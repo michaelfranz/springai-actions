@@ -7,7 +7,7 @@ import java.lang.reflect.Parameter;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.FromContext;
 
-public class ActionArgumentBinder {
+class ActionArgumentBinder {
 
 	private final ObjectMapper mapper = new ObjectMapper();
 

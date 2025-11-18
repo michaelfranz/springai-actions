@@ -6,16 +6,18 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ActionContext {
 	private final Map<String, Object> data = new ConcurrentHashMap<>();
 
-	public <T> void put(String key, T value) {
+	public void put(String key, Object value) {
 		data.put(key, value);
 	}
 
 	public <T> T get(String key, Class<T> type) {
-		Object v = data.get(key);
-		if (v == null) {
+		Object o = data.get(key);
+		if (o == null) {
 			throw new IllegalStateException("No value for context key: " + key);
 		}
-		return (T) v;
+		assert type.isAssignableFrom(o.getClass())
+				: "Given type '%s' is not assignable from stored value '%s'".formatted(type, o.getClass());
+		return (T) o;
 	}
 
 	public boolean contains(String key) {

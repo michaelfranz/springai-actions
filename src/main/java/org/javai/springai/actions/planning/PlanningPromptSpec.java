@@ -5,10 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.javai.springai.actions.definition.ActionDefinition;
 import org.javai.springai.actions.definition.ActionDefinitionFactory;
-import org.javai.springai.actions.execution.ActionPlanCompiler;
-import org.javai.springai.actions.execution.ActionPlanResult;
 import org.javai.springai.actions.execution.ExecutableAction;
 import org.javai.springai.actions.execution.ExecutableActionFactory;
+import org.javai.springai.actions.execution.ExecutablePlan;
 import org.springframework.ai.chat.client.ChatClient;
 
 public class PlanningPromptSpec {
@@ -52,7 +51,7 @@ public class PlanningPromptSpec {
 		return this;
 	}
 
-	public ChatClient.CallResponseSpec call() {
+	ChatClient.CallResponseSpec call() {
 		List<String> finalSystem = new ArrayList<>();
 		if (!actions.isEmpty()) {
 			finalSystem.add(buildActionSchemaMessage());
@@ -65,11 +64,12 @@ public class PlanningPromptSpec {
 		return delegate.call();
 	}
 
-	public ActionPlanResult plan() {
+	public ExecutablePlan plan() {
+		Plan plan = ensureValidPlan(this.call().entity(Plan.class));
+		return new ExecutablePlan(compilePlan(plan));
+	}
 
-		// 1. Get the plan from LLM
-		ActionPlan plan = this.call().entity(ActionPlan.class);
-
+	private Plan ensureValidPlan(Plan plan) {
 		if (plan == null) {
 			throw new IllegalStateException("""
                 LLM returned null instead of an ActionPlan.
@@ -84,41 +84,46 @@ public class PlanningPromptSpec {
                 """);
 		}
 
-		// 2. Compile to executable actions using the existing action definitions
-		ExecutableActionFactory factory = new ExecutableActionFactory(this.actions);
-		ActionPlanCompiler compiler = new ActionPlanCompiler(factory);
-		List<ExecutableAction> executables = compiler.compile(plan);
+		return plan;
+	}
 
-		return new ActionPlanResult(plan, executables);
+	private List<ExecutableAction> compilePlan(Plan plan) {
+		ExecutableActionFactory factory = new ExecutableActionFactory(this.actions);
+		return plan.steps().stream()
+				// should not be necessary: .filter(step -> factory.actionExists(step.action()))
+				.map(factory::from)
+				.toList();
 	}
 
 	private String buildActionSchemaMessage() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("""
-            === ACTION DEFINITIONS ===
+            === PLAN AND ACTION DEFINITIONS ===
 
             Actions represent side-effectful operations that the application will perform later.
 
-            Your task is to generate a FINAL PLAN consisting ONLY of steps steps.
-            Each steps step has the following exact structure:
+            Your task is to generate a FINAL PLAN consisting ONLY of PlanStep entries.
+            Each PlanStep has the following exact structure:
 
             {
-              "steps": "<actionName>",
+              "action": "<actionName>",
               "arguments": { ... }
             }
 
-            The final output MUST be a single, top-level JSON array containing only these steps steps.
-            Do NOT wrap the array inside an object.
+            The final output MUST be a single JSON object with exactly one property named "steps".
+            The "steps" property MUST contain an array of PlanStep objects.
+            Only use actions to create the plan. Tool calls are never part of the plan.
             Do NOT include any commentary, explanation, natural language, or additional fields.
             Do NOT prefix the plan with text.
             Do NOT append text after the plan.
             
             Here are the available actions and their required argument schemas.
             When constructing the plan:
-            - Use each steps's name EXACTLY as specified.
+            - Use each action's name EXACTLY as specified.
             - Follow the argument schema EXACTLY.
             - Provide values for all required fields.
             - Use information tools (queries) to gather any missing data.
+            - Only actions, which are named in the following list, may be used in the plan.
             """);
 
 		for (ActionDefinition def : actions) {
@@ -132,19 +137,21 @@ public class PlanningPromptSpec {
 		sb.append("""
             
             === PLAN FORMAT EXAMPLE ===
-            [
-              {
-                "steps": "sendEmail",
-                "arguments": {
-                  "to": "someone@example.com",
-                  "subject": "Hello",
-                  "body": "This is the email body."
+            {
+              "steps": [
+                {
+                  "action": "sendEmail",
+                  "arguments": {
+                    "to": "someone@example.com",
+                    "subject": "Hello",
+                    "body": "This is the email body."
+                  }
                 }
-              }
-            ]
+              ]
+            }
 
             Remember:
-            - The final output MUST be ONLY the JSON array.
+            - The final output MUST be EXACTLY the JSON object with the "steps" array.
             - Do NOT include backticks or code fences.
             """);
 

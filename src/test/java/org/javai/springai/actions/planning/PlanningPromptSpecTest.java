@@ -1,15 +1,15 @@
 package org.javai.springai.actions.planning;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.util.List;
 import org.javai.springai.actions.api.Action;
-import org.javai.springai.actions.api.ActionContext;
-import org.javai.springai.actions.execution.ActionPlanResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,8 +29,6 @@ class PlanningPromptSpecTest {
 
 	@Mock
 	private ChatClient.CallResponseSpec callResponseSpec;
-
-	private final ObjectMapper mapper = new ObjectMapper();
 
 	private PlanningPromptSpec spec;
 
@@ -74,7 +72,7 @@ class PlanningPromptSpecTest {
 		verify(requestSpec).system(systemCaptor.capture());
 
 		String systemPrompt = systemCaptor.getValue();
-		assertTrue(systemPrompt.contains("=== ACTION DEFINITIONS ==="));
+		assertTrue(systemPrompt.contains("=== PLAN AND ACTION DEFINITIONS ==="));
 		assertTrue(systemPrompt.contains("planAction"));
 	}
 
@@ -87,7 +85,7 @@ class PlanningPromptSpecTest {
 	@Test
 	void planThrowsWhenEntityNull() {
 		spec.actions(new PlanningActions());
-		when(callResponseSpec.entity(ActionPlan.class)).thenReturn(null);
+		when(callResponseSpec.entity(Plan.class)).thenReturn(null);
 
 		assertThrows(IllegalStateException.class, spec::plan);
 	}
@@ -95,32 +93,27 @@ class PlanningPromptSpecTest {
 	@Test
 	void planThrowsWhenStepsEmpty() {
 		spec.actions(new PlanningActions());
-		when(callResponseSpec.entity(ActionPlan.class)).thenReturn(new ActionPlan(List.of()));
+		when(callResponseSpec.entity(Plan.class)).thenReturn(new Plan(List.of()));
 
 		assertThrows(IllegalStateException.class, spec::plan);
 	}
 
 	@Test
-	void planReturnsExecutableActionsFromDefinitions() throws Exception {
-		PlanningActions bean = new PlanningActions();
-		spec.actions(bean);
+	void buildActionSchemaMessageAlignsWithPlanStepContract() throws Exception {
+		spec.actions(new PlanningActions());
 
-		Method method = PlanningActions.class.getMethod("planAction", String.class);
-		String paramName = method.getParameters()[0].getName();
-		ObjectNode arguments = mapper.createObjectNode();
-		arguments.put(paramName, "value");
-		ActionPlan plan = new ActionPlan(List.of(new ActionStep("planAction", arguments)));
+		Method method = PlanningPromptSpec.class.getDeclaredMethod("buildActionSchemaMessage");
+		method.setAccessible(true);
+		String schemaMessage = (String) method.invoke(spec);
 
-		when(callResponseSpec.entity(ActionPlan.class)).thenReturn(plan);
-
-		ActionPlanResult result = spec.plan();
-		assertSame(plan, result.plan());
-		assertEquals(1, result.executableActions().size());
-
-		ActionContext ctx = new ActionContext();
-		result.executableActions().get(0).perform(ctx);
-		assertEquals("VALUE", ctx.get("planResult", String.class));
+		assertTrue(schemaMessage.contains("PlanStep entries"));
+		assertTrue(schemaMessage.contains("\"action\": \"<actionName>\""));
+		assertTrue(schemaMessage.contains("PlanStep objects"));
+		assertTrue(schemaMessage.contains("Action name: planAction"));
+		assertTrue(schemaMessage.contains("\"action\": \"sendEmail\""));
+		assertFalse(schemaMessage.contains("\"steps\""));
 	}
+
 
 	public static class PlanningActions {
 

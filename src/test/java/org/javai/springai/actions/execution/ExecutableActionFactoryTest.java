@@ -1,7 +1,10 @@
 package org.javai.springai.actions.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
@@ -9,7 +12,7 @@ import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.definition.ActionDefinition;
-import org.javai.springai.actions.planning.ActionStep;
+import org.javai.springai.actions.planning.PlanStep;
 import org.junit.jupiter.api.Test;
 
 class ExecutableActionFactoryTest {
@@ -26,7 +29,7 @@ class ExecutableActionFactoryTest {
 		String parameterName = method.getParameters()[0].getName();
 		args.put(parameterName, "Bob");
 
-		ExecutableAction executable = factory.from(new ActionStep("greet", args));
+		ExecutableAction executable = factory.from(new PlanStep("greet", args));
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
@@ -42,7 +45,7 @@ class ExecutableActionFactoryTest {
 		Method method = SampleExecutableActions.class.getMethod("returnsNull");
 		ExecutableActionFactory factory = new ExecutableActionFactory(List.of(definition(bean, method)));
 
-		ExecutableAction executable = factory.from(new ActionStep("returnsNull", mapper.createObjectNode()));
+		ExecutableAction executable = factory.from(new PlanStep("returnsNull", mapper.createObjectNode()));
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
@@ -59,7 +62,7 @@ class ExecutableActionFactoryTest {
 		ObjectNode args = mapper.createObjectNode();
 		args.put(method.getParameters()[0].getName(), "value");
 
-		ExecutableAction executable = factory.from(new ActionStep("nonAnnotated", args));
+		ExecutableAction executable = factory.from(new PlanStep("nonAnnotated", args));
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
@@ -73,7 +76,7 @@ class ExecutableActionFactoryTest {
 		ExecutableActionFactory factory = new ExecutableActionFactory(List.of());
 
 		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-				() -> factory.from(new ActionStep("missing", mapper.createObjectNode())));
+				() -> factory.from(new PlanStep("missing", mapper.createObjectNode())));
 
 		assertEquals("Unknown action: missing", ex.getMessage());
 	}
