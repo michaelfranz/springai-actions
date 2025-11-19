@@ -5,10 +5,13 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.Mutability;
 
 /**
@@ -23,6 +26,8 @@ public record ActionMetadata(
 		String actionName,
 		/** Fully resolved affinity IDs determining serialized execution lanes. */
 		List<String> affinityIds,
+		/** Affinity templates that must be resolved from context at runtime. */
+		List<PendingAffinity> pendingAffinities,
 		/** Mutability contract (read-only, create, mutate) for scheduling rules. */
 		Mutability mutability,
 		/** Logical resources/context keys this action reads. */
@@ -54,6 +59,7 @@ public record ActionMetadata(
 		stepId = Objects.requireNonNull(stepId, "stepId must not be null");
 		actionName = Objects.requireNonNull(actionName, "actionName must not be null");
 		affinityIds = immutableList(affinityIds);
+		pendingAffinities = immutableList(pendingAffinities);
 		mutability = mutability != null ? mutability : Mutability.MUTATE;
 		resourceReads = immutableSet(resourceReads);
 		resourceWrites = immutableSet(resourceWrites);
@@ -93,11 +99,38 @@ public record ActionMetadata(
 		return Collections.unmodifiableSet(new LinkedHashSet<>(source));
 	}
 
+	public List<String> resolvedAffinityIds(ActionContext ctx) {
+		if (pendingAffinities.isEmpty()) {
+			return affinityIds;
+		}
+		List<String> resolved = new ArrayList<>(affinityIds);
+		for (PendingAffinity pending : pendingAffinities) {
+			resolved.add(resolvePendingAffinity(ctx, pending));
+		}
+		return Collections.unmodifiableList(resolved);
+	}
+
+	private String resolvePendingAffinity(ActionContext ctx, PendingAffinity pending) {
+		Map<String, String> values = new HashMap<>();
+		for (String placeholder : pending.placeholders()) {
+			values.put(placeholder, ContextExpressionResolver.resolve(ctx, placeholder));
+		}
+		TemplateBindings runtimeBindings = TemplateBindings.fromMap(values);
+		TemplateRenderer.RenderOutcome outcome = TemplateRenderer.render(pending.template(), runtimeBindings);
+		if (!outcome.resolved()) {
+			throw new IllegalStateException(
+					"Unable to resolve affinity template '%s' using context keys %s"
+							.formatted(pending.template(), pending.placeholders()));
+		}
+		return outcome.value();
+	}
+
 	public static final class Builder {
 
 		private String stepId = "unspecified";
 		private String actionName = "unspecified";
 		private final List<String> affinityIds = new ArrayList<>();
+		private final List<PendingAffinity> pendingAffinities = new ArrayList<>();
 		private Mutability mutability = Mutability.MUTATE;
 		private final Set<String> resourceReads = new LinkedHashSet<>();
 		private final Set<String> resourceWrites = new LinkedHashSet<>();
@@ -123,6 +156,13 @@ public record ActionMetadata(
 		public Builder addAffinityId(String affinityId) {
 			if (affinityId != null && !affinityId.isBlank()) {
 				this.affinityIds.add(affinityId);
+			}
+			return this;
+		}
+
+		public Builder addPendingAffinity(String template, List<String> placeholders) {
+			if (template != null && !template.isBlank() && placeholders != null && !placeholders.isEmpty()) {
+				this.pendingAffinities.add(new PendingAffinity(template, placeholders));
 			}
 			return this;
 		}
@@ -203,6 +243,7 @@ public record ActionMetadata(
 					stepId,
 					actionName,
 					affinityIds,
+					pendingAffinities,
 					mutability,
 					resourceReads,
 					resourceWrites,
@@ -214,6 +255,16 @@ public record ActionMetadata(
 					timeout,
 					maxRetries,
 					idempotent);
+		}
+	}
+
+	public record PendingAffinity(String template, List<String> placeholders) {
+		public PendingAffinity {
+			Objects.requireNonNull(template, "template must not be null");
+			if (placeholders == null || placeholders.isEmpty()) {
+				throw new IllegalArgumentException("placeholders must not be empty");
+			}
+			placeholders = List.copyOf(placeholders);
 		}
 	}
 }

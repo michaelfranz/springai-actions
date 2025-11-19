@@ -30,6 +30,10 @@ final class TemplateBindings {
 		return new TemplateBindings(collected);
 	}
 
+	static TemplateBindings fromMap(Map<String, String> values) {
+		return new TemplateBindings(new HashMap<>(values));
+	}
+
 	Optional<String> resolve(String key) {
 		return Optional.ofNullable(values.get(key));
 	}

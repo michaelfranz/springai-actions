@@ -36,4 +36,11 @@ public class ActionContext {
 	public boolean contains(ContextKey<?> key) {
 		return contains(key.name());
 	}
+
+	public Object get(String key) {
+		if (!data.containsKey(key)) {
+			throw new IllegalStateException("No value for context key: " + key);
+		}
+		return data.get(key);
+	}
 }
