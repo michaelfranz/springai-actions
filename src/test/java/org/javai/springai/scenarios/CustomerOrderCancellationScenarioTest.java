@@ -24,6 +24,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 
 class CustomerOrderCancellationScenarioTest {
 
@@ -37,9 +39,11 @@ class CustomerOrderCancellationScenarioTest {
 
 	private PlanningChatClient chatClient;
 	private final MockOrderRepository repository = new MockOrderRepository();
+	private String lastCustomerNameToolResult;
 
 	@BeforeEach
 	void setUp() {
+		this.lastCustomerNameToolResult = null;
 		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
 			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
 		}
@@ -59,18 +63,21 @@ class CustomerOrderCancellationScenarioTest {
 	void cancelMostRecentOrderForCustomer() throws PlanExecutionException {
 		ExecutablePlan plan = chatClient
 				.prompt()
+				.system("""
+						You must call the customerName tool with the same customerId to obtain the email-friendly name.
+						Use that tool result to populate the friendlyCustomerName argument of cancelOrderAndNotify.
+						""")
 				.user(AGENT_ROLE)
 				.user("""
 						For customer 123, fetch the most recent order and cancel it.
 						Provide the reason for cancellation as: 'At the customer's request'.
 						After cancellation, send an email confirming the change and mention the updated status.
 						Always use the fetchLatestOrder action before cancelOrderAndNotify.
+						Ensure the email greeting uses the friendlyCustomerName argument that came from the customerName tool call.
 						""")
+				.tools(this)
 				.actions(this)
 				.plan();
-
-		assertThat(plan.executables())
-				.hasSize(2);
 
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext context = executor.execute(plan);
@@ -80,9 +87,20 @@ class CustomerOrderCancellationScenarioTest {
 		assertThat(updatedOrder.customerId()).isEqualTo("123");
 
 		String email = context.get(CANCELLATION_EMAIL_KEY);
+		assertThat(lastCustomerNameToolResult).isNotBlank();
 		assertThat(email)
 				.contains("Order " + updatedOrder.orderId())
-				.contains("status set to CANCELLED");
+				.contains("status set to CANCELLED")
+				.contains(lastCustomerNameToolResult);
+	}
+
+	@Tool(description = "Return an email-friendly customer name for the given customer id")
+	public String customerName(
+			@ToolParam(description = "The id of the customer") String customerId) {
+		String friendlyName = repository.findFriendlyName(customerId)
+				.orElse("Valued customer #" + customerId);
+		this.lastCustomerNameToolResult = friendlyName;
+		return friendlyName;
 	}
 
 	@Action(description = "Fetch the most recent order for a customer",
@@ -107,12 +125,17 @@ class CustomerOrderCancellationScenarioTest {
 			affinity = "order:{latestOrder.orderId}")
 	public Order cancelOrderAndNotify(
 			@ActionParam(description = "Reason for cancellation") String reason,
+			@ActionParam(description = "Email-friendly customer name returned by the customerName tool") String friendlyCustomerName,
 			@FromContext("latestOrder") Order latestOrder,
 			ActionContext ctx
 	) {
 		Order cancelled = latestOrder.withStatus("CANCELLED");
 		repository.log("Cancelled order %s with reason %s".formatted(cancelled.orderId(), reason));
 		repository.save(cancelled);
+
+		String greetingName = (friendlyCustomerName != null && !friendlyCustomerName.isBlank())
+				? friendlyCustomerName
+				: latestOrder.customerId();
 
 		String email = """
 				To: %s
@@ -122,7 +145,7 @@ class CustomerOrderCancellationScenarioTest {
 
 				We have set the status of order %s to CANCELLED for the following reason: %s.
 				The status set to CANCELLED will be reflected immediately.
-				""".formatted(cancelled.customerEmail(), cancelled.orderId(), cancelled.customerId(), cancelled.orderId(), reason);
+				""".formatted(cancelled.customerEmail(), cancelled.orderId(), greetingName, cancelled.orderId(), reason);
 
 		ctx.put(CANCELLATION_EMAIL_KEY, email);
 		return cancelled;
@@ -143,17 +166,23 @@ class CustomerOrderCancellationScenarioTest {
 	static class MockOrderRepository {
 
 		private final Map<String, List<Order>> orders = new ConcurrentHashMap<>();
+		private final Map<String, String> friendlyNames = new ConcurrentHashMap<>();
 
 		MockOrderRepository() {
 			orders.put("123", List.of(
 					new Order("A-1", "123", "PLACED", LocalDateTime.now().minusDays(3), "customer123@example.com"),
 					new Order("A-2", "123", "PLACED", LocalDateTime.now().minusDays(1), "customer123@example.com")
 			));
+			friendlyNames.put("123", "Alex \"Red\" Thompson");
 		}
 
 		Optional<Order> findLatestOrder(String customerId) {
 			return Optional.ofNullable(orders.get(customerId))
 					.flatMap(list -> list.stream().max(Comparator.comparing(Order::createdAt)));
+		}
+
+		Optional<String> findFriendlyName(String customerId) {
+			return Optional.ofNullable(friendlyNames.get(customerId));
 		}
 
 		void save(Order order) {

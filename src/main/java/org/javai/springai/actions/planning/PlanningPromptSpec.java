@@ -122,7 +122,8 @@ public class PlanningPromptSpec {
             - Use each action's name EXACTLY as specified.
             - Follow the argument schema EXACTLY.
             - Provide values for all required fields.
-            - Use information tools (queries) to gather any missing data.
+            - Use information tools (function calls) to gather any missing data BEFORE you produce the final JSON plan.
+            - Tool calls never appear inside the plan itself; invoke them first, wait for their responses, and only then emit the Plan JSON.
             - Only actions, which are named in the following list, may be used in the plan.
             """);
 
