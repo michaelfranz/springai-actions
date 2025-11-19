@@ -3,25 +3,25 @@
 Each milestone delivers a usable framework plus an updated `DadJokeForTodayGeneratorTest`. Checkbox lists track the concrete tasks required to reach that milestone.
 
 ## Milestone 1 — Metadata Foundation (framework remains single-threaded)
-- [ ] Define a serialisable `ActionMetadata` record (or builder-backed class) with identity, affinity IDs, mutability, resource scopes, context contracts, and execution policy slots (even if some stay empty initially).
-- [ ] Add light-weight `ContextKey<T>` helpers so actions can declare the keys they read/write without string literals.
-- [ ] Allow `@Action` to specify optional defaults (description, mutability hint, context key names) but keep affinity prefix optional.
-- [ ] Update `ExecutableActionFactory` to instantiate `ActionMetadata` placeholders for current actions (auto-filling from annotation defaults) so existing behaviour continues unchanged.
-- [ ] Adjust `DadJokeForTodayGeneratorTest` actions to compile against the new helpers (no behaviour change yet).
+- [x] Define a serialisable `ActionMetadata` record (or builder-backed class) with identity, affinity IDs, mutability, resource scopes, context contracts, and execution policy slots (even if some stay empty initially).
+- [x] Add light-weight `ContextKey<T>` helpers so actions can declare the keys they read/write without string literals.
+- [x] Allow `@Action` to specify optional defaults (description, mutability hint, context key names) but keep affinity prefix optional.
+- [x] Update `ExecutableActionFactory` to instantiate `ActionMetadata` placeholders for current actions (auto-filling from annotation defaults) so existing behaviour continues unchanged.
+- [x] Adjust `DadJokeForTodayGeneratorTest` actions to compile against the new helpers (no behaviour change yet).
 
-## Milestone 2 — Actions Return Metadata
-- [ ] Change the contract so `@Action` methods must return `ActionMetadata`; introduce compile-time/static analysis guards to flag legacy signatures.
-- [ ] Extend `ExecutableActionFactory` to capture the returned metadata, persist it inside `ExecutableAction`, and remove the old “store arbitrary return value in context” path.
-- [ ] Provide convenience builders (`ActionMetadata.readOnly(affinityId)`, `.create(...)`, `.mutate(...)`) to keep declarations terse.
-- [ ] Update all sample actions (including DadJoke scenario) to write business data via `ActionContext` and return metadata describing their scheduling needs.
-- [ ] Backfill unit tests that ensure missing metadata (e.g., null affinity on mutating action) is rejected at build time.
+## Milestone 2 — Annotation-Derived Metadata Templates
+- [ ] Keep action methods returning domain results; metadata moves entirely into annotations plus helper annotations (e.g., `@RequiresContext`, `@ProducesContext`).
+- [ ] Extend `@Action` to support template attributes (e.g., `affinity = "customer:{customerId}"`, `produces = "emailText"`) with safe defaults to avoid annotation bloat.
+- [ ] Build a template expansion utility that validates referenced parameters/context keys at plan-compilation time; fail fast if placeholders cannot be resolved.
+- [ ] Update `ExecutableActionFactory` to derive `ActionMetadata` solely from annotations + templates and persist it within `ExecutableAction`.
+- [ ] Adjust DadJoke scenario annotations to use the new template syntax while preserving runtime behaviour.
 
-## Milestone 3 — Context Contracts & Dependency Graph
-- [ ] Teach `ActionMetadata` to carry `requiresContext` and `producesContext`, plus automatic registration when actions call `ctx.put(ContextKey, value)`.
-- [ ] Enhance the planning phase to derive implicit dependencies from these contracts and persist them alongside plan steps.
-- [ ] Validate that every required key has a producer (or is marked as pre-seeded) and fail fast on contradictions.
-- [ ] Implement cycle detection (topological sort) within plan compilation; bubble clear diagnostics back to callers.
-- [ ] Extend DadJoke scenario so the email action declares it consumes the joke text written by the generator action; verify the planner enforces the ordering even if executables are re-ordered manually.
+## Milestone 3 — Context Contracts & Execution DAG
+- [ ] Introduce dedicated annotations (`@RequiresContext`, `@ProducesContext`) to declare data dependencies without AOP.
+- [ ] Build a standalone `ExecutionDAG` structure that consumes all metadata (affinities, mutability, context contracts) and materialises the executable dependency graph.
+- [ ] Provide thorough unit tests for `ExecutionDAG` independent of actual execution, covering template expansion, dependency creation, and cycle detection.
+- [ ] Validate that every required context key is produced (or marked pre-existing) and fail fast on contradictions.
+- [ ] Update DadJoke scenario to reflect the new context annotations and verify the DAG enforces correct sequencing even when plan steps are reordered.
 
 ## Milestone 4 — Affinity-Aware Parallel Executor
 - [ ] Introduce a new `ConcurrentPlanExecutor` that reads affinity IDs and mutability to route actions into affinity queues while still honouring dependencies computed in Milestone 3.
