@@ -10,6 +10,11 @@ public class ActionContext {
 		data.put(key, value);
 	}
 
+	public <T> void put(ContextKey<T> key, T value) {
+		put(key.name(), value);
+	}
+
+	@SuppressWarnings("unchecked")
 	public <T> T get(String key, Class<T> type) {
 		Object o = data.get(key);
 		if (o == null) {
@@ -20,7 +25,15 @@ public class ActionContext {
 		return (T) o;
 	}
 
+	public <T> T get(ContextKey<T> key) {
+		return get(key.name(), key.type());
+	}
+
 	public boolean contains(String key) {
 		return data.containsKey(key);
+	}
+
+	public boolean contains(ContextKey<?> key) {
+		return contains(key.name());
 	}
 }

@@ -21,13 +21,14 @@ public class ExecutableActionFactory {
 		ActionDefinition def = findDefinition(step.action());
 		Method method = def.method();
 		Object bean = def.bean();
+		Action actionAnno = method.getAnnotation(Action.class);
+		ActionMetadata metadata = createMetadata(step, actionAnno);
 
-		return new AbstractExecutableAction(step) {
+		return new AbstractExecutableAction(step, metadata) {
 			public void perform(ActionContext ctx) throws PlanExecutionException {
 				Object[] args = binder.bindArguments(method, step.arguments(), ctx);
 				try {
 					Object result = method.invoke(bean, args);
-					Action actionAnno = method.getAnnotation(Action.class);
 					// Store return value if contextKey is provided
 					if (actionAnno != null && !actionAnno.contextKey().isEmpty() && result != null) {
 						ctx.put(actionAnno.contextKey(), result);
@@ -49,5 +50,22 @@ public class ExecutableActionFactory {
 
 	public boolean actionExists(String action) {
 		return actions.stream().anyMatch(d -> d.name().equals(action));
+	}
+
+	private ActionMetadata createMetadata(PlanStep step, Action actionAnno) {
+		ActionMetadata.Builder builder = ActionMetadata.builder()
+				.stepId(step.action())
+				.actionName(step.action());
+
+		if (actionAnno != null) {
+			builder.cost(actionAnno.cost())
+					.mutability(actionAnno.mutability())
+					.addAffinityId(actionAnno.affinity());
+			if (!actionAnno.contextKey().isBlank()) {
+				builder.addProducesContext(actionAnno.contextKey());
+			}
+		}
+
+		return builder.build();
 	}
 }

@@ -8,6 +8,7 @@ import java.util.Random;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.api.ContextKey;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
 import org.javai.springai.actions.execution.ExecutablePlan;
 import org.javai.springai.actions.execution.PlanExecutionException;
@@ -26,6 +27,7 @@ public class DadJokeForTodayGeneratorTest {
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final Random RANDOM = new Random();
 	private static final List<String> NAMES = List.of("Mike", "Dave", "Martin", "Elke", "Helena");
+	private static final ContextKey<String> EMAIL_TEXT_KEY = ContextKey.of("emailText", String.class);
 
 	private PlanningChatClient chatClient;
 
@@ -67,7 +69,7 @@ public class DadJokeForTodayGeneratorTest {
 
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext actionContext = executor.execute(plan);
-		assertThat(actionContext.get("emailText", String.class))
+		assertThat(actionContext.get(EMAIL_TEXT_KEY))
 				.startsWith("to:");
 	}
 
@@ -95,7 +97,7 @@ public class DadJokeForTodayGeneratorTest {
 				body: %s
 				""".formatted(to, from, subject, body);
 		System.out.println("Sending email to\n" + email);
-		return "Email sent";
+		return email;
 	}
 
 }
