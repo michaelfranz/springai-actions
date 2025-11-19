@@ -1,4 +1,4 @@
-package org.javai.springai.actions.execution;
+package org.javai.springai.actions.api;
 
 /**
  * Describes how an action interacts with shared resources so schedulers can

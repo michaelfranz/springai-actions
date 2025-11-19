@@ -57,15 +57,50 @@ public class ExecutableActionFactory {
 				.stepId(step.action())
 				.actionName(step.action());
 
-		if (actionAnno != null) {
-			builder.cost(actionAnno.cost())
-					.mutability(actionAnno.mutability())
-					.addAffinityId(actionAnno.affinity());
-			if (!actionAnno.contextKey().isBlank()) {
-				builder.addProducesContext(actionAnno.contextKey());
-			}
+		if (actionAnno == null) {
+			return builder.build();
+		}
+
+		TemplateBindings bindings = TemplateBindings.from(step.arguments());
+
+		builder.cost(actionAnno.cost())
+				.mutability(actionAnno.mutability());
+
+		validateAffinityUsage(actionAnno);
+		addTemplateValue(actionAnno.affinity(), bindings, builder::addAffinityId);
+		for (String extraAffinity : actionAnno.affinities()) {
+			addTemplateValue(extraAffinity, bindings, builder::addAffinityId);
+		}
+
+		for (String produces : actionAnno.produces()) {
+			addTemplateValue(produces, bindings, builder::addProducesContext);
+		}
+
+		if (!actionAnno.contextKey().isBlank()) {
+			builder.addProducesContext(actionAnno.contextKey());
 		}
 
 		return builder.build();
+	}
+
+	private void addTemplateValue(String template,
+			TemplateBindings bindings,
+			java.util.function.Consumer<String> consumer) {
+		if (template == null || template.isBlank()) {
+			return;
+		}
+		String rendered = TemplateRenderer.render(template, bindings);
+		if (!rendered.isBlank()) {
+			consumer.accept(rendered);
+		}
+	}
+
+	private void validateAffinityUsage(Action action) {
+		boolean hasSingle = action.affinity() != null && !action.affinity().isBlank();
+		boolean hasMultiple = action.affinities() != null && action.affinities().length > 0;
+		if (hasSingle && hasMultiple) {
+			throw new IllegalArgumentException(
+					"Action annotation must not define both 'affinity' and 'affinities'.");
+		}
 	}
 }

@@ -9,103 +9,49 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import org.javai.springai.actions.api.Mutability;
 
 /**
  * Canonical description of how an executable action should be scheduled. This
  * record is intentionally serialisable so queued actions can survive process
  * restarts.
  */
-public final class ActionMetadata implements Serializable {
+public record ActionMetadata(
+		String stepId,
+		String actionName,
+		List<String> affinityIds,
+		Mutability mutability,
+		Set<String> resourceReads,
+		Set<String> resourceWrites,
+		Set<String> requiresContext,
+		Set<String> producesContext,
+		Set<String> dependsOn,
+		int cost,
+		Integer priority,
+		Duration timeout,
+		int maxRetries,
+		boolean idempotent
+) implements Serializable {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	private final String stepId;
-	private final String actionName;
-	private final List<String> affinityIds;
-	private final Mutability mutability;
-	private final Set<String> resourceReads;
-	private final Set<String> resourceWrites;
-	private final Set<String> requiresContext;
-	private final Set<String> producesContext;
-	private final Set<String> dependsOn;
-	private final int cost;
-	private final Integer priority;
-	private final Duration timeout;
-	private final int maxRetries;
-	private final boolean idempotent;
-
-	private ActionMetadata(Builder builder) {
-		this.stepId = builder.stepId;
-		this.actionName = builder.actionName;
-		this.affinityIds = Collections.unmodifiableList(new ArrayList<>(builder.affinityIds));
-		this.mutability = builder.mutability;
-		this.resourceReads = Collections.unmodifiableSet(new LinkedHashSet<>(builder.resourceReads));
-		this.resourceWrites = Collections.unmodifiableSet(new LinkedHashSet<>(builder.resourceWrites));
-		this.requiresContext = Collections.unmodifiableSet(new LinkedHashSet<>(builder.requiresContext));
-		this.producesContext = Collections.unmodifiableSet(new LinkedHashSet<>(builder.producesContext));
-		this.dependsOn = Collections.unmodifiableSet(new LinkedHashSet<>(builder.dependsOn));
-		this.cost = builder.cost;
-		this.priority = builder.priority;
-		this.timeout = builder.timeout;
-		this.maxRetries = builder.maxRetries;
-		this.idempotent = builder.idempotent;
-	}
-
-	public String stepId() {
-		return stepId;
-	}
-
-	public String actionName() {
-		return actionName;
-	}
-
-	public List<String> affinityIds() {
-		return affinityIds;
-	}
-
-	public Mutability mutability() {
-		return mutability;
-	}
-
-	public Set<String> resourceReads() {
-		return resourceReads;
-	}
-
-	public Set<String> resourceWrites() {
-		return resourceWrites;
-	}
-
-	public Set<String> requiresContext() {
-		return requiresContext;
-	}
-
-	public Set<String> producesContext() {
-		return producesContext;
-	}
-
-	public Set<String> dependsOn() {
-		return dependsOn;
-	}
-
-	public int cost() {
-		return cost;
-	}
-
-	public Integer priority() {
-		return priority;
-	}
-
-	public Duration timeout() {
-		return timeout;
-	}
-
-	public int maxRetries() {
-		return maxRetries;
-	}
-
-	public boolean idempotent() {
-		return idempotent;
+	public ActionMetadata {
+		stepId = Objects.requireNonNull(stepId, "stepId must not be null");
+		actionName = Objects.requireNonNull(actionName, "actionName must not be null");
+		affinityIds = immutableList(affinityIds);
+		mutability = mutability != null ? mutability : Mutability.MUTATE;
+		resourceReads = immutableSet(resourceReads);
+		resourceWrites = immutableSet(resourceWrites);
+		requiresContext = immutableSet(requiresContext);
+		producesContext = immutableSet(producesContext);
+		dependsOn = immutableSet(dependsOn);
+		if (cost <= 0) {
+			throw new IllegalArgumentException("cost must be positive");
+		}
+		if (maxRetries < 0) {
+			throw new IllegalArgumentException("maxRetries must be >= 0");
+		}
 	}
 
 	public static Builder builder() {
@@ -117,6 +63,20 @@ public final class ActionMetadata implements Serializable {
 				.stepId("unspecified")
 				.actionName("unspecified")
 				.build();
+	}
+
+	private static <T> List<T> immutableList(List<T> source) {
+		if (source == null || source.isEmpty()) {
+			return Collections.emptyList();
+		}
+		return Collections.unmodifiableList(new ArrayList<>(source));
+	}
+
+	private static <T> Set<T> immutableSet(Set<T> source) {
+		if (source == null || source.isEmpty()) {
+			return Collections.emptySet();
+		}
+		return Collections.unmodifiableSet(new LinkedHashSet<>(source));
 	}
 
 	public static final class Builder {
@@ -225,7 +185,21 @@ public final class ActionMetadata implements Serializable {
 		}
 
 		public ActionMetadata build() {
-			return new ActionMetadata(this);
+			return new ActionMetadata(
+					stepId,
+					actionName,
+					affinityIds,
+					mutability,
+					resourceReads,
+					resourceWrites,
+					requiresContext,
+					producesContext,
+					dependsOn,
+					cost,
+					priority,
+					timeout,
+					maxRetries,
+					idempotent);
 		}
 	}
 }

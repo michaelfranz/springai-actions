@@ -11,6 +11,7 @@ import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.api.ContextKey;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
 import org.javai.springai.actions.execution.ExecutablePlan;
+import org.javai.springai.actions.api.Mutability;
 import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.planning.PlanningChatClient;
@@ -83,7 +84,10 @@ public class DadJokeForTodayGeneratorTest {
 		return NAMES.get(RANDOM.nextInt(NAMES.size()));
 	}
 
-	@Action(description = "Action to send an email", contextKey = "emailText")
+	@Action(description = "Action to send an email",
+			contextKey = "emailText",
+			affinity = "email:{to}",
+			mutability = Mutability.MUTATE)
 	public String sendEmail(
 			@ActionParam(description = "The email recipient") String to,
 			@ActionParam(description = "The email sender") String from,
