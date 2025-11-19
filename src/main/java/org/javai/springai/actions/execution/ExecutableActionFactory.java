@@ -2,13 +2,20 @@ package org.javai.springai.actions.execution;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.definition.ActionDefinition;
 import org.javai.springai.actions.planning.PlanStep;
 
 public class ExecutableActionFactory {
+
+	private static final Logger logger = LogManager.getLogger(ExecutableActionFactory.class);
 
 	private final List<ActionDefinition> actions;
 	private final ActionArgumentBinder binder = new ActionArgumentBinder();
@@ -20,8 +27,12 @@ public class ExecutableActionFactory {
 	public ExecutableAction from(PlanStep step) {
 		ActionDefinition def = findDefinition(step.action());
 		Method method = def.method();
+		method.setAccessible(true);
 		Object bean = def.bean();
 		Action actionAnno = method.getAnnotation(Action.class);
+		if (actionAnno != null) {
+			inspectContextWrites(method, actionAnno);
+		}
 		ActionMetadata metadata = createMetadata(step, actionAnno);
 
 		return new AbstractExecutableAction(step, metadata) {
@@ -29,18 +40,57 @@ public class ExecutableActionFactory {
 				Object[] args = binder.bindArguments(method, step.arguments(), ctx);
 				try {
 					Object result = method.invoke(bean, args);
-					// Store return value if contextKey is provided
 					if (actionAnno != null && !actionAnno.contextKey().isEmpty() && result != null) {
 						ctx.put(actionAnno.contextKey(), result);
 					}
+					enforceContextContract(actionAnno, ctx);
 				} catch (IllegalAccessException | InvocationTargetException e) {
-					throw new PlanExecutionException("Exception invoking action: " + def.name(), e);
+					throw new PlanExecutionException(
+							"Exception invoking action: %s, bean: %s, method: %s"
+									.formatted(def.name(), bean.getClass().getName(), method.getName()), e);
 				}
 			}
 		};
 	}
 
+	private void inspectContextWrites(Method method, Action actionAnno) {
+		if (actionAnno.additionalContextKeys().length <= 1) {
+			return;
+		}
+		boolean hasActionContextParam = Arrays.stream(method.getParameters())
+				.anyMatch(p -> p.getType().equals(ActionContext.class));
+		if (!hasActionContextParam) {
+			logger.warn(
+					"Action '{}' declares multiple additionalContextKeys but has no ActionContext parameter. "
+							+ "Consider injecting ActionContext to satisfy the declared contract.",
+					method.getName());
+		}
+	}
+
+	private void enforceContextContract(Action actionAnno, ActionContext ctx) {
+		if (actionAnno == null) {
+			return;
+		}
+		Set<String> expectedKeys = new HashSet<>();
+		if (!actionAnno.contextKey().isBlank()) {
+			expectedKeys.add(actionAnno.contextKey());
+		}
+		for (String key : actionAnno.additionalContextKeys()) {
+			if (key != null && !key.isBlank()) {
+				expectedKeys.add(key);
+			}
+		}
+		for (String key : expectedKeys) {
+			if (!ctx.contains(key)) {
+				throw new IllegalStateException(
+						"Action '%s' contract violation: expected context key '%s' to be present."
+								.formatted(actionAnno.description().isBlank() ? actionAnno.contextKey() : actionAnno.description(), key));
+			}
+		}
+	}
+
 	private ActionDefinition findDefinition(String actionName) {
+		assert actionExists(actionName) : "Unknown action: " + actionName;
 		return actions.stream()
 				.filter(d -> d.name().equals(actionName))
 				.findFirst()
@@ -48,7 +98,7 @@ public class ExecutableActionFactory {
 						"Unknown action: " + actionName));
 	}
 
-	public boolean actionExists(String action) {
+	private boolean actionExists(String action) {
 		return actions.stream().anyMatch(d -> d.name().equals(action));
 	}
 
@@ -67,13 +117,13 @@ public class ExecutableActionFactory {
 				.mutability(actionAnno.mutability());
 
 		validateAffinityUsage(actionAnno);
-		addTemplateValue(actionAnno.affinity(), bindings, builder::addAffinityId);
+		addTemplateValue(builder, actionAnno.affinity(), bindings, builder::addAffinityId);
 		for (String extraAffinity : actionAnno.affinities()) {
-			addTemplateValue(extraAffinity, bindings, builder::addAffinityId);
+			addTemplateValue(builder, extraAffinity, bindings, builder::addAffinityId);
 		}
 
-		for (String produces : actionAnno.produces()) {
-			addTemplateValue(produces, bindings, builder::addProducesContext);
+		for (String produces : actionAnno.additionalContextKeys()) {
+			addTemplateValue(builder, produces, bindings, builder::addProducesContext);
 		}
 
 		if (!actionAnno.contextKey().isBlank()) {
@@ -83,15 +133,20 @@ public class ExecutableActionFactory {
 		return builder.build();
 	}
 
-	private void addTemplateValue(String template,
+	private void addTemplateValue(ActionMetadata.Builder builder,
+			String template,
 			TemplateBindings bindings,
 			java.util.function.Consumer<String> consumer) {
 		if (template == null || template.isBlank()) {
 			return;
 		}
-		String rendered = TemplateRenderer.render(template, bindings);
-		if (!rendered.isBlank()) {
-			consumer.accept(rendered);
+		TemplateRenderer.RenderOutcome outcome = TemplateRenderer.render(template, bindings);
+		if (outcome.resolved()) {
+			if (!outcome.value().isBlank()) {
+				consumer.accept(outcome.value());
+			}
+		} else {
+			builder.addPendingAffinity(template, outcome.missingPlaceholders());
 		}
 	}
 

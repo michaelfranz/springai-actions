@@ -4,7 +4,6 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.javai.springai.actions.api.Mutability;
 
 /**
  * Marks a method as an executable action in the planning/execution DSL.
@@ -32,7 +31,7 @@ import org.javai.springai.actions.api.Mutability;
  * actions to the right serialized queue, e.g. {@code "customer:{customerId}"}.</li>
  * <li>Execution cost, description, and mutability hints for schedulers.</li>
  * <li>Context keys the action writes via {@link #contextKey()} or
- * {@link #produces()}.</li>
+ * {@link #additionalContextKeys()}.</li>
  * </ul>
  */
 @Retention(RetentionPolicy.RUNTIME)
@@ -71,7 +70,7 @@ public @interface Action {
 	 * Additional context keys produced by this action, allowing the planner to
 	 * build dependencies, e.g. {@code {"profile", "orderSummary"}}.
 	 */
-	String[] produces() default {};
+	String[] additionalContextKeys() default {};
 
 	/**
 	 * Indicates whether the action is read-only, creates data, or mutates existing

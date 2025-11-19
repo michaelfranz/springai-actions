@@ -17,11 +17,10 @@ Each milestone delivers a usable framework plus an updated `DadJokeForTodayGener
 - [x] Adjust DadJoke scenario annotations to use the new template syntax while preserving runtime behaviour.
 
 ## Milestone 3 — Context Contracts & Execution DAG
-- [ ] Introduce dedicated annotations (`@RequiresContext`, `@ProducesContext`) to declare data dependencies without AOP.
-- [ ] Build a standalone `ExecutionDAG` structure that consumes all metadata (affinities, mutability, context contracts) and materialises the executable dependency graph.
-- [ ] Provide thorough unit tests for `ExecutionDAG` independent of actual execution, covering template expansion, dependency creation, and cycle detection.
-- [ ] Validate that every required context key is produced (or marked pre-existing) and fail fast on contradictions.
-- [ ] Update DadJoke scenario to reflect the new context annotations and verify the DAG enforces correct sequencing even when plan steps are reordered.
+- [x] Build a standalone `ExecutionDAG` structure that consumes all metadata (affinities, mutability, context contracts) and materialises the executable dependency graph.
+- [x] Provide thorough unit tests for `ExecutionDAG` (and ordering strategy) independent of actual execution, covering template expansion, dependency creation, and cycle detection.
+- [x] Validate that every required context key is produced (or marked pre-existing) and fail fast on contradictions.
+- [x] Add a new scenario to try out functionality added in Milestone 3.
 
 ## Milestone 4 — Affinity-Aware Parallel Executor
 - [ ] Introduce a new `ConcurrentPlanExecutor` that reads affinity IDs and mutability to route actions into affinity queues while still honouring dependencies computed in Milestone 3.
