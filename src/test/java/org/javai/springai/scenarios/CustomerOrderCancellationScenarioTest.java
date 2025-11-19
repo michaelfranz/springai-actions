@@ -29,7 +29,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 
 class CustomerOrderCancellationScenarioTest {
 
-	private static final String AGENT_ROLE = "You are a customer service agent.";
+	private static final String CUSTOMER_SERVICE_PERSONA = "You are a customer service agent.";
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 
@@ -67,7 +67,7 @@ class CustomerOrderCancellationScenarioTest {
 						You must call the customerName tool with the same customerId to obtain the email-friendly name.
 						Use that tool result to populate the friendlyCustomerName argument of cancelOrderAndNotify.
 						""")
-				.user(AGENT_ROLE)
+				.user(CUSTOMER_SERVICE_PERSONA)
 				.user("""
 						For customer 123, fetch the most recent order and cancel it.
 						Provide the reason for cancellation as: 'At the customer's request'.
