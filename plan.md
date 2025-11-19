@@ -10,11 +10,11 @@ Each milestone delivers a usable framework plus an updated `DadJokeForTodayGener
 - [x] Adjust `DadJokeForTodayGeneratorTest` actions to compile against the new helpers (no behaviour change yet).
 
 ## Milestone 2 — Annotation-Derived Metadata Templates
-- [ ] Keep action methods returning domain results; metadata moves entirely into annotations plus helper annotations (e.g., `@RequiresContext`, `@ProducesContext`).
-- [ ] Extend `@Action` to support template attributes (e.g., `affinity = "customer:{customerId}"`, `produces = "emailText"`) with safe defaults to avoid annotation bloat.
-- [ ] Build a template expansion utility that validates referenced parameters/context keys at plan-compilation time; fail fast if placeholders cannot be resolved.
-- [ ] Update `ExecutableActionFactory` to derive `ActionMetadata` solely from annotations + templates and persist it within `ExecutableAction`.
-- [ ] Adjust DadJoke scenario annotations to use the new template syntax while preserving runtime behaviour.
+- [x] Keep action methods returning domain results; metadata moves entirely into annotations plus helper annotations (e.g., `@RequiresContext`, `@ProducesContext`).
+- [x] Extend `@Action` to support template attributes (e.g., `affinity = "customer:{customerId}"`, `produces = "emailText"`) with safe defaults to avoid annotation bloat.
+- [x] Build a template expansion utility that validates referenced parameters/context keys at plan-compilation time; fail fast if placeholders cannot be resolved.
+- [x] Update `ExecutableActionFactory` to derive `ActionMetadata` solely from annotations + templates and persist it within `ExecutableAction`.
+- [x] Adjust DadJoke scenario annotations to use the new template syntax while preserving runtime behaviour.
 
 ## Milestone 3 — Context Contracts & Execution DAG
 - [ ] Introduce dedicated annotations (`@RequiresContext`, `@ProducesContext`) to declare data dependencies without AOP.
