@@ -17,19 +17,33 @@ import org.javai.springai.actions.api.Mutability;
  * restarts.
  */
 public record ActionMetadata(
+		/** Unique identifier for the plan step (used in dependency edges). */
 		String stepId,
+		/** Human-readable action name (method name or alias). */
 		String actionName,
+		/** Fully resolved affinity IDs determining serialized execution lanes. */
 		List<String> affinityIds,
+		/** Mutability contract (read-only, create, mutate) for scheduling rules. */
 		Mutability mutability,
+		/** Logical resources/context keys this action reads. */
 		Set<String> resourceReads,
+		/** Logical resources/context keys this action writes or mutates. */
 		Set<String> resourceWrites,
+		/** Context keys or resources that must exist before execution. */
 		Set<String> requiresContext,
+		/** Context keys or resources produced by the action. */
 		Set<String> producesContext,
+		/** Step IDs that must complete before this action can begin. */
 		Set<String> dependsOn,
+		/** Relative scheduling cost used when ordering competing actions. */
 		int cost,
+		/** Optional priority override for finer-grained scheduling. */
 		Integer priority,
+		/** Maximum allowed execution time before the action is considered timed out. */
 		Duration timeout,
+		/** Maximum number of retries permitted on failure. */
 		int maxRetries,
+		/** Whether the action can be safely retried without side effects. */
 		boolean idempotent
 ) implements Serializable {
 
