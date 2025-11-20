@@ -79,6 +79,8 @@ class CustomerOrderCancellationScenarioTest {
 				.actions(this)
 				.plan();
 
+		// TODO verify plan correct
+
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext context = executor.execute(plan);
 

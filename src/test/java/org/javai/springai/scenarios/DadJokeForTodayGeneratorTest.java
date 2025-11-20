@@ -64,7 +64,8 @@ public class DadJokeForTodayGeneratorTest {
 						The joke must somehow be replated to the song Rocket Man by Elton John.
 						""")
 				.tools(this)
-				.actions(this).plan();
+				.actions(this)
+				.plan();
 		assertThat(plan.executables())
 				.hasSize(1);
 
