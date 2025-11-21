@@ -1,5 +1,7 @@
 plugins {
     java
+    `java-library`
+    `maven-publish`
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -15,6 +17,7 @@ java {
 }
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -60,4 +63,33 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Configure Spring Boot to not create a bootJar by default.
+// Instead, use the plain JAR as the main artifact for library consumption.
+tasks {
+    bootJar {
+        enabled = false
+    }
+    
+    jar {
+        enabled = true
+    }
+    
+    // Ensure the plain jar is the default artifact
+    build {
+        dependsOn(jar)
+    }
+}
+
+// Configure Maven publishing for the plain JAR
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+            groupId = "org.javai.springai"
+            artifactId = "SpringAIActions"
+            version = "0.0.1-SNAPSHOT"
+        }
+    }
 }
