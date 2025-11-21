@@ -8,9 +8,13 @@ import org.javai.springai.actions.definition.ActionDefinitionFactory;
 import org.javai.springai.actions.execution.ExecutableAction;
 import org.javai.springai.actions.execution.ExecutableActionFactory;
 import org.javai.springai.actions.execution.ExecutablePlan;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 
 public class PlanningPromptSpec {
+
+	private static final Logger logger = LoggerFactory.getLogger(PlanningPromptSpec.class);
 
 	private final ChatClient.ChatClientRequestSpec delegate;
 	private final List<String> systemMessages = new ArrayList<>();
@@ -18,20 +22,24 @@ public class PlanningPromptSpec {
 	private final List<ActionDefinition> actions = new ArrayList<>();
 
 	public PlanningPromptSpec(ChatClient.ChatClientRequestSpec delegate) {
+		logger.debug("PlanningPromptSpec() called with delegate: {}", delegate);
 		this.delegate = delegate;
 	}
 
 	public PlanningPromptSpec system(String text) {
+		logger.debug("system() invoked with text: {}", text);
 		systemMessages.add(text);
 		return this;
 	}
 
 	public PlanningPromptSpec user(String text) {
+		logger.debug("user() invoked with text: {}", text);
 		userMessages.add(text);
 		return this;
 	}
 
 	public PlanningPromptSpec tools(Object beanWithTools) {
+		logger.debug("tools() invoked with bean: {}", beanWithTools);
 		delegate.tools(beanWithTools);
 		return this;
 	}
@@ -42,6 +50,7 @@ public class PlanningPromptSpec {
 	 * to the LLM in the system prompt.
 	 */
 	public PlanningPromptSpec actions(Object ... beanWithActions) {
+		logger.debug("actions() invoked with {} bean(s)", beanWithActions == null ? 0 : beanWithActions.length);
 		if (beanWithActions == null) return this;
 		for (Object bean : beanWithActions) {
 			if (bean == null) continue;
@@ -65,6 +74,7 @@ public class PlanningPromptSpec {
 	}
 
 	public ExecutablePlan plan() {
+		logger.debug("plan() invoked with {} registered action definition(s)", this.actions.size());
 		Plan plan = ensureValidPlan(this.call().entity(Plan.class));
 		return new ExecutablePlan(compilePlan(plan));
 	}
