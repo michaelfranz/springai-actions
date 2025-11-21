@@ -2,6 +2,7 @@ package org.javai.springai.actions.execution;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,9 +15,7 @@ import java.util.Set;
  * {@link ExecutableAction}s. The factory performs validation, detects cycles,
  * and documents the resulting order.
  */
-public class DAGFactory {
-
-	private final ExecutionOrderStrategy orderStrategy;
+public record DAGFactory(ExecutionOrderStrategy orderStrategy) {
 
 	public DAGFactory() {
 		this(new TopologicalExecutionOrderStrategy());
@@ -79,9 +78,9 @@ public class DAGFactory {
 	}
 
 	private void addExplicitDependencies(String stepId,
-			ActionMetadata metadata,
-			Map<String, ActionMetadata> metadataByStep,
-			Map<String, List<String>> dependencyReasons) {
+										 ActionMetadata metadata,
+										 Map<String, ActionMetadata> metadataByStep,
+										 Map<String, List<String>> dependencyReasons) {
 		for (String dependency : metadata.dependsOn()) {
 			ActionMetadata dependencyMetadata = metadataByStep.get(dependency);
 			if (dependencyMetadata == null) {
@@ -97,9 +96,9 @@ public class DAGFactory {
 	}
 
 	private void addContextDependencies(String stepId,
-			ActionMetadata metadata,
-			Map<String, Set<String>> contextProducers,
-			Map<String, List<String>> dependencyReasons) {
+										ActionMetadata metadata,
+										Map<String, Set<String>> contextProducers,
+										Map<String, List<String>> dependencyReasons) {
 
 		for (String contextKey : metadata.requiresContext()) {
 			Set<String> producers = contextProducers.get(contextKey);
@@ -116,14 +115,14 @@ public class DAGFactory {
 	}
 
 	private void ensureNoContextContradiction(String stepId,
-			ActionMetadata metadata,
-			String dependency,
-			ActionMetadata dependencyMetadata) {
+											  ActionMetadata metadata,
+											  String dependency,
+											  ActionMetadata dependencyMetadata) {
 
 		if (metadata.producesContext().isEmpty() || dependencyMetadata.requiresContext().isEmpty()) {
 			return;
 		}
-		Set<String> produced = new java.util.HashSet<>(metadata.producesContext());
+		Set<String> produced = new HashSet<>(metadata.producesContext());
 		produced.retainAll(dependencyMetadata.requiresContext());
 		if (!produced.isEmpty()) {
 			throw new IllegalStateException(

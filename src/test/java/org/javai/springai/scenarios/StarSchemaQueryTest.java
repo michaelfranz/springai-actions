@@ -13,6 +13,7 @@ import org.javai.springai.actions.execution.ExecutablePlan;
 import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.planning.PlanningChatClient;
+import org.javai.springai.actions.planning.PlanningPromptSpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -32,7 +33,7 @@ class StarSchemaQueryTest {
 
 	private static final ContextKey<String> DISPLAY_FEEDBACK = ContextKey.of("displayFeedback", String.class);
 
-	private PlanningChatClient chatClient;
+	private PlanningPromptSpec chatBasis;
 
 	@BeforeEach
 	void setUp() {
@@ -48,12 +49,7 @@ class StarSchemaQueryTest {
 				.defaultOptions(optionsBuilder.build())
 				.build();
 
-		this.chatClient = new PlanningChatClient(springAiChatClient);
-	}
-
-	@Test
-	void generateSimpleQuery() throws PlanExecutionException {
-		ExecutablePlan plan = chatClient
+		chatBasis = new PlanningChatClient(springAiChatClient)
 				.prompt()
 				.system(ASSISTENT_PERSONA)
 				.system("""
@@ -102,13 +98,20 @@ class StarSchemaQueryTest {
 												You must translate the user's input into an SQL query that is as close as possible to the user's intention.
 												If you cannot translate the user's input, return an error message.
 						""")
+				.tools(this)
+				.actions(this);
+	}
+
+	@Test
+	void generateSimpleQuery() throws PlanExecutionException {
+		ExecutablePlan plan = chatBasis
 				.user("""
 						Find the total order value of orders placed in germany in 2001.
 						Then display the search results.
 						""")
-				.tools(this)
-				.actions(this)
 				.plan();
+
+		// TODO verify plan correct
 
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext context = executor.execute(plan);

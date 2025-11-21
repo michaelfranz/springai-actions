@@ -18,9 +18,8 @@ repositories {
     mavenCentral()
 }
 
-var springAiVersion = "1.1.0"
 var springBootVersion = "3.5.7"
-var springAIVersion = "1.0.3"
+var springAIVersion = "1.1.0"
 
 dependencies {
 
@@ -55,7 +54,7 @@ configurations.all {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.ai:spring-ai-bom:$springAiVersion")
+        mavenBom("org.springframework.ai:spring-ai-bom:$springAIVersion")
     }
 }
 
