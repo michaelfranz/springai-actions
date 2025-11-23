@@ -1,7 +1,7 @@
 package org.javai.springai.actions.api;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 class ActionContextTest {
@@ -13,18 +13,18 @@ class ActionContextTest {
 
 		String value = ctx.get("name", String.class);
 
-		assertEquals("Spring", value);
-		assertTrue(ctx.contains("name"));
+		assertThat(value).isEqualTo("Spring");
+		assertThat(ctx.contains("name")).isTrue();
 	}
 
 	@Test
 	void getThrowsWhenKeyMissing() {
 		ActionContext ctx = new ActionContext();
 
-		IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ctx.get("missing", String.class));
-
-		assertEquals("No value for context key: missing", ex.getMessage());
-		assertFalse(ctx.contains("missing"));
+		assertThatThrownBy(() -> ctx.get("missing", String.class))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessage("No value for context key: missing");
+		assertThat(ctx.contains("missing")).isFalse();
 	}
 }
 

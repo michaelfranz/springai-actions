@@ -40,10 +40,11 @@ public class ExecutableActionFactory {
 				Object[] args = binder.bindArguments(method, step.arguments(), ctx);
 				try {
 					Object result = method.invoke(bean, args);
-					if (actionAnno != null && !actionAnno.contextKey().isEmpty() && result != null) {
+					boolean wrotePrimaryContext = actionAnno != null && !actionAnno.contextKey().isBlank() && result != null;
+					if (wrotePrimaryContext) {
 						ctx.put(actionAnno.contextKey(), result);
 					}
-					enforceContextContract(actionAnno, ctx);
+					enforceContextContract(actionAnno, ctx, wrotePrimaryContext);
 				} catch (IllegalAccessException | InvocationTargetException e) {
 					throw new PlanExecutionException(
 							"Exception invoking action: %s, bean: %s, method: %s"
@@ -67,12 +68,12 @@ public class ExecutableActionFactory {
 		}
 	}
 
-	private void enforceContextContract(Action actionAnno, ActionContext ctx) {
+	private void enforceContextContract(Action actionAnno, ActionContext ctx, boolean primaryKeyRequired) {
 		if (actionAnno == null) {
 			return;
 		}
 		Set<String> expectedKeys = new HashSet<>();
-		if (!actionAnno.contextKey().isBlank()) {
+		if (primaryKeyRequired) {
 			expectedKeys.add(actionAnno.contextKey());
 		}
 		for (String key : actionAnno.additionalContextKeys()) {
@@ -90,16 +91,11 @@ public class ExecutableActionFactory {
 	}
 
 	private ActionDefinition findDefinition(String actionName) {
-		assert actionExists(actionName) : "Unknown action: " + actionName;
 		return actions.stream()
 				.filter(d -> d.name().equals(actionName))
 				.findFirst()
 				.orElseThrow(() -> new IllegalArgumentException(
 						"Unknown action: " + actionName));
-	}
-
-	private boolean actionExists(String action) {
-		return actions.stream().anyMatch(d -> d.name().equals(action));
 	}
 
 	private ActionMetadata createMetadata(PlanStep step, Action actionAnno) {

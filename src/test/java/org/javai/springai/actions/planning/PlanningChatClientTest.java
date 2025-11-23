@@ -1,8 +1,9 @@
 package org.javai.springai.actions.planning;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
@@ -18,7 +19,7 @@ class PlanningChatClientTest {
 
 		PlanningPromptSpec promptSpec = client.prompt();
 
-		assertNotNull(promptSpec);
+		assertThat(promptSpec).isNotNull();
 		verify(delegate).prompt();
 	}
 }

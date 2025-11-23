@@ -1,7 +1,6 @@
 package org.javai.springai.actions.tuning;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.time.Duration;
 import java.util.Map;
 import org.apache.logging.log4j.Level;

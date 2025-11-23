@@ -2,7 +2,6 @@ package org.javai.springai.actions.tuning;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
-
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.api.ActionContext;

@@ -1,10 +1,7 @@
 package org.javai.springai.actions.planning;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
@@ -43,15 +40,16 @@ class PlanningPromptSpecTest {
 		spec.system("sys-1").system("sys-2");
 		spec.user("user-1").user("user-2");
 
-		assertSame(callResponseSpec, spec.call());
+
+		assertThat(spec.call()).isSameAs(callResponseSpec);
 
 		ArgumentCaptor<String> systemCaptor = ArgumentCaptor.forClass(String.class);
 		verify(requestSpec).system(systemCaptor.capture());
-		assertEquals("sys-1\n\nsys-2", systemCaptor.getValue());
+		assertThat(systemCaptor.getValue()).isEqualTo("sys-1\n\nsys-2");
 
 		ArgumentCaptor<String> userCaptor = ArgumentCaptor.forClass(String.class);
 		verify(requestSpec).user(userCaptor.capture());
-		assertEquals("user-1\n\nuser-2", userCaptor.getValue());
+		assertThat(userCaptor.getValue()).isEqualTo("user-1\n\nuser-2");
 	}
 
 	@Test
@@ -72,14 +70,15 @@ class PlanningPromptSpecTest {
 		verify(requestSpec).system(systemCaptor.capture());
 
 		String systemPrompt = systemCaptor.getValue();
-		assertTrue(systemPrompt.contains("=== PLAN AND ACTION DEFINITIONS ==="));
-		assertTrue(systemPrompt.contains("planAction"));
+		assertThat(systemPrompt)
+			.contains("=== PLAN AND ACTION DEFINITIONS ===")
+			.contains("planAction");
 	}
 
 	@Test
 	void actionsIgnoreNullValuesGracefully() {
-		assertSame(spec, spec.actions((Object[]) null));
-		assertSame(spec, spec.actions(null, new PlanningActions(), null));
+		assertThat(spec.actions((Object[]) null)).isSameAs(spec);
+		assertThat(spec.actions(null, new PlanningActions(), null)).isSameAs(spec);
 	}
 
 	@Test
@@ -87,7 +86,7 @@ class PlanningPromptSpecTest {
 		spec.actions(new PlanningActions());
 		when(callResponseSpec.entity(Plan.class)).thenReturn(null);
 
-		assertThrows(IllegalStateException.class, spec::plan);
+		assertThatThrownBy(spec::plan).isInstanceOf(IllegalStateException.class);
 	}
 
 	@Test
@@ -95,7 +94,7 @@ class PlanningPromptSpecTest {
 		spec.actions(new PlanningActions());
 		when(callResponseSpec.entity(Plan.class)).thenReturn(new Plan(List.of()));
 
-		assertThrows(IllegalStateException.class, spec::plan);
+		assertThatThrownBy(spec::plan).isInstanceOf(IllegalStateException.class);
 	}
 
 	@Test
@@ -106,12 +105,13 @@ class PlanningPromptSpecTest {
 		method.setAccessible(true);
 		String schemaMessage = (String) method.invoke(spec);
 
-		assertTrue(schemaMessage.contains("PlanStep entries"));
-		assertTrue(schemaMessage.contains("\"action\": \"<actionName>\""));
-		assertTrue(schemaMessage.contains("PlanStep objects"));
-		assertTrue(schemaMessage.contains("Action name: planAction"));
-		assertTrue(schemaMessage.contains("\"action\": \"sendEmail\""));
-		assertFalse(schemaMessage.contains("\"steps\""));
+		assertThat(schemaMessage)
+			.contains("PlanStep entries")
+			.contains("\"action\": \"<actionName>\"")
+			.contains("PlanStep objects")
+			.contains("Action name: planAction")
+			.contains("\"action\": \"sendEmail\"")
+			.contains("\"steps\"");
 	}
 
 

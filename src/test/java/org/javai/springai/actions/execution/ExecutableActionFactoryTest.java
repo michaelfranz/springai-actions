@@ -1,10 +1,7 @@
 package org.javai.springai.actions.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
@@ -33,10 +30,10 @@ class ExecutableActionFactoryTest {
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
-		assertEquals("Bob", bean.getLastArgument());
-		assertEquals("Hello Bob", bean.getLastOutput());
-		assertTrue(context.contains("greetingResult"));
-		assertEquals("Hello Bob", context.get("greetingResult", String.class));
+		assertThat(bean.getLastArgument()).isEqualTo("Bob");
+		assertThat(bean.getLastOutput()).isEqualTo("Hello Bob");
+		assertThat(context.contains("greetingResult")).isTrue();
+		assertThat(context.get("greetingResult", String.class)).isEqualTo("Hello Bob");
 	}
 
 	@Test
@@ -49,8 +46,8 @@ class ExecutableActionFactoryTest {
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
-		assertNull(bean.getLastOutput());
-		assertFalse(context.contains("nullStore"));
+		assertThat(bean.getLastOutput()).isNull();
+		assertThat(context.contains("nullStore")).isFalse();
 	}
 
 	@Test
@@ -66,19 +63,18 @@ class ExecutableActionFactoryTest {
 		ActionContext context = new ActionContext();
 		executable.perform(context);
 
-		assertEquals("value", bean.getLastArgument());
-		assertEquals("VALUE", bean.getLastOutput());
-		assertFalse(context.contains("nonAnnotated"));
+		assertThat(bean.getLastArgument()).isEqualTo("value");
+		assertThat(bean.getLastOutput()).isEqualTo("VALUE");
+		assertThat(context.contains("nonAnnotated")).isFalse();
 	}
 
 	@Test
 	void fromThrowsWhenActionUnknown() {
 		ExecutableActionFactory factory = new ExecutableActionFactory(List.of());
 
-		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-				() -> factory.from(new PlanStep("missing", mapper.createObjectNode())));
-
-		assertEquals("Unknown action: missing", ex.getMessage());
+		assertThatThrownBy(() -> factory.from(new PlanStep("missing", mapper.createObjectNode())))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Unknown action: missing");
 	}
 
 	private ActionDefinition definition(Object bean, Method method) {

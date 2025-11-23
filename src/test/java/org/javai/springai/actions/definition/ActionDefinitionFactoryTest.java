@@ -1,7 +1,6 @@
 package org.javai.springai.actions.definition;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.junit.jupiter.api.Test;
@@ -14,25 +13,25 @@ class ActionDefinitionFactoryTest {
 
 		List<ActionDefinition> definitions = ActionDefinitionFactory.from(bean);
 
-		assertEquals(2, definitions.size());
+  assertThat(definitions).hasSize(2);
 
 		ActionDefinition greet = definitions.stream()
 				.filter(def -> def.name().equals("greet"))
 				.findFirst()
 				.orElseThrow();
 
-		assertEquals("Friendly greeting", greet.description());
-		assertNotNull(greet.argumentSchema());
-		assertEquals(bean, greet.bean());
-		assertEquals("greet", greet.method().getName());
+  assertThat(greet.description()).isEqualTo("Friendly greeting");
+  assertThat(greet.argumentSchema()).isNotNull();
+  assertThat(greet.bean()).isSameAs(bean);
+  assertThat(greet.method().getName()).isEqualTo("greet");
 
 		ActionDefinition fallback = definitions.stream()
 				.filter(def -> def.name().equals("fallback"))
 				.findFirst()
 				.orElseThrow();
 
-		assertEquals("Action fallback", fallback.description());
-		assertNotNull(fallback.argumentSchema());
+  assertThat(fallback.description()).isEqualTo("Action fallback");
+  assertThat(fallback.argumentSchema()).isNotNull();
 	}
 
 	static class SampleActions {

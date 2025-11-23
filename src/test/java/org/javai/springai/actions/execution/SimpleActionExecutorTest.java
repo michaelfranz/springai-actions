@@ -1,8 +1,6 @@
 package org.javai.springai.actions.execution;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.javai.springai.actions.api.ActionContext;
@@ -25,9 +23,9 @@ class SimpleActionExecutorTest {
 
 		executor.execute(plan);
 
-		assertNotNull(firstContext.get());
-		assertSame(firstContext.get(), secondContext.get());
-		assertTrue(secondContext.get().contains("executed"));
+		assertThat(firstContext.get()).isNotNull();
+		assertThat(firstContext.get()).isSameAs(secondContext.get());
+		assertThat(secondContext.get().contains("executed")).isTrue();
 	}
 }
 

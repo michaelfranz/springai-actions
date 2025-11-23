@@ -1,7 +1,7 @@
 package org.javai.springai.actions.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
@@ -27,12 +27,12 @@ class ActionArgumentBinderTest {
 		ActionContext ctx = new ActionContext();
 		ctx.put("user", "Alice");
 
-		Object[] bound = binder.bindArguments(method, args, ctx);
+ 	Object[] bound = binder.bindArguments(method, args, ctx);
 
-		assertSame(ctx, bound[0]);
-		assertEquals("Alice", bound[1]);
-		assertEquals(5, bound[2]);
-		assertEquals("details", bound[3]);
+		assertThat(bound[0]).isSameAs(ctx);
+		assertThat(bound[1]).isEqualTo("Alice");
+		assertThat(bound[2]).isEqualTo(5);
+		assertThat(bound[3]).isEqualTo("details");
 	}
 
 	@Test
@@ -40,12 +40,10 @@ class ActionArgumentBinderTest {
 		Method method = BinderSample.class.getMethod("requiresArgument", String.class);
 		ActionContext ctx = new ActionContext();
 
-		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-				() -> binder.bindArguments(method, mapper.createObjectNode(), ctx));
-
 		String expectedParam = method.getParameters()[0].getName();
-		assertEquals("Missing required argument '%s' for action '%s'".formatted(expectedParam, "requiresArgument"),
-				ex.getMessage());
+		assertThatThrownBy(() -> binder.bindArguments(method, mapper.createObjectNode(), ctx))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Missing required argument '%s' for action '%s'".formatted(expectedParam, "requiresArgument"));
 	}
 
 	static class BinderSample {

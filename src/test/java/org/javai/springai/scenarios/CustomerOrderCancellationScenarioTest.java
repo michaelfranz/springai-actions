@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.javai.springai.actions.api.Action;
@@ -20,7 +21,7 @@ import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.planning.PlanningChatClient;
 import org.javai.springai.actions.tuning.LlmTuningConfig;
 import org.javai.springai.actions.tuning.PlanSupplier;
-import org.javai.springai.actions.tuning.PlanSupplierFactory;
+import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -30,62 +31,54 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
-class CustomerOrderCancellationScenarioTest implements PlanSupplier {
+class CustomerOrderCancellationScenarioTest implements ScenarioPlanSupplier {
 
 	private static final String CUSTOMER_SERVICE_PERSONA = "You are a customer service agent.";
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 
-	private static final ContextKey<Order> LATEST_ORDER_KEY = ContextKey.of("latestOrder", Order.class);
 	private static final ContextKey<Order> UPDATED_ORDER_KEY = ContextKey.of("updatedOrder", Order.class);
 	private static final ContextKey<String> CANCELLATION_EMAIL_KEY = ContextKey.of("cancellationEmail", String.class);
 
-	private PlanningChatClient chatClient;
+	private static final LlmTuningConfig BASELINE_CONFIG = new LlmTuningConfig(
+			CUSTOMER_SERVICE_PERSONA,
+			0.2,
+			0.95
+	);
+
 	private final MockOrderRepository repository = new MockOrderRepository();
 	private String lastCustomerNameToolResult;
 
 	@BeforeEach
 	void setUp() {
+		ensureApiKeyPresent();
 		this.lastCustomerNameToolResult = null;
-		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
-		}
-		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder().model("gpt-4.1-mini");
-		optionsBuilder.temperature(0.2);
-
-		ChatClient springAiChatClient = ChatClient.builder(chatModel)
-				.defaultOptions(optionsBuilder.build())
-				.build();
-
-		this.chatClient = new PlanningChatClient(springAiChatClient);
 	}
 
 	@Override
-	public ExecutablePlan get() {
-		return chatClient
-				.prompt()
-				.system("""
-						You must call the customerName tool with the same customerId to obtain the email-friendly name.
-						Use that tool result to populate the friendlyCustomerName argument of cancelOrderAndNotify.
-						""")
-				.user(CUSTOMER_SERVICE_PERSONA)
-				.user("""
-						For customer 123, fetch the most recent order and cancel it.
-						Provide the reason for cancellation as: 'At the customer's request'.
-						After cancellation, send an email confirming the change and mention the updated status.
-						Always use the fetchLatestOrder action before cancelOrderAndNotify.
-						Ensure the email greeting uses the friendlyCustomerName argument that came from the customerName tool call.
-						""")
-				.tools(this)
-				.actions(this)
-				.plan();
+	public String scenarioId() {
+		return "customer-order-cancellation";
+	}
+
+	@Override
+	public String description() {
+		return "Cancels the latest order for a customer and sends a confirmation email.";
+	}
+
+	@Override
+	public LlmTuningConfig defaultConfig() {
+		return BASELINE_CONFIG;
+	}
+
+	@Override
+	public PlanSupplier planSupplier(LlmTuningConfig config) {
+		LlmTuningConfig effective = config != null ? config : defaultConfig();
+		return () -> createPlan(effective);
 	}
 
 	@Test
 	void cancelMostRecentOrderForCustomer() throws PlanExecutionException {
-		ExecutablePlan plan = get();
+		ExecutablePlan plan = planSupplier().get();
 
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext context = executor.execute(plan);
@@ -100,6 +93,60 @@ class CustomerOrderCancellationScenarioTest implements PlanSupplier {
 				.contains("Order " + updatedOrder.orderId())
 				.contains("status set to CANCELLED")
 				.contains(lastCustomerNameToolResult);
+	}
+
+	private ExecutablePlan createPlan(LlmTuningConfig config) {
+		PlanningChatClient client = createPlanningClient(config);
+		this.lastCustomerNameToolResult = null;
+
+		String persona = (config.systemPrompt() == null || config.systemPrompt().isBlank())
+				? CUSTOMER_SERVICE_PERSONA
+				: config.systemPrompt();
+
+		return client
+				.prompt()
+				.system("""
+						You must call the customerName tool with the same customerId to obtain the email-friendly name.
+						Use that tool result to populate the friendlyCustomerName argument of cancelOrderAndNotify.
+						""")
+				.user(persona)
+				.user("""
+						For customer 123, fetch the most recent order and cancel it.
+						Provide the reason for cancellation as: 'At the customer's request'.
+						After cancellation, send an email confirming the change and mention the updated status.
+						Always use the fetchLatestOrder action before cancelOrderAndNotify.
+						Ensure the email greeting uses the friendlyCustomerName argument that came from the customerName tool call.
+						""")
+				.tools(this)
+				.actions(this)
+				.plan();
+	}
+
+	private PlanningChatClient createPlanningClient(LlmTuningConfig config) {
+		ensureApiKeyPresent();
+		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
+		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
+		OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder().model("gpt-4.1-mini");
+
+		if (config.temperature() != null) {
+			optionsBuilder.temperature(config.temperature());
+		}
+		if (config.topP() != null) {
+			optionsBuilder.topP(config.topP());
+		}
+
+		ChatClient springAiChatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
+				.defaultOptions(Objects.requireNonNull(optionsBuilder.build()))
+				.build();
+
+		return new PlanningChatClient(springAiChatClient);
+	}
+
+	private void ensureApiKeyPresent() {
+		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
+			throw new IllegalStateException(
+					"Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
+		}
 	}
 
 	@Tool(description = "Return an email-friendly customer name for the given customer id")

@@ -3,6 +3,7 @@ package org.javai.springai.scenarios;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Objects;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
@@ -14,7 +15,9 @@ import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.planning.PlanningChatClient;
 import org.javai.springai.actions.planning.PlanningPromptSpec;
-import org.junit.jupiter.api.BeforeEach;
+import org.javai.springai.actions.tuning.LlmTuningConfig;
+import org.javai.springai.actions.tuning.PlanSupplier;
+import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -22,7 +25,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.annotation.Tool;
 
-class StarSchemaQueryTest {
+class StarSchemaQueryTest implements ScenarioPlanSupplier {
 
 	private static final String ASSISTENT_PERSONA = """
 			You are an expert data engineer whose job is to translate \
@@ -33,83 +36,62 @@ class StarSchemaQueryTest {
 
 	private static final ContextKey<String> DISPLAY_FEEDBACK = ContextKey.of("displayFeedback", String.class);
 
-	private PlanningPromptSpec chatBasis;
+	private static final String METADATA_BRIEF = """
+			The warehouse contains:
+				•	Multiple fact tables, each representing a business process.
+				•	Multiple dimension tables, many of which are shared across fact tables (conformed dimensions).
+				•	Fact tables always join to dimension tables using foreign keys.
+				•	Dimension tables do not join to each other unless explicitly indicated in metadata.
 
-	@BeforeEach
-	void setUp() {
-		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
-		}
-		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder().model("gpt-4.1-mini");
-		optionsBuilder.temperature(0.2);
+			Your responsibilities:
+				1.	Interpret the user’s natural-language request.
+				2.	Identify the correct fact table(s) by using metadata tools whenever necessary.
+				•	Always call listFactTables() when deciding which fact table contains the required metrics.
+				•	Never assume that a fact table exists without confirming via metadata.
+				3.	Identify the required dimension tables by inspecting metadata.
+				•	Use listDimensionTables(factTableName) to determine which dimensions are available for joining.
+				•	Use getTableSchema(tableName) to inspect column names if mapping is unclear.
+				•	Never invent or guess columns—only use what is confirmed in metadata.
+				4.	Construct a complete and syntactically valid SQL query that:
+				•	Uses explicit JOIN clauses
+				•	Selects the correct fields
+				•	Applies the necessary filters and grouping
+				•	Respects the SQL dialect (PostgreSQL unless otherwise specified)
+				•	Uses table aliases where appropriate
+				•	Never includes tables or columns that are not present in metadata
+				5.	Be deterministic and explicit.
+				•	If multiple fact tables could apply, choose the most semantically relevant one.
+				•	If the user’s request is ambiguous, ask a clarifying question instead of guessing.
+				•	If the request cannot be satisfied with available metadata, state so and explain why.
+				6.	Output rules:
+				•	Return a .
+				•	Do not include commentary, discussion, or reasoning unless requested.
 
-		ChatClient springAiChatClient = ChatClient.builder(chatModel)
-				.defaultOptions(optionsBuilder.build())
-				.build();
+			Failure modes to avoid:
+				•	Do not hallucinate table names or column names.
+				•	Do not invent join conditions.
+				•	Do not rely on vague semantics—use metadata tools.
 
-		chatBasis = new PlanningChatClient(springAiChatClient)
-				.prompt()
-				.system(ASSISTENT_PERSONA)
-				.system("""
-						The warehouse contains:
-							•	Multiple fact tables, each representing a business process.
-							•	Multiple dimension tables, many of which are shared across fact tables (conformed dimensions).
-							•	Fact tables always join to dimension tables using foreign keys.
-							•	Dimension tables do not join to each other unless explicitly indicated in metadata.
-						
-						Your responsibilities:
-							1.	Interpret the user’s natural-language request.
-							2.	Identify the correct fact table(s) by using metadata tools whenever necessary.
-							•	Always call listFactTables() when deciding which fact table contains the required metrics.
-							•	Never assume that a fact table exists without confirming via metadata.
-							3.	Identify the required dimension tables by inspecting metadata.
-							•	Use listDimensionTables(factTableName) to determine which dimensions are available for joining.
-							•	Use getTableSchema(tableName) to inspect column names if mapping is unclear.
-							•	Never invent or guess columns—only use what is confirmed in metadata.
-							4.	Construct a complete and syntactically valid SQL query that:
-							•	Uses explicit JOIN clauses
-							•	Selects the correct fields
-							•	Applies the necessary filters and grouping
-							•	Respects the SQL dialect (PostgreSQL unless otherwise specified)
-							•	Uses table aliases where appropriate
-							•	Never includes tables or columns that are not present in metadata
-							5.	Be deterministic and explicit.
-							•	If multiple fact tables could apply, choose the most semantically relevant one.
-							•	If the user’s request is ambiguous, ask a clarifying question instead of guessing.
-							•	If the request cannot be satisfied with available metadata, state so and explain why.
-							6.	Output rules:
-							•	Return a .
-							•	Do not include commentary, discussion, or reasoning unless requested.
-						
-						Failure modes to avoid:
-							•	Do not hallucinate table names or column names.
-							•	Do not invent join conditions.
-							•	Do not rely on vague semantics—use metadata tools.
-						
-						Metadata Tools Available (call them as needed):
-							•	listFactTables() → returns available fact tables with descriptions
-							•	listDimensionTables(factTableName) → returns dimension tables linked to that fact table
-							•	getTableSchema(tableName) → returns columns + types for any table
-													You must call the factTables tool to obtain a list of fact tables.
-												You must call the dimensionTables tool with the fact table name as the argument to obtain a list of dimension tables.
-												You must call the tableFields tool with a table name as the argument to obtain a list of fields and their types.
-												You must translate the user's input into an SQL query that is as close as possible to the user's intention.
-												If you cannot translate the user's input, return an error message.
-						""")
-				.tools(this)
-				.actions(this);
-	}
+			Metadata Tools Available (call them as needed):
+				•	listFactTables() → returns available fact tables with descriptions
+				•	listDimensionTables(factTableName) → returns dimension tables linked to that fact table
+				•	getTableSchema(tableName) → returns columns + types for any table
+										You must call the factTables tool to obtain a list of fact tables.
+									You must call the dimensionTables tool with the fact table name as the argument to obtain a list of dimension tables.
+									You must call the tableFields tool with a table name as the argument to obtain a list of fields and their types.
+									You must translate the user's input into an SQL query that is as close as possible to the user's intention.
+									If you cannot translate the user's input, return an error message.
+			""";
+
+	private static final LlmTuningConfig BASELINE_CONFIG = new LlmTuningConfig(
+			ASSISTENT_PERSONA,
+			0.2,
+			0.95
+	);
 
 	@Test
 	void generateSimpleQuery() throws PlanExecutionException {
-		ExecutablePlan plan = chatBasis
-				.user("""
-						Find the total order value of orders placed in germany in 2001.
-						Then display the search results.
-						""")
-				.plan();
+		ExecutablePlan plan = planSupplier().get();
 
 		// TODO verify plan correct
 
@@ -201,6 +183,71 @@ class StarSchemaQueryTest {
 			throw new RuntimeException(e);
 		}
 		return "OK";
+	}
+
+	@Override
+	public String scenarioId() {
+		return "star-schema-query";
+	}
+
+	@Override
+	public String description() {
+		return "Translates NL requests into SQL using metadata-backed star schema tools.";
+	}
+
+	@Override
+	public LlmTuningConfig defaultConfig() {
+		return BASELINE_CONFIG;
+	}
+
+	@Override
+	public PlanSupplier planSupplier(LlmTuningConfig config) {
+		LlmTuningConfig effective = config != null ? config : defaultConfig();
+		return () -> createPlan(effective);
+	}
+
+	private ExecutablePlan createPlan(LlmTuningConfig config) {
+		PlanningPromptSpec prompt = basePrompt(config);
+		return prompt
+				.user("""
+						Find the total order value of orders placed in germany in 2001.
+						Then display the search results.
+						""")
+				.plan();
+	}
+
+	private PlanningPromptSpec basePrompt(LlmTuningConfig config) {
+		PlanningPromptSpec prompt = createPlanningClient(config).prompt();
+		if (config.systemPrompt() != null && !config.systemPrompt().isBlank()) {
+			prompt = prompt.system(config.systemPrompt());
+		}
+		return prompt
+				.system(METADATA_BRIEF)
+				.tools(this)
+				.actions(this);
+	}
+
+	private PlanningChatClient createPlanningClient(LlmTuningConfig config) {
+		ensureApiKeyPresent();
+		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
+		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
+		OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder().model("gpt-4.1-mini");
+		if (config.temperature() != null) {
+			optionsBuilder.temperature(config.temperature());
+		}
+		if (config.topP() != null) {
+			optionsBuilder.topP(config.topP());
+		}
+		ChatClient springAiChatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
+				.defaultOptions(Objects.requireNonNull(optionsBuilder.build()))
+				.build();
+		return new PlanningChatClient(springAiChatClient);
+	}
+
+	private void ensureApiKeyPresent() {
+		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
+			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
+		}
 	}
 }
 
