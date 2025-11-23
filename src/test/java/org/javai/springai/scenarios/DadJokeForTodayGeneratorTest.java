@@ -97,7 +97,11 @@ public class DadJokeForTodayGeneratorTest implements ScenarioPlanSupplier {
 
 	@Override
 	public String description() {
-		return "Generates a dad joke email that references Rocket Man.";
+		return "Generate a dad joke related to the song 'Rocket Man' by Elton John. " +
+				"The scenario must call the randomName tool to get a name to include in the joke, " +
+				"and the localDateTime tool to get the current date and time. " +
+				"Both the name and timestamp must be incorporated into the joke. " +
+				"Finally, send the joke via email to michaelmannion@me.com from joker@me.com.";
 	}
 
 	@Override

@@ -26,7 +26,10 @@ public class DefaultTuningExecutor implements TuningExecutor {
 	public TuningExperimentResult execute(TuningExperiment experiment) {
 		List<ConfigPerformance> performances = new ArrayList<>();
 
-		for (LlmTuningConfig config : experiment.configsToTest()) {
+		// Expand configs with prompt variants if strategy is provided
+		List<LlmTuningConfig> configsToRun = expandConfigsWithPromptVariants(experiment);
+
+		for (LlmTuningConfig config : configsToRun) {
 			List<PlanTestResult> queryResults = new ArrayList<>();
 
 			// Run each test case multiple times
@@ -60,6 +63,62 @@ public class DefaultTuningExecutor implements TuningExecutor {
 				Instant.now(),
 				performances
 		);
+	}
+
+	/**
+	 * Expand the base configs with system prompt variants if a SystemPromptVariationStrategy is provided.
+	 * If no strategy is provided, returns the original configs unchanged.
+	 */
+	private List<LlmTuningConfig> expandConfigsWithPromptVariants(TuningExperiment experiment) {
+		if (experiment.promptStrategy() == null || experiment.promptVariants() <= 0 || experiment.scenario() == null) {
+			return experiment.configsToTest();
+		}
+
+		List<LlmTuningConfig> expanded = new ArrayList<>(experiment.configsToTest());
+		SystemPromptVariationStrategy strategy = experiment.promptStrategy();
+		ScenarioPlanSupplier scenario = experiment.scenario();
+
+		for (LlmTuningConfig baseConfig : experiment.configsToTest()) {
+			SystemPromptVariationContext context = new SystemPromptVariationContext(
+					baseConfig.model() != null ? baseConfig.model() : "unknown",
+					scenario.description()
+			);
+
+			logger.debug("Generating system prompt variants for config: model={}", baseConfig.model());
+
+			List<SystemPromptVariant> variants = strategy.generateVariants(
+					baseConfig.systemPrompt(),
+					context
+			);
+
+			// Add derived configs for each variant (limited by promptVariants count)
+			int count = 0;
+			for (SystemPromptVariant variant : variants) {
+				if (count >= experiment.promptVariants()) {
+					break;
+				}
+
+				LlmTuningConfig variantConfig = new LlmTuningConfig(
+						variant.systemPrompt(),
+						baseConfig.temperature(),
+						baseConfig.topP(),
+						baseConfig.model(),
+						baseConfig.modelVersion()
+				);
+
+				expanded.add(variantConfig);
+				logger.debug("Added system prompt variant: {}", variant.rationale());
+				count++;
+			}
+		}
+
+		logger.debug("Expanded {} base configs to {} total configs with {} system prompt variants",
+				experiment.configsToTest().size(),
+				expanded.size(),
+				expanded.size() - experiment.configsToTest().size()
+		);
+
+		return expanded;
 	}
 
 	private Map<String, Double> calculateBreakdown(List<PlanTestResult> queryResults) {

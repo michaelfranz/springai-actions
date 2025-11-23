@@ -62,6 +62,17 @@ public class TuningLogger {
 		logger.debug(formatDebugMessage(message, difficulty, size, successCount, avgScore));
 	}
 
+	/**
+	 * Flexible debug logging for arbitrary messages and arguments.
+	 * Uses SLF4J's {} placeholder format.
+	 */
+	public void debug(String format, Object... args) {
+		if (!logger.isDebugEnabled()) {
+			return;
+		}
+		logger.debug(format, args);
+	}
+
 	private String describeConfig(LlmTuningConfig config) {
 		if (config == null) {
 			return "n/a";

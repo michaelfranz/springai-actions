@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: spring-ai-actions
+  # Disable auto-configurations not needed for this project
+  autoconfigure:
+    exclude:
+      # Database (not used in this project)
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      # Anthropic (project only uses OpenAI for chat)
+      - org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration
+      # OpenAI Audio models (not used in this project)
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      # Other LLM providers (project only uses OpenAI chat)
+      - org.springframework.ai.model.mistralai.autoconfigure.MistralAiAutoConfiguration
+      - org.springframework.ai.model.bedrock.autoconfigure.BedrockAutoConfiguration
+      # Vector stores (not used in this project)
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.qdrant.autoconfigure.QdrantVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.weaviate.autoconfigure.WeaviateVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.hnswlib.autoconfigure.HnswlibVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.opensearch.autoconfigure.OpenSearchVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.neo4j.autoconfigure.Neo4jVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.mongodb.autoconfigure.MongoDbVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.chroma.autoconfigure.ChromaVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.elasticsearch.autoconfigure.ElasticsearchVectorStoreAutoConfiguration
+  # OpenAI configuration - picks up from OPENAI_API_KEY environment variable
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        model: gpt-4-mini
+
+app:
+  tuning-example:
+    enabled: false
+

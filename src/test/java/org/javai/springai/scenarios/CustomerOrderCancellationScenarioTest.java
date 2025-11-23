@@ -62,7 +62,10 @@ class CustomerOrderCancellationScenarioTest implements ScenarioPlanSupplier {
 
 	@Override
 	public String description() {
-		return "Cancels the latest order for a customer and sends a confirmation email.";
+		return "Fetch the most recent order for a customer and cancel it, sending a confirmation email. " +
+				"The scenario must call the customerName tool to get an email-friendly name for the greeting, " +
+				"then pass that to the cancelOrderAndNotify action with the reason 'At the customer's request'. " +
+				"The fetchLatestOrder action must be called before cancelOrderAndNotify to retrieve order details.";
 	}
 
 	@Override

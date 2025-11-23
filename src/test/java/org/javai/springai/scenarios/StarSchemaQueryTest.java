@@ -192,7 +192,13 @@ class StarSchemaQueryTest implements ScenarioPlanSupplier {
 
 	@Override
 	public String description() {
-		return "Translates NL requests into SQL using metadata-backed star schema tools.";
+		return """
+				Translate natural-language questions into valid SQL queries for a data warehouse \
+				using a classical star-schema design. The scenario must use the listFactTables tool \
+				to identify available fact tables, listDimensionTables to find dimension tables for joining, \
+				and listTableFields to inspect column names and types. Queries must use explicit JOINs, \
+				respect PostgreSQL syntax, and never invent or hallucinate table/column names. \
+				After generating the SQL, execute it and display the results.""";
 	}
 
 	@Override

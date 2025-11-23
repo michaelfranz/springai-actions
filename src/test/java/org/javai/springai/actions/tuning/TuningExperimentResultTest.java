@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
 
 class TuningExperimentResultTest {
@@ -42,7 +43,7 @@ class TuningExperimentResultTest {
 		);
 
 		assertThatThrownBy(result::getBestPerformance)
-				.isInstanceOf(java.util.NoSuchElementException.class);
+				.isInstanceOf(NoSuchElementException.class);
 	}
 }
 

@@ -13,7 +13,13 @@ public interface ScenarioPlanSupplier {
 	String scenarioId();
 
 	/**
-	 * Human-readable summary shown in reports.
+	 * Human-readable description of the scenario.
+	 * This description serves as critical background information for prompt tuners
+	 * and should capture the core purpose, constraints, and success criteria.
+	 * 
+	 * Example: "Fetch the most recent order for a customer and cancel it, sending a 
+	 * confirmation email. The scenario must call the customerName tool to get an 
+	 * email-friendly name, then pass that to the cancelOrderAndNotify action."
 	 */
 	String description();
 
@@ -32,4 +38,3 @@ public interface ScenarioPlanSupplier {
 		return planSupplier(defaultConfig());
 	}
 }
-

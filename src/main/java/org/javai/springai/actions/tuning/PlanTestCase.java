@@ -9,5 +9,3 @@ public record PlanTestCase(
 		ExecutablePlan expectedPlan,  // Reference implementation
 		DifficultyLevel difficulty  // EASY, MEDIUM, HARD
 ) {}
-
-enum DifficultyLevel { EASY, MEDIUM, HARD }
