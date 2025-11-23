@@ -18,6 +18,9 @@ import org.javai.springai.actions.execution.ExecutablePlan;
 import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.planning.PlanningChatClient;
+import org.javai.springai.actions.tuning.LlmTuningConfig;
+import org.javai.springai.actions.tuning.PlanSupplier;
+import org.javai.springai.actions.tuning.PlanSupplierFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,7 +30,7 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
-class CustomerOrderCancellationScenarioTest {
+class CustomerOrderCancellationScenarioTest implements PlanSupplier {
 
 	private static final String CUSTOMER_SERVICE_PERSONA = "You are a customer service agent.";
 
@@ -59,9 +62,9 @@ class CustomerOrderCancellationScenarioTest {
 		this.chatClient = new PlanningChatClient(springAiChatClient);
 	}
 
-	@Test
-	void cancelMostRecentOrderForCustomer() throws PlanExecutionException {
-		ExecutablePlan plan = chatClient
+	@Override
+	public ExecutablePlan get() {
+		return chatClient
 				.prompt()
 				.system("""
 						You must call the customerName tool with the same customerId to obtain the email-friendly name.
@@ -78,8 +81,11 @@ class CustomerOrderCancellationScenarioTest {
 				.tools(this)
 				.actions(this)
 				.plan();
+	}
 
-		// TODO verify plan correct
+	@Test
+	void cancelMostRecentOrderForCustomer() throws PlanExecutionException {
+		ExecutablePlan plan = get();
 
 		PlanExecutor executor = new DefaultPlanExecutor();
 		ActionContext context = executor.execute(plan);
