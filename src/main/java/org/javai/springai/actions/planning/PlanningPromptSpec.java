@@ -87,9 +87,9 @@ public class PlanningPromptSpec {
                 """);
 		}
 
-		if (plan.steps() == null || plan.steps().isEmpty()) {
+		if (plan.steps() == null) {
 			throw new IllegalStateException("""
-                LLM returned an ActionPlan with no steps.
+                LLM returned null instead of plan steps.
                 This means the model did not produce a valid plan.
                 """);
 		}

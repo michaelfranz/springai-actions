@@ -90,9 +90,9 @@ class PlanningPromptSpecTest {
 	}
 
 	@Test
-	void planThrowsWhenStepsEmpty() {
+	void planThrowsWhenStepsNull() {
 		spec.actions(new PlanningActions());
-		when(callResponseSpec.entity(Plan.class)).thenReturn(new Plan(List.of()));
+		when(callResponseSpec.entity(Plan.class)).thenReturn(new Plan("", null));
 
 		assertThatThrownBy(spec::plan).isInstanceOf(IllegalStateException.class);
 	}

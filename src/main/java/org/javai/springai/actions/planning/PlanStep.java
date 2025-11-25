@@ -1,9 +1,19 @@
 package org.javai.springai.actions.planning;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.fasterxml.jackson.databind.JsonNode;
 
 public record PlanStep(
+		@JsonProperty(required = true)
+		@JsonPropertyDescription("""
+			Name the action that is to be performed in this plan step
+			""")
 		String action,
+		@JsonPropertyDescription("""
+			The a single object containing the arguments to be provided to
+			the named action when it is called
+			""")
 		JsonNode arguments
 ) {
 	/**
