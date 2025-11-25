@@ -17,8 +17,36 @@ public record Plan(
 		@JsonProperty(required = true)
 		@JsonPropertyDescription("""
 			The steps which make up the plan. If no plan steps could be determined then
-			the list is empty
+			the list is empty and not null.
 			""")
 		List<PlanStep> steps
 ) {
+
+	/**
+	 * Returns a developer-friendly description of this plan for diagnostics.
+	 * Includes the intent and a brief summary of the contained steps.
+	 * @return formatted description string
+	 */
+	public String describe() {
+		StringBuilder sb = new StringBuilder()
+				.append("Plan[")
+				.append("intent='").append(planIntent != null ? planIntent : "unspecified").append("'");
+
+		if (steps == null || steps.isEmpty()) {
+			sb.append(", steps=0");
+		}
+		else {
+			sb.append(", steps=").append(steps.size());
+			sb.append(", stepSummaries=").append(
+					steps.stream()
+							.limit(3)
+							.map(step -> step != null ? step.describe() : "PlanStep[null]")
+							.toList());
+			if (steps.size() > 3) {
+				sb.append(" (+").append(steps.size() - 3).append(" more)");
+			}
+		}
+
+		return sb.append("]").toString();
+	}
 }

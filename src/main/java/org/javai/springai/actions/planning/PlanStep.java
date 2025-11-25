@@ -23,17 +23,17 @@ public record PlanStep(
 	 * @return a formatted string describing the plan step
 	 */
 	public String describe() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("PlanStep[")
-		.append("action='")
-		.append(action)
-		.append("'");
-		if (arguments != null && !arguments.isEmpty()) {
-			sb.append(", arguments=").append(arguments.toString());
-		} else {
+		StringBuilder sb = new StringBuilder()
+				.append("PlanStep[")
+				.append("action='").append(action != null ? action : "unspecified").append("'");
+
+		if (arguments == null || arguments.isEmpty()) {
 			sb.append(", arguments={}");
 		}
-		sb.append("]");
-		return sb.toString();
+		else {
+			sb.append(", arguments=").append(arguments.toString());
+		}
+
+		return sb.append("]").toString();
 	}
 }
