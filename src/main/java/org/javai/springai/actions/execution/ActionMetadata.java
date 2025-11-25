@@ -125,6 +125,61 @@ public record ActionMetadata(
 		return outcome.value();
 	}
 
+	/**
+	 * Returns a developer-friendly string representation of this metadata for debugging purposes.
+	 * This method provides more useful information than the default toString() implementation.
+	 *
+	 * @return a formatted string describing the action metadata
+	 */
+	public String describe() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("ActionMetadata[");
+		sb.append("stepId='").append(stepId).append("'");
+		sb.append(", actionName='").append(actionName).append("'");
+		sb.append(", mutability=").append(mutability);
+		
+		if (!affinityIds.isEmpty()) {
+			sb.append(", affinityIds=").append(affinityIds);
+		}
+		if (!pendingAffinities.isEmpty()) {
+			sb.append(", pendingAffinities=").append(
+					pendingAffinities.stream()
+							.map(pa -> pa.template() + " (missing: " + pa.placeholders() + ")")
+							.toList());
+		}
+		
+		if (!requiresContext.isEmpty()) {
+			sb.append(", requiresContext=").append(requiresContext);
+		}
+		if (!producesContext.isEmpty()) {
+			sb.append(", producesContext=").append(producesContext);
+		}
+		
+		if (!resourceReads.isEmpty()) {
+			sb.append(", resourceReads=").append(resourceReads);
+		}
+		if (!resourceWrites.isEmpty()) {
+			sb.append(", resourceWrites=").append(resourceWrites);
+		}
+		
+		if (!dependsOn.isEmpty()) {
+			sb.append(", dependsOn=").append(dependsOn);
+		}
+		
+		sb.append(", cost=").append(cost);
+		if (priority != null) {
+			sb.append(", priority=").append(priority);
+		}
+		if (timeout != null) {
+			sb.append(", timeout=").append(timeout);
+		}
+		sb.append(", maxRetries=").append(maxRetries);
+		sb.append(", idempotent=").append(idempotent);
+		
+		sb.append("]");
+		return sb.toString();
+	}
+
 	public static final class Builder {
 
 		private String stepId = "unspecified";

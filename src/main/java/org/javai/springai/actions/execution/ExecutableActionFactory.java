@@ -1,6 +1,5 @@
 package org.javai.springai.actions.execution;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -45,10 +44,14 @@ public class ExecutableActionFactory {
 						ctx.put(actionAnno.contextKey(), result);
 					}
 					enforceContextContract(actionAnno, ctx, wrotePrimaryContext);
-				} catch (IllegalAccessException | InvocationTargetException e) {
+				} catch (Exception e) {
 					throw new PlanExecutionException(
-							"Exception invoking action: %s, bean: %s, method: %s"
-									.formatted(def.name(), bean.getClass().getName(), method.getName()), e);
+							"Exception invoking *** action: %s\n*** bean: %s\n*** method: %s\n*** metadata: %s\n*** plan step: %s"
+									.formatted(def.name(),
+											bean.getClass().getName(),
+											method.getName(),
+											metadata.describe(),
+											step.describe()), e);
 				}
 			}
 		};
