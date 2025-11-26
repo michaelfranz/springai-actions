@@ -8,4 +8,8 @@ public interface ExecutableAction {
 	default ActionMetadata metadata() {
 		return ActionMetadata.empty();
 	}
+
+	default String describe() {
+		return metadata().describe();
+	}
 }
