@@ -27,7 +27,7 @@ import org.springframework.ai.tool.annotation.Tool;
 
 class StarSchemaQueryTest implements ScenarioPlanSupplier {
 
-	private static final String ASSISTENT_PERSONA = """
+	private static final String ASSISTANT_PERSONA = """
 			You are an expert data engineer whose job is to translate \
 			natural-language questions into valid SQL queries for a data \
 			warehouse that uses a classical star-schema design.""";
@@ -84,7 +84,7 @@ class StarSchemaQueryTest implements ScenarioPlanSupplier {
 			""";
 
 	private static final LlmTuningConfig BASELINE_CONFIG = new LlmTuningConfig(
-			ASSISTENT_PERSONA,
+			ASSISTANT_PERSONA,
 			0.2,
 			0.95
 	);
