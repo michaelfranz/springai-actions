@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.within;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.api.ActionContext;
+import org.javai.springai.actions.execution.ActionResult;
 import org.javai.springai.actions.execution.ExecutableAction;
 import org.javai.springai.actions.execution.ExecutablePlan;
-import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.testsupport.DeterministicPlanSupplierFactory;
 import org.junit.jupiter.api.Test;
 
@@ -92,8 +92,8 @@ class DefaultTuningExecutorTest {
 	private record ConfigAwareAction(String label) implements ExecutableAction {
 
 		@Override
-		public void perform(ActionContext ctx) throws PlanExecutionException {
-			// no-op for testing purposes
+		public ActionResult apply(ActionContext ctx) {
+			return new ActionResult.Success(Map.of("config", label));
 		}
 	}
 }

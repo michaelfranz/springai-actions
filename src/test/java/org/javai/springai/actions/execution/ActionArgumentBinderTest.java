@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.Arrays;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.FromContext;
 import org.junit.jupiter.api.Test;
@@ -27,12 +28,18 @@ class ActionArgumentBinderTest {
 		ActionContext ctx = new ActionContext();
 		ctx.put("user", "Alice");
 
-		Object[] bound = binder.bindArguments(method, args, ctx);
+		DeserializationResult<?>[] bound = binder.bindArguments(method, args, ctx);
+		assertThat(bound).hasSize(4);
+		Object[] boundArgs = Arrays.stream(bound)
+				.filter(dr -> dr instanceof DeserializationResult.Success<?>)
+				.map(dr -> (DeserializationResult.Success<?>) dr)
+				.map(DeserializationResult.Success::value)
+				.toArray();
 
-		assertThat(bound[0]).isSameAs(ctx);
-		assertThat(bound[1]).isEqualTo("Alice");
-		assertThat(bound[2]).isEqualTo(5);
-		assertThat(bound[3]).isEqualTo("details");
+		assertThat(boundArgs[0]).isSameAs(ctx);
+		assertThat(boundArgs[1]).isEqualTo("Alice");
+		assertThat(boundArgs[2]).isEqualTo(5);
+		assertThat(boundArgs[3]).isEqualTo("details");
 	}
 
 	@Test

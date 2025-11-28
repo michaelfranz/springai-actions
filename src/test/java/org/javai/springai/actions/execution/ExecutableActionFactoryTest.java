@@ -28,7 +28,7 @@ class ExecutableActionFactoryTest {
 
 		ExecutableAction executable = factory.from(new PlanStep("greet", args));
 		ActionContext context = new ActionContext();
-		executable.perform(context);
+		executable.apply(context);
 
 		assertThat(bean.getLastArgument()).isEqualTo("Bob");
 		assertThat(bean.getLastOutput()).isEqualTo("Hello Bob");
@@ -44,7 +44,7 @@ class ExecutableActionFactoryTest {
 
 		ExecutableAction executable = factory.from(new PlanStep("returnsNull", mapper.createObjectNode()));
 		ActionContext context = new ActionContext();
-		executable.perform(context);
+		executable.apply(context);
 
 		assertThat(bean.getLastOutput()).isNull();
 		assertThat(context.contains("nullStore")).isFalse();
@@ -61,7 +61,7 @@ class ExecutableActionFactoryTest {
 
 		ExecutableAction executable = factory.from(new PlanStep("nonAnnotated", args));
 		ActionContext context = new ActionContext();
-		executable.perform(context);
+		executable.apply(context);
 
 		assertThat(bean.getLastArgument()).isEqualTo("value");
 		assertThat(bean.getLastOutput()).isEqualTo("VALUE");

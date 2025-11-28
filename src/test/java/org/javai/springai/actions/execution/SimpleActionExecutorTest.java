@@ -14,10 +14,14 @@ class SimpleActionExecutorTest {
 		AtomicReference<ActionContext> firstContext = new AtomicReference<>();
 		AtomicReference<ActionContext> secondContext = new AtomicReference<>();
 
-		ExecutableAction action1 = firstContext::set;
+		ExecutableAction action1 = ctx -> {
+			firstContext.set(ctx);
+			return new ActionResult.Success(null);
+		};
 		ExecutableAction action2 = ctx -> {
 			secondContext.set(ctx);
 			ctx.put("executed", true);
+			return new ActionResult.Success(null);
 		};
 		ExecutablePlan plan = new ExecutablePlan(List.of(action1, action2));
 

@@ -1,5 +1,6 @@
 package org.javai.springai.actions.execution;
 
+import static org.javai.springai.actions.execution.DeserializationResult.Success;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Method;
@@ -11,19 +12,19 @@ class ActionArgumentBinder {
 
 	private final ObjectMapper mapper = new ObjectMapper();
 
-	public Object[] bindArguments(Method method,
-								  JsonNode argNode,
-								  ActionContext ctx) {
+	public DeserializationResult<?>[] bindArguments(Method method,
+													JsonNode argNode,
+													ActionContext ctx) {
 
 		Parameter[] params = method.getParameters();
-		Object[] javaArgs = new Object[params.length];
+		DeserializationResult<?>[] javaArgs = new DeserializationResult<?>[params.length];
 
 		for (int i = 0; i < params.length; i++) {
 			Parameter p = params[i];
 
 			// 1) Direct ActionContext injection
 			if (p.getType().equals(ActionContext.class)) {
-				javaArgs[i] = ctx;
+				javaArgs[i] = new Success<>(ctx);
 				continue;
 			}
 
@@ -32,7 +33,7 @@ class ActionArgumentBinder {
 			if (fc != null) {
 				String key = fc.value();
 				Object value = ctx.get(key, p.getType());
-				javaArgs[i] = value;
+				javaArgs[i] = new Success<>(value);
 				continue;
 			}
 
@@ -45,9 +46,7 @@ class ActionArgumentBinder {
 						"Missing required argument '%s' for action '%s'"
 								.formatted(name, method.getName()));
 			}
-
-			Object converted = mapper.convertValue(rawValue, p.getType());
-			javaArgs[i] = converted;
+			javaArgs[i] = SafeDeserializer.tryConvert(rawValue, p.getType(), mapper);
 		}
 
 		return javaArgs;

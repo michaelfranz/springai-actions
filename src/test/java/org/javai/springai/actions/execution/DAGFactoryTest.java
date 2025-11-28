@@ -176,7 +176,7 @@ class DAGFactoryTest {
 
 		return new ExecutableAction() {
 			@Override
-			public void perform(ActionContext ctx) {
+			public ActionResult apply(ActionContext ctx) {
 				throw new UnsupportedOperationException("Not needed for DAG tests");
 			}
 

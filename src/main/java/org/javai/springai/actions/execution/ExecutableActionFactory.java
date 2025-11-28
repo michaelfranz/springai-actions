@@ -35,8 +35,20 @@ public class ExecutableActionFactory {
 		ActionMetadata metadata = createMetadata(step, actionAnno);
 
 		return new AbstractExecutableAction(step, metadata) {
-			public void perform(ActionContext ctx) throws PlanExecutionException {
-				Object[] args = binder.bindArguments(method, step.arguments(), ctx);
+			public ActionResult apply(ActionContext ctx) {
+				DeserializationResult<?>[] deserializationResults = binder.bindArguments(method, step.arguments(), ctx);
+				if (Arrays.stream(deserializationResults).anyMatch(DeserializationResult.Failure.class::isInstance)) {
+					return new ActionResult.Failure(Arrays.stream(deserializationResults)
+							.filter(a -> a instanceof DeserializationResult.Failure)
+							.map(DeserializationResult.Failure.class::cast)
+							.map(DeserializationResult.Failure::toString)
+							.toArray(String[]::new));
+				}
+				Object[] args = Arrays.stream(deserializationResults)
+						.filter(a -> a instanceof DeserializationResult.Success)
+						.map(DeserializationResult.Success.class::cast)
+						.map(DeserializationResult.Success::value)
+						.toArray();
 				try {
 					Object result = method.invoke(bean, args);
 					boolean wrotePrimaryContext = actionAnno != null && !actionAnno.contextKey().isBlank() && result != null;
@@ -44,14 +56,10 @@ public class ExecutableActionFactory {
 						ctx.put(actionAnno.contextKey(), result);
 					}
 					enforceContextContract(actionAnno, ctx, wrotePrimaryContext);
+					return new ActionResult.Success(result);
 				} catch (Exception e) {
-					throw new PlanExecutionException(
-							"Exception invoking *** action: %s\n*** bean: %s\n*** method: %s\n*** metadata: %s\n*** plan step: %s"
-									.formatted(def.name(),
-											bean.getClass().getName(),
-											method.getName(),
-											metadata.describe(),
-											step.describe()), e);
+					logger.error("Failed to execute action '{}': {}", step.action(), e.getMessage());
+					return new ActionResult.Failure(e.getMessage());
 				}
 			}
 		};
@@ -133,9 +141,9 @@ public class ExecutableActionFactory {
 	}
 
 	private void addTemplateValue(ActionMetadata.Builder builder,
-			String template,
-			TemplateBindings bindings,
-			java.util.function.Consumer<String> consumer) {
+								  String template,
+								  TemplateBindings bindings,
+								  java.util.function.Consumer<String> consumer) {
 		if (template == null || template.isBlank()) {
 			return;
 		}
