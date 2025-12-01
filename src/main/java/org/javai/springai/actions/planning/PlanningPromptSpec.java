@@ -14,7 +14,7 @@ import org.springframework.ai.chat.client.ChatClient;
 
 public class PlanningPromptSpec {
 
-	private static final Logger logger = LoggerFactory.getLogger(PlanningPromptSpec.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(PlanningPromptSpec.class);
 
 	private final ChatClient.ChatClientRequestSpec delegate;
 	private final List<String> systemMessages = new ArrayList<>();
@@ -22,24 +22,24 @@ public class PlanningPromptSpec {
 	private final List<ActionDefinition> actions = new ArrayList<>();
 
 	public PlanningPromptSpec(ChatClient.ChatClientRequestSpec delegate) {
-		logger.debug("PlanningPromptSpec() called with delegate: {}", delegate);
+		LOGGER.debug("PlanningPromptSpec() called with delegate: {}", delegate);
 		this.delegate = delegate;
 	}
 
 	public PlanningPromptSpec system(String text) {
-		logger.debug("system() invoked with text: {}", text);
+		LOGGER.debug("system() invoked with text: {}", text);
 		systemMessages.add(text);
 		return this;
 	}
 
 	public PlanningPromptSpec user(String text) {
-		logger.debug("user() invoked with text: {}", text);
+		LOGGER.debug("user() invoked with text: {}", text);
 		userMessages.add(text);
 		return this;
 	}
 
 	public PlanningPromptSpec tools(Object beanWithTools) {
-		logger.debug("tools() invoked with bean: {}", beanWithTools);
+		LOGGER.debug("tools() invoked with bean: {}", beanWithTools);
 		delegate.tools(beanWithTools);
 		return this;
 	}
@@ -50,7 +50,7 @@ public class PlanningPromptSpec {
 	 * to the LLM in the system prompt.
 	 */
 	public PlanningPromptSpec actions(Object ... beanWithActions) {
-		logger.debug("actions() invoked with {} bean(s)", beanWithActions == null ? 0 : beanWithActions.length);
+		LOGGER.debug("actions() invoked with {} bean(s)", beanWithActions == null ? 0 : beanWithActions.length);
 		if (beanWithActions == null) return this;
 		for (Object bean : beanWithActions) {
 			if (bean == null) continue;
@@ -63,7 +63,9 @@ public class PlanningPromptSpec {
 	ChatClient.CallResponseSpec call() {
 		List<String> finalSystem = new ArrayList<>();
 		if (!actions.isEmpty()) {
-			finalSystem.add(buildActionSchemaMessage());
+			String actionSchemaMessage = buildActionSchemaMessage();
+			LOGGER.info(actionSchemaMessage);
+			finalSystem.add(actionSchemaMessage);
 		}
 		finalSystem.addAll(systemMessages);  // user persona, domain instructions
 
@@ -74,7 +76,7 @@ public class PlanningPromptSpec {
 	}
 
 	public ExecutablePlan plan() {
-		logger.debug("plan() invoked with {} registered action definition(s)", this.actions.size());
+		LOGGER.debug("plan() invoked with {} registered action definition(s)", this.actions.size());
 		Plan plan = ensureValidPlan(this.call().entity(Plan.class));
 		return new ExecutablePlan(compilePlan(plan));
 	}
