@@ -1,0 +1,16 @@
+package org.javai.springai.actions.sxl.meta;
+
+import java.util.List;
+
+/**
+ * A constraint rule for a symbol.
+ */
+public record SymbolConstraint(
+	String rule,  // e.g., "requires", "must_have_root", "disallowed_together"
+	String target,  // rule-dependent target
+	String symbol,  // for must_have_root or similar
+	List<String> items,  // list for disallowed_together
+	String when  // optional predicate expression
+) {
+}
+

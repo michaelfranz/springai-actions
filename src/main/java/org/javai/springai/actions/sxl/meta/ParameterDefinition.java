@@ -1,0 +1,18 @@
+package org.javai.springai.actions.sxl.meta;
+
+import java.util.List;
+
+/**
+ * Definition of a parameter for a symbol.
+ */
+public record ParameterDefinition(
+	String name,
+	String description,
+	String type,  // node | literal(X) | identifier | dsl-id | embedded | any
+	List<String> allowedSymbols,  // Only for type=node
+	Cardinality cardinality,
+	Boolean ordered,
+	IdentifierRules identifierRules
+) {
+}
+

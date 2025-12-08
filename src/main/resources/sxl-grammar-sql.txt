@@ -1,0 +1,329 @@
+SXL-v2 — Runtime Specification (LLM Output Format)
+
+SXL expresses SQL SELECT queries using symbolic node names in strict s-expression form.
+All operations follow the pattern: (FN arg1 arg2 ...).
+
+⸻
+
+1. Top-Level Query
+
+(Q distinct? from? join* select where? groupBy? having? orderBy? limit?)
+
+	•	distinct?  : omitted or (D)
+	•	from?      : omitted or (F table alias)
+	•	join*      : zero or more joins
+	•	select     : exactly one (S ...) clause (required)
+	•	where?     : omitted or (W condition)
+	•	groupBy?   : omitted or (G expr1 expr2 ...)
+	•	having?    : omitted or (H condition)
+	•	orderBy?   : omitted or (O orderItem1 orderItem2 ...)
+	•	limit?     : omitted or (L number)
+
+All clauses, when present, must appear in the order above.
+
+⸻
+
+2. DISTINCT
+
+(D)
+
+Example:
+
+(Q
+  (D)
+  (F table t)
+  (S ...)
+)
+
+
+⸻
+
+3. FROM Clause
+
+(F table_name alias)
+
+Example:
+
+(F orders o)
+
+
+⸻
+
+4. JOIN Clauses
+
+Default join type: INNER JOIN
+
+(J       table alias condition)
+(J_LEFT  table alias condition)
+(J_RIGHT table alias condition)
+(J_FULL  table alias condition)
+
+Example:
+
+(J products p (EQ o.product_id p.id))
+
+The condition is any boolean expression in prefix notation.
+
+⸻
+
+5. SELECT Clause
+
+(S select_item1 select_item2 ...)
+
+5.1 Select Item Forms
+
+A select item is one of:
+	•	Expression without alias
+
+expr
+
+
+	•	Expression with alias
+
+(AS expr alias)
+
+
+
+Wildcards (*, table.*) are intentionally not allowed for deterministic schemas.
+
+Example
+
+(S
+  (AS c.name           customer)
+  (AS (COUNT f.id)     orders)
+  (AS (SUM   f.amount) total)
+)
+
+
+⸻
+
+6. WHERE Clause
+
+(W condition)
+
+Example:
+
+(W (GT p.price 100))
+
+
+⸻
+
+7. GROUP BY
+
+(G expr1 expr2 ...)
+
+Example:
+
+(G c.name c.region)
+
+
+⸻
+
+8. HAVING
+
+(H condition)
+
+Example:
+
+(H (GE (SUM f.amount) 5000))
+
+
+⸻
+
+9. ORDER BY
+
+(O orderItem1 orderItem2 ...)
+
+Order item forms:
+	•	(expr)
+	•	(expr ASC)
+	•	(expr DESC)
+
+Example:
+
+(O ((SUM f.amount) DESC))
+
+
+⸻
+
+10. LIMIT
+
+(L number)
+
+Example:
+
+(L 10)
+
+
+⸻
+
+11. Expressions
+
+Expressions use prefix notation throughout.
+
+⸻
+
+11.1 Column References
+
+alias.column
+
+Examples:
+
+c.name
+f.amount
+o.status
+
+
+⸻
+
+11.2 Literals
+
+"string literal"
+123
+-10
+3.14
+true
+false
+null
+
+
+⸻
+
+11.3 Function Calls
+
+(FUNC arg1 arg2 ...)
+
+Examples:
+
+(COUNT f.id)
+(UPPER c.name)
+(SUM f.amount)
+(DATE_TRUNC "month" f.order_date)
+(EXTRACT "YEAR" o.created_at)
+
+COUNT(*) is expressed as:
+
+(COUNT)
+
+
+⸻
+
+11.4 Operators (Alphabetic Operator Names Only)
+
+To avoid ambiguity and ensure robust tokenization, all operators use alphabetic names.
+
+Comparison Operators
+
+SQL	SXL-v2
+=	(EQ a b)
+!=	(NE a b)
+<	(LT a b)
+>	(GT a b)
+<=	(LE a b)
+>=	(GE a b)
+
+Examples:
+
+(EQ a b)
+(GT x y)
+(LE amount 100)
+
+
+⸻
+
+Arithmetic Operators
+
+(ADD x y)
+(SUB x y)
+(MUL x y)
+(DIV x y)
+
+Examples:
+
+(ADD 2 3)
+(MUL price quantity)
+
+
+⸻
+
+Boolean Operators
+
+(AND c1 c2 ...)
+(OR  c1 c2 ...)
+(NOT c)
+
+
+⸻
+
+Pattern Matching
+
+(LIKE  expr "pattern")
+(ILIKE expr "pattern")
+
+
+⸻
+
+Range & Membership
+
+(BETWEEN value lower upper)
+(IN      value opt1 opt2 ...)
+(NOT_IN  value opt1 opt2 ...)
+
+
+⸻
+
+NULL Checks
+
+(IS_NULL expr)
+(IS_NOT_NULL expr)
+
+
+⸻
+
+12. Canonical Examples
+
+⸻
+
+Example 1 — Simple SELECT
+
+(Q
+  (F fact_sales f)
+  (S
+    (AS f.id     order_id)
+    (AS f.amount total)
+  )
+)
+
+
+⸻
+
+Example 2 — JOIN + WHERE + GROUP BY + HAVING + ORDER BY + LIMIT
+
+(Q
+  (F fact_sales f)
+  (J dim_customer c (EQ c.id f.customer_id))
+  (S
+    (AS c.name           customer)
+    (AS (COUNT f.id)     orders)
+    (AS (SUM f.amount)   total)
+  )
+  (W (EQ f.status "COMPLETED"))
+  (G c.name)
+  (H (GT (SUM f.amount) 5000))
+  (O ((SUM f.amount) DESC))
+  (L 10)
+)
+
+
+⸻
+
+13. Rules
+	•	Emit exactly one top-level (Q ...) expression.
+	•	Use prefix notation for all operators and functions.
+	•	Use alphabetic operator names only (EQ, LT, GE, etc.).
+	•	Column references must follow alias.column.
+	•	Use only table/column names provided by the schema.
+	•	GROUP BY is required when mixing aggregates and non-aggregates.
+	•	HAVING applies only to aggregated expressions.
+	•	WHERE applies only to row-level conditions.
+	•	Do not invent any functions, symbols, or SQL features not defined here.

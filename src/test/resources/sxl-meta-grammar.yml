@@ -1,0 +1,121 @@
+meta_grammar_version: 1.1
+
+dsl:
+  id: string
+  description: string
+  version: string
+
+symbols:
+  <symbol-name>:
+    description: string
+    kind: node
+    params:
+      - name: string
+        description: string
+        type: string                # node | literal | identifier | dsl-id | embedded | any
+        allowed_symbols: [ ... ]     # only for type=node
+        cardinality: required        # required | optional | zeroOrMore | oneOrMore
+        ordered: true
+    constraints: [ ... ]
+    examples:
+      - |
+        (EXAMPLE ...)
+
+literals:
+  string:   { regex: "^\".*\"$" }
+  number:   { regex: "^-?[0-9]+(\\.[0-9]+)?$" }
+  boolean:  { values: [true, false] }
+  null:     { values: [null] }
+
+identifier:
+  description: "General identifier rule"
+  regex: "^[A-Za-z_][A-Za-z0-9_\\.\\-]*$"
+
+reserved_symbols:
+  - EMBED
+  - AS
+
+embedding:
+  enabled: true
+  symbol: EMBED
+  params:
+    - name: dsl_id
+      type: dsl-id
+      cardinality: required
+    - name: payload
+      type: embedded
+      cardinality: required
+
+constraints: [ ... ]
+
+
+# ============================================================
+#  LLM SPEC GENERATION CONFIGURATION
+# ============================================================
+llm_specs:
+
+  # ----------------------------------------------------------
+  # DEFAULT BEHAVIOR FOR ALL MODELS
+  # ----------------------------------------------------------
+  defaults:
+    style: strict               # strict | concise | verbose | explanatory
+    max_examples: 3             # number of examples to include
+    include_constraints: true   # include semantic constraints in final prompt
+    include_symbol_summaries: true
+    include_literal_rules: true
+    include_identifier_rules: true
+    preamble: true              # top-of-prompt description of the DSL
+    postamble: false            # optional trailing notes
+    formatting: block           # block | compact | markdown
+    enforce_canonical_form: true
+
+  # ----------------------------------------------------------
+  # MODEL-SPECIFIC OVERRIDES
+  #
+  # Each entry should ONLY specify differences from defaults.
+  # The spec generator merges defaults + overrides.
+  # ----------------------------------------------------------
+  models:
+
+    openai:
+      gpt-4.1:
+        overrides:
+          style: concise
+          max_examples: 2
+          formatting: compact
+
+      gpt-5:
+        overrides:
+          style: strict
+          include_constraints: true
+          max_examples: 4
+
+    anthropic:
+      claude-3:
+        overrides:
+          style: explanatory
+          max_examples: 6
+          formatting: block
+          preamble: true
+
+    mistral:
+      mistral-large:
+        overrides:
+          style: concise
+          max_examples: 2
+          formatting: compact
+
+    llama:
+      llama-3:
+        overrides:
+          style: strict
+          max_examples: 3
+
+  # ----------------------------------------------------------
+  # OPTIONAL: Custom profiles for testing or fine-tuning
+  # ----------------------------------------------------------
+  profiles:
+    testing:
+      style: verbose
+      include_constraints: true
+      max_examples: 10

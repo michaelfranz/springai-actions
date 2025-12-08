@@ -89,7 +89,7 @@ public class PlanningPromptSpec {
 
 		if (plan.steps() == null) {
 			throw new IllegalStateException("""
-                LLM returned null instead of plan steps.
+                LLM returned null instead of plan steps. \
                 This means the model did not produce a valid plan.
                 """);
 		}
