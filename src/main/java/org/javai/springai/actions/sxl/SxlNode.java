@@ -39,5 +39,22 @@ public record SxlNode(String symbol, List<SxlNode> args, String literalValue) {
 	public boolean isLiteral() {
 		return literalValue != null;
 	}
+
+	/**
+	 * Accepts a visitor and dispatches to the appropriate visitor method.
+	 * This enables the visitor pattern for AST traversal and operations
+	 * like code generation, analysis, and transformation.
+	 * 
+	 * @param <R> the return type of the visitor
+	 * @param visitor the visitor to accept
+	 * @return the result of the visitor operation
+	 */
+	public <R> R accept(SxlNodeVisitor<R> visitor) {
+		if (isLiteral()) {
+			return visitor.visitLiteral(literalValue);
+		} else {
+			return visitor.visitSymbol(symbol, args);
+		}
+	}
 }
 

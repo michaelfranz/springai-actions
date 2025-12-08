@@ -48,6 +48,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("com.h2database:h2")
     testImplementation("org.apache.commons:commons-csv:1.10.0")
+    testImplementation("com.github.jsqlparser:jsqlparser:4.9")
 }
 
 // Exclude Spring Boot's default Logback starter to avoid conflicts with Log4j2
