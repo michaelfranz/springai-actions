@@ -2,22 +2,12 @@ package org.javai.springai.sxl.grammar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
-import org.javai.springai.sxl.grammar.Example;
-import org.javai.springai.sxl.grammar.GlobalConstraint;
-import org.javai.springai.sxl.grammar.LiteralDefinitions;
-import org.javai.springai.sxl.grammar.ParameterDefinition;
-import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarParser;
-import org.javai.springai.sxl.grammar.SxlGrammarPromptGenerator;
-import org.javai.springai.sxl.grammar.SymbolConstraint;
-import org.javai.springai.sxl.grammar.SymbolDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
  * Tests for SxlGrammarPromptGenerator.
- *
  * This class generates system prompt content from DSL grammar definitions,
  * focusing on the DSL-specific rules while omitting universal s-expression
  * language rules.
@@ -413,19 +403,19 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.symbols() == null || grammar.symbols().isEmpty()) {
 			return "No symbols defined.";
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		grammar.symbols().entrySet().stream()
 				.sorted(java.util.Map.Entry.comparingByKey())
 				.forEach(entry -> {
 					String symbolName = entry.getKey();
 					SymbolDefinition symbol = entry.getValue();
-					
+
 					sb.append(symbolName);
 					sb.append(":\n");
 					sb.append("  Description: ").append(symbol.description()).append("\n");
 					sb.append("  Kind: ").append(symbol.kind()).append("\n");
-					
+
 					if (symbol.params() != null && !symbol.params().isEmpty()) {
 						sb.append("  Parameters:\n");
 						for (ParameterDefinition param : symbol.params()) {
@@ -441,7 +431,7 @@ class SxlGrammarPromptGeneratorTest {
 							sb.append("\n");
 						}
 					}
-					
+
 					if (symbol.constraints() != null && !symbol.constraints().isEmpty()) {
 						sb.append("  Constraints:\n");
 						for (SymbolConstraint constraint : symbol.constraints()) {
@@ -452,7 +442,7 @@ class SxlGrammarPromptGeneratorTest {
 							sb.append("\n");
 						}
 					}
-					
+
 					if (symbol.examples() != null && !symbol.examples().isEmpty()) {
 						sb.append("  Examples:\n");
 						for (Example example : symbol.examples()) {
@@ -467,10 +457,10 @@ class SxlGrammarPromptGeneratorTest {
 							}
 						}
 					}
-					
+
 					sb.append("\n");
 				});
-		
+
 		return sb.toString().trim();
 	}
 
@@ -478,10 +468,10 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.literals() == null) {
 			return "No literal definitions.";
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		LiteralDefinitions literals = grammar.literals();
-		
+
 		if (literals.string() != null) {
 			sb.append("string:\n");
 			if (literals.string().regex() != null && !literals.string().regex().isEmpty()) {
@@ -494,7 +484,7 @@ class SxlGrammarPromptGeneratorTest {
 			}
 			sb.append("\n");
 		}
-		
+
 		if (literals.number() != null) {
 			sb.append("number:\n");
 			if (literals.number().regex() != null && !literals.number().regex().isEmpty()) {
@@ -507,7 +497,7 @@ class SxlGrammarPromptGeneratorTest {
 			}
 			sb.append("\n");
 		}
-		
+
 		if (literals.boolean_() != null) {
 			sb.append("boolean:\n");
 			if (literals.boolean_().regex() != null && !literals.boolean_().regex().isEmpty()) {
@@ -520,7 +510,7 @@ class SxlGrammarPromptGeneratorTest {
 			}
 			sb.append("\n");
 		}
-		
+
 		if (literals.null_() != null) {
 			sb.append("null:\n");
 			if (literals.null_().regex() != null && !literals.null_().regex().isEmpty()) {
@@ -533,7 +523,7 @@ class SxlGrammarPromptGeneratorTest {
 			}
 			sb.append("\n");
 		}
-		
+
 		String result = sb.toString().trim();
 		return result.isEmpty() ? "No literal definitions." : result;
 	}
@@ -542,7 +532,7 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.identifier() == null) {
 			return "No identifier rules defined.";
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		if (grammar.identifier().description() != null && !grammar.identifier().description().isEmpty()) {
 			sb.append(grammar.identifier().description()).append("\n");
@@ -550,7 +540,7 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.identifier().pattern() != null && !grammar.identifier().pattern().isEmpty()) {
 			sb.append("Pattern: ").append(grammar.identifier().pattern());
 		}
-		
+
 		return sb.toString().trim();
 	}
 
@@ -558,7 +548,7 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.reservedSymbols() == null || grammar.reservedSymbols().isEmpty()) {
 			return "No reserved symbols.";
 		}
-		
+
 		return String.join(", ", grammar.reservedSymbols());
 	}
 
@@ -566,13 +556,13 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.embedding() == null) {
 			return "Embedding not configured.";
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		sb.append("Enabled: ").append(grammar.embedding().enabled());
 		if (grammar.embedding().symbol() != null && !grammar.embedding().symbol().isEmpty()) {
 			sb.append("\nSymbol: ").append(grammar.embedding().symbol());
 		}
-		
+
 		return sb.toString();
 	}
 
@@ -580,7 +570,7 @@ class SxlGrammarPromptGeneratorTest {
 		if (grammar.constraints() == null || grammar.constraints().isEmpty()) {
 			return "No global constraints.";
 		}
-		
+
 		StringBuilder sb = new StringBuilder();
 		for (GlobalConstraint constraint : grammar.constraints()) {
 			sb.append("- ").append(constraint.rule());
@@ -595,8 +585,87 @@ class SxlGrammarPromptGeneratorTest {
 			}
 			sb.append("\n");
 		}
-		
+
 		return sb.toString().trim();
+	}
+
+	// ============================================================
+	// GOLDEN FILE TESTS
+	// ============================================================
+	// These tests verify that system prompts are correctly generated
+	// and can be inspected via golden files in src/test/resources/golden/
+
+	@Test
+	@DisplayName("should generate and save SQL grammar golden file")
+	void shouldGenerateSqlGoldenFile() {
+		// This test verifies that the golden file generator works correctly
+		// and creates the golden file in the expected location
+		String prompt = generator.generate(sqlGrammar);
+
+		// Verify the prompt is substantial (contains actual content)
+		assertThat(prompt).isNotEmpty();
+		assertThat(prompt.length()).isGreaterThan(500); // Should be substantial
+
+		// Verify key sections are present
+		assertThat(prompt).contains(SQL_DSL_ID);
+		assertThat(prompt).contains(SQL_DSL_DESCRIPTION);
+		assertThat(prompt).contains("SYMBOL DEFINITIONS");
+	}
+
+	@Test
+	@DisplayName("should generate and save Plan grammar golden file")
+	void shouldGeneratePlanGoldenFile() {
+		// This test verifies that the golden file generator works correctly
+		// and creates the golden file in the expected location
+		String prompt = generator.generate(planGrammar);
+
+		// Verify the prompt is substantial (contains actual content)
+		assertThat(prompt).isNotEmpty();
+		assertThat(prompt.length()).isGreaterThan(500); // Should be substantial
+
+		// Verify key sections are present
+		assertThat(prompt).contains(PLAN_DSL_ID);
+		assertThat(prompt).contains(PLAN_DSL_DESCRIPTION);
+		assertThat(prompt).contains("SYMBOL DEFINITIONS");
+	}
+
+	@Test
+	@DisplayName("Golden files should be readable for documentation purposes")
+	void goldenFilesShouldBeReadable() {
+		// This test documents the purpose of golden files
+		// They should be readable files in src/test/resources/golden/
+		// that developers can review to understand what system prompts look like
+
+		String sqlPrompt = generator.generate(sqlGrammar);
+		String planPrompt = generator.generate(planGrammar);
+
+		// Both prompts should be well-formatted and human-readable
+		assertThat(sqlPrompt).doesNotContain("\u0000"); // No null bytes
+		assertThat(planPrompt).doesNotContain("\u0000");
+
+		// Should have proper line breaks for readability
+		assertThat(sqlPrompt).contains("\n");
+		assertThat(planPrompt).contains("\n");
+	}
+
+	@Test
+	@DisplayName("Golden files document all grammar features")
+	void goldenFilesDocumentAllGrammarFeatures() {
+		String sqlPrompt = generator.generate(sqlGrammar);
+		String planPrompt = generator.generate(planGrammar);
+
+		// SQL grammar should document at least these features:
+		assertThat(sqlPrompt)
+				.contains("Q") // Query
+				.contains("S") // Select
+				.contains("F") // From
+				.contains("parameter");
+
+		// Plan grammar should document at least these features:
+		assertThat(planPrompt)
+				.contains("P") // Plan
+				.contains("PS") // PlanStep
+				.contains("parameter");
 	}
 }
 

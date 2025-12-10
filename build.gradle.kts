@@ -66,20 +66,48 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// ============================================================
+// GOLDEN FILES GENERATION TASK
+// ============================================================
+// Automatically generates golden files from grammar resources.
+// This task runs before tests to ensure golden files are up-to-date.
+tasks.register<JavaExec>("generateGoldenFiles") {
+    group = "verification"
+    description = "Generate golden files from grammar resources for system prompt verification"
+
+    classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+    mainClass = "org.javai.springai.sxl.grammar.GoldenFileGenerator"
+    workingDir = rootDir
+
+    doFirst {
+        println("Generating golden files from grammar resources...")
+    }
+
+    doLast {
+        println("Golden files generation completed")
+    }
+}
+
+// Run golden file generation before tests
+tasks.test {
+    dependsOn("generateGoldenFiles")
+}
+
 // Configure Spring Boot to not create a bootJar by default.
 // Instead, use the plain JAR as the main artifact for library consumption.
 tasks {
     bootJar {
         enabled = false
     }
-    
+
     jar {
         enabled = true
     }
-    
+
     // Ensure the plain jar is the default artifact
     build {
         dependsOn(jar)
+        dependsOn("generateGoldenFiles")
     }
 }
 
