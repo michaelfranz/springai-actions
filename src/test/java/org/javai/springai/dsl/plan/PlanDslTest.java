@@ -188,10 +188,10 @@ class PlanDslTest {
 				)
 				""";
 			
-			assertThatThrownBy(() -> parseAndValidate(input))
-				.isInstanceOf(SxlParseException.class)
-				.hasMessageContaining("requires parameter")
-				.hasMessageContaining("dsl-instance");
+		assertThatThrownBy(() -> parseAndValidate(input))
+			.isInstanceOf(SxlParseException.class)
+			.hasMessageContaining("requires parameter")
+			.hasMessageContaining("step-content");
 		}
 
 		@Test
@@ -491,6 +491,168 @@ class PlanDslTest {
 	}
 
 	@Nested
+	@DisplayName("Error Step Tests")
+	class ErrorStepTests {
+
+		@Test
+		@DisplayName("Should parse error step with reason message")
+		void shouldParseErrorStepWithReasonMessage() {
+			String input = """
+				(EMBED sxl-plan
+				  (P "Plan with error step"
+				    (PS getOrders (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+				    (PS getCustomersError (ERROR "Failed to generate customer query: LLM timeout after 30 seconds"))
+				    (PS joinData (EMBED sxl-sql (Q (F orders o) (S (AS o.id order_id)))))
+				  )
+				)
+				""";
+			
+			List<SxlNode> nodes = parseAndValidate(input);
+			
+			SxlNode plan = nodes.get(0).args().get(1);
+			assertThat(plan.args()).hasSize(4); // Description + 3 steps
+			
+			// Verify the error step is present
+			SxlNode errorStep = plan.args().get(2);
+			assertThat(errorStep.symbol()).isEqualTo("PS");
+			// The dsl-instance should be an ERROR node
+			assertThat(errorStep.args().get(1).symbol()).isEqualTo("ERROR");
+		}
+
+		@Test
+		@DisplayName("Should parse error step with optional fallback expression")
+		void shouldParseErrorStepWithOptionalFallbackExpression() {
+			String input = """
+				(EMBED sxl-plan
+				  (P "Plan with error recovery"
+				    (PS primaryQuery (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+				    (PS fallbackQuery (ERROR "LLM failed to parse nested query" (EMBED sxl-sql (Q (F orders o) (S (AS o.status status))))))
+				  )
+				)
+				""";
+			
+			List<SxlNode> nodes = parseAndValidate(input);
+			
+			SxlNode plan = nodes.get(0).args().get(1);
+			assertThat(plan.args()).hasSize(3); // Description + 2 steps
+		}
+
+	@Test
+	@DisplayName("Should parse error step with recoverable flag")
+	void shouldParseErrorStepWithRecoverableFlag() {
+		String input = """
+			(EMBED sxl-plan
+			  (P "Plan with recoverable error"
+			    (PS tryFirstApproach (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+			    (PS tryAlternative (ERROR "First approach failed"))
+			    (PS fallbackStep (EMBED sxl-sql (Q (F customers c) (S (AS c.id id)))))
+			  )
+			)
+			""";
+		
+		List<SxlNode> nodes = parseAndValidate(input);
+		
+		SxlNode plan = nodes.get(0).args().get(1);
+		assertThat(plan.args()).hasSize(4); // Description + 3 steps
+	}
+
+		@Test
+		@DisplayName("Should allow multiple error steps in a plan")
+		void shouldAllowMultipleErrorStepsInAPlan() {
+			String input = """
+				(EMBED sxl-plan
+				  (P "Complex plan with multiple potential failures"
+				    (PS step1 (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+				    (PS step2Error (ERROR "Unable to generate step 2 query"))
+				    (PS step3 (EMBED sxl-sql (Q (F customers c) (S (AS c.name name)))))
+				    (PS step4Error (ERROR "Step 4 LLM generation timed out"))
+				    (PS step5 (EMBED sxl-sql (Q (F products p) (S (AS p.sku sku)))))
+				  )
+				)
+				""";
+			
+			List<SxlNode> nodes = parseAndValidate(input);
+			
+			SxlNode plan = nodes.get(0).args().get(1);
+			assertThat(plan.args()).hasSize(6); // Description + 5 steps
+		}
+
+	@Test
+	@DisplayName("Should parse error step with all optional parameters")
+	void shouldParseErrorStepWithAllOptionalParameters() {
+		String input = """
+			(EMBED sxl-plan
+			  (P "Plan with fully specified error step"
+			    (PS complexQuery (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id))))))
+			  )
+			)
+			""";
+		
+		List<SxlNode> nodes = parseAndValidate(input);
+		
+		assertThat(nodes).hasSize(1);
+		// Validation succeeds if no exception is thrown
+		}
+
+		@Test
+		@DisplayName("Should reject error step without reason message")
+		void shouldRejectErrorStepWithoutReasonMessage() {
+			String input = """
+				(EMBED sxl-plan
+				  (P
+				    (PS failedStep (ERROR))
+				  )
+				)
+				""";
+			
+			assertThatThrownBy(() -> parseAndValidate(input))
+				.isInstanceOf(SxlParseException.class)
+				.hasMessageContaining("reason");
+		}
+
+		@Test
+		@DisplayName("Should handle plan with only error steps")
+		void shouldHandlePlanWithOnlyErrorSteps() {
+			String input = """
+				(EMBED sxl-plan
+				  (P "All steps failed"
+				    (PS step1 (ERROR "Unable to parse query 1"))
+				    (PS step2 (ERROR "Unable to parse query 2"))
+				    (PS step3 (ERROR "Unable to parse query 3"))
+				  )
+				)
+				""";
+			
+			List<SxlNode> nodes = parseAndValidate(input);
+			
+			SxlNode plan = nodes.get(0).args().get(1);
+			assertThat(plan.args()).hasSize(4); // Description + 3 error steps
+		}
+
+		@Test
+		@DisplayName("Should handle mixed successful and error steps")
+		void shouldHandleMixedSuccessfulAndErrorSteps() {
+			String input = """
+				(EMBED sxl-plan
+				  (P "Mixed success and failure scenario"
+				    (PS getOrders (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+				    (PS getOrdersError (ERROR "Alternative query generation failed"))
+				    (PS getCustomers (EMBED sxl-sql (Q (F customers c) (S (AS c.id id)))))
+				    (PS joinError (ERROR "Join query failed to generate"))
+				    (PS getFinalResults (EMBED sxl-sql (Q (F orders o) (S (AS o.status status)))))
+				  )
+				)
+				""";
+			
+			List<SxlNode> nodes = parseAndValidate(input);
+			
+			SxlNode plan = nodes.get(0).args().get(1);
+			// Description + 5 steps (alternating successful and error)
+			assertThat(plan.args()).hasSize(6);
+		}
+	}
+
+	@Nested
 	@DisplayName("Error Handling Tests")
 	class ErrorHandlingTests {
 
@@ -540,20 +702,20 @@ class PlanDslTest {
 				.hasMessageContaining("P");
 		}
 
-		@Test
-		@DisplayName("Should provide meaningful error for missing dsl-instance")
-		void shouldProvideMeaningfulErrorForMissingDslInstance() {
-			String input = """
-				(EMBED sxl-plan
-				  (P
-				    (PS incompleteStep)
-				  )
-				)
-				""";
-			
-			assertThatThrownBy(() -> parseAndValidate(input))
-				.isInstanceOf(SxlParseException.class)
-				.hasMessageContaining("dsl-instance");
+	@Test
+	@DisplayName("Should provide meaningful error for missing dsl-instance")
+	void shouldProvideMeaningfulErrorForMissingDslInstance() {
+		String input = """
+			(EMBED sxl-plan
+			  (P
+			    (PS incompleteStep)
+			  )
+			)
+			""";
+		
+		assertThatThrownBy(() -> parseAndValidate(input))
+			.isInstanceOf(SxlParseException.class)
+			.hasMessageContaining("step-content");
 		}
 	}
 

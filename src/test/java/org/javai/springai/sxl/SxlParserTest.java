@@ -2,12 +2,18 @@ package org.javai.springai.sxl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.io.InputStream;
 import java.util.List;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlToken;
 import org.javai.springai.sxl.SxlTokenizer;
+import org.javai.springai.sxl.grammar.SxlGrammarParser;
+import org.javai.springai.sxl.grammar.SxlGrammar;
+import org.javai.springai.sxl.ComplexDslValidator;
+import org.javai.springai.sxl.DefaultValidatorRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -15,8 +21,56 @@ import org.junit.jupiter.api.Test;
  * The parser converts tokens from SxlTokenizer into a raw AST representation.
  * It must accept all syntactically correct s-expressions without knowing
  * anything about DSL semantics.
+ * 
+ * Additionally, this test suite validates that SQL-related S-expressions are
+ * semantically correct against the SQL DSL grammar, ensuring comprehensive
+ * testing that validates both syntax AND semantics.
  */
 class SxlParserTest {
+
+	private SxlGrammar sqlGrammar;
+	private DefaultValidatorRegistry registry;
+
+	@BeforeEach
+	void setUp() {
+		SxlGrammarParser parser = new SxlGrammarParser();
+		
+		// Load SQL grammar from resources for validation of SQL expressions
+		sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
+		
+		// Create registry with SQL grammar
+		registry = new DefaultValidatorRegistry();
+		registry.addGrammar("sxl-sql", sqlGrammar);
+	}
+
+	private SxlGrammar loadGrammar(String resourceName, SxlGrammarParser parser) {
+		InputStream stream = getClass().getClassLoader().getResourceAsStream(resourceName);
+		if (stream == null) {
+			throw new IllegalStateException("Could not load grammar resource: " + resourceName);
+		}
+		try {
+			return parser.parse(stream);
+		} finally {
+			try {
+				stream.close();
+			} catch (Exception e) {
+				// Ignore
+			}
+		}
+	}
+
+	/**
+	 * Parse and validate an S-expression against the SQL DSL grammar.
+	 * This ensures the expression is both syntactically AND semantically correct.
+	 */
+	private List<SxlNode> parseAndValidateSql(String input) {
+		String wrappedInput = "(EMBED sxl-sql " + input + ")";
+		SxlTokenizer tokenizer = new SxlTokenizer(wrappedInput);
+		List<SxlToken> tokens = tokenizer.tokenize();
+		
+		ComplexDslValidator validator = new ComplexDslValidator(registry);
+		return validator.parseAndValidate(tokens);
+	}
 
 	@Test
 	void parseEmptyExpressionList() {
@@ -433,6 +487,402 @@ class SxlParserTest {
 		SxlNode divNode = addNode.args().get(1);
 		assertThat(divNode.symbol()).isEqualTo("DIV");
 		assertThat(divNode.args()).hasSize(2);
+	}
+
+	/**
+	 * SQL DSL Keyword Coverage and Validation Tests.
+	 * 
+	 * These tests ensure that:
+	 * 1. Every keyword in the SQL DSL has at least one test case
+	 * 2. Parsed S-expressions are validated against the SQL DSL grammar
+	 * 3. Both syntactic AND semantic correctness is verified
+	 */
+
+	// ============================================================
+	// SQL CLAUSE KEYWORDS (Q, D, F, S, AS, W, G, H, O, L)
+	// ============================================================
+
+	@Test
+	void validateSqlQueryKeywordQ() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+		assertThat(validated.getFirst().symbol()).isEqualTo("EMBED");
+	}
+
+	@Test
+	void validateSqlDistinctKeywordD() {
+		String sqlExpr = "(Q (D) (F orders o) (S o.status))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlFromKeywordF() {
+		String sqlExpr = "(Q (F customers c) (S (AS c.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlSelectKeywordS() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id) (AS o.amount amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlAsKeyword() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id order_id) (AS o.status order_status)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlWhereKeywordW() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (EQ o.status \"COMPLETED\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlGroupByKeywordG() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.status status) (AS (COUNT o.id) count)) (G o.status))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlHavingKeywordH() {
+		String sqlExpr = "(Q (F orders o) (S (AS (COUNT o.id) count)) (G o.status) (H (GT (COUNT o.id) 5)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlOrderByKeywordO() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (O (DESC o.amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLimitKeywordL() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (L 10))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL JOIN KEYWORDS (J, J_LEFT, J_RIGHT, J_FULL)
+	// ============================================================
+
+	@Test
+	void validateSqlInnerJoinKeywordJ() {
+		String sqlExpr = "(Q (F orders o) (J customers c (EQ o.customer_id c.id)) (S (AS o.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLeftJoinKeywordJLeft() {
+		String sqlExpr = "(Q (F orders o) (J_LEFT customers c (EQ o.customer_id c.id)) (S (AS o.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlRightJoinKeywordJRight() {
+		String sqlExpr = "(Q (F orders o) (J_RIGHT customers c (EQ o.customer_id c.id)) (S (AS o.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlFullOuterJoinKeywordJFull() {
+		String sqlExpr = "(Q (F orders o) (J_FULL customers c (EQ o.customer_id c.id)) (S (AS o.id id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL COMPARISON OPERATORS (EQ, NE, LT, GT, LE, GE)
+	// ============================================================
+
+	@Test
+	void validateSqlEqualOperatorEQ() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (EQ o.status \"ACTIVE\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlNotEqualOperatorNE() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (NE o.status \"CANCELLED\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLessThanOperatorLT() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (LT o.amount 100)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlGreaterThanOperatorGT() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (GT o.amount 500)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLessEqualOperatorLE() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (LE o.amount 1000)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlGreaterEqualOperatorGE() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (GE o.amount 50)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL ARITHMETIC OPERATORS (ADD, SUB, MUL, DIV)
+	// ============================================================
+
+	@Test
+	void validateSqlAdditionOperatorADD() {
+		String sqlExpr = "(Q (F orders o) (S (AS (ADD o.amount o.tax) total)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlSubtractionOperatorSUB() {
+		String sqlExpr = "(Q (F orders o) (S (AS (SUB o.amount o.discount) net)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlMultiplicationOperatorMUL() {
+		String sqlExpr = "(Q (F orders o) (S (AS (MUL o.quantity o.unit_price) total)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlDivisionOperatorDIV() {
+		String sqlExpr = "(Q (F orders o) (S (AS (DIV o.total_amount o.quantity) avg_price)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL BOOLEAN OPERATORS (AND, OR, NOT)
+	// ============================================================
+
+	@Test
+	void validateSqlAndOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (AND (GT o.amount 100) (EQ o.status \"ACTIVE\"))))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlOrOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (OR (EQ o.status \"ACTIVE\") (EQ o.status \"PENDING\"))))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlNotOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (NOT (EQ o.status \"CANCELLED\"))))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL PATTERN MATCHING OPERATORS (LIKE, ILIKE)
+	// ============================================================
+
+	@Test
+	void validateSqlLikeOperator() {
+		String sqlExpr = "(Q (F customers c) (S (AS c.id id)) (W (LIKE c.name \"%Smith%\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlIlikeOperator() {
+		String sqlExpr = "(Q (F customers c) (S (AS c.id id)) (W (ILIKE c.name \"%johnson%\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL RANGE AND MEMBERSHIP OPERATORS (BETWEEN, IN, NOT_IN)
+	// ============================================================
+
+	@Test
+	void validateSqlBetweenOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (BETWEEN o.amount 100 500)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlInOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (IN o.status \"ACTIVE\" \"PENDING\" \"SHIPPED\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlNotInOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (NOT_IN o.status \"CANCELLED\" \"REJECTED\")))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL NULL CHECK OPERATORS (IS_NULL, IS_NOT_NULL)
+	// ============================================================
+
+	@Test
+	void validateSqlIsNullOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (IS_NULL o.shipped_date)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlIsNotNullOperator() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (IS_NOT_NULL o.customer_id)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL AGGREGATE FUNCTIONS (COUNT, SUM, AVG, MIN, MAX)
+	// ============================================================
+
+	@Test
+	void validateSqlCountFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (COUNT o.id) total_orders)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlCountFunctionWithoutArg() {
+		String sqlExpr = "(Q (F orders o) (S (AS (COUNT) total_rows)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlSumFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (SUM o.amount) total_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlAvgFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (AVG o.amount) average_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlMinFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (MIN o.amount) min_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlMaxFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (MAX o.amount) max_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL STRING FUNCTIONS (UPPER)
+	// ============================================================
+
+	@Test
+	void validateSqlUpperFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (UPPER c.name) name_upper)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL DATE FUNCTIONS (DATE_TRUNC, EXTRACT)
+	// ============================================================
+
+	@Test
+	void validateSqlDateTruncFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (DATE_TRUNC \"month\" o.order_date) order_month)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlExtractFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (EXTRACT \"YEAR\" o.order_date) order_year)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// SQL SORT KEYWORDS (ASC, DESC)
+	// ============================================================
+
+	@Test
+	void validateSqlAscKeyword() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (O (ASC o.created_date)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlDescKeyword() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (O (DESC o.amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// COMPLEX SQL EXPRESSIONS COMBINING MULTIPLE KEYWORDS
+	// ============================================================
+
+	@Test
+	void validateComplexSqlWithAllKeywords() {
+		String sqlExpr = """
+			(Q
+			  (D)
+			  (F orders o)
+			  (J_LEFT customers c (EQ o.customer_id c.id))
+			  (S (AS c.name customer) (AS (COUNT o.id) order_count) (AS (SUM o.amount) total))
+			  (W (AND (GT o.amount 100) (NE o.status "CANCELLED")))
+			  (G c.name)
+			  (H (GE (SUM o.amount) 500))
+			  (O (DESC (SUM o.amount)))
+			  (L 20)
+			)
+			""";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
 	}
 }
 

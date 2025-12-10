@@ -53,11 +53,38 @@ symbols:
         identifier_rules:
           pattern: "^[a-zA-Z_$][a-zA-Z0-9_$]*$"
 
-      - name: dsl-instance
-        description: "Statement of action to perform in some DSL of what to do in this step"
-        type: embedded(dsl-id)
+      - name: step-content
+        description: "Either an embedded DSL expression or an error step describing why this step failed"
+        type: node
+        allowed_symbols: [EMBED, ERROR]
         cardinality: required
         ordered: true
+
+  ERROR:
+    description: "Represents a failed step - when an LLM failed to generate a valid expression for this step"
+    kind: node
+    params:
+      - name: reason
+        description: "User-friendly and/or technical message explaining why the step failed"
+        type: literal(string)
+        cardinality: required
+        ordered: true
+
+      - name: fallback-expression
+        description: "Optional fallback embedded DSL expression to use if primary generation failed"
+        type: node
+        allowed_symbols: [EMBED]
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "Simple error with reason only"
+        code: |
+          (ERROR "LLM timeout after 30 seconds")
+      
+      - label: "Error with fallback expression"
+        code: |
+          (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
 
 # ============================================================
 # LITERAL DEFINITIONS

@@ -1,0 +1,1893 @@
+version: 0.1
+sample-queries:
+  - id: "1.1"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+    human:
+      - "list all customers by name"
+      - "Show me all customers by name"
+    assistant:
+      message:
+        - "Here is a list of customers by name"
+        - "Here you go"
+      sql: >
+        SELECT CONCAT(c.first_name, ' ', c.last_name) AS name
+        FROM dim_customer AS c
+    
+  - id: "1.2"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_sku
+              type: VARCHAR
+              description: "Product stock keeping unit identifier"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+            - name: unit_price
+              type: DECIMAL
+              description: "Price per unit of the product"
+    human:
+      - list all products by name and price
+    assistant:
+      message:
+        - "Here is a list of products by name and price"
+        - "Here are the products you requested"
+      sql: >
+        SELECT p.product_name AS name, p.unit_price AS price
+        FROM dim_product AS p
+    
+  - id: "1.3"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: calendar_date
+              type: DATE
+              description: "Calendar date"
+            - name: year
+              type: INTEGER
+              description: "Year component of the date"
+            - name: month_name
+              type: VARCHAR
+              description: "Name of the month"
+    human:
+      - list all dates by year and month name
+    assistant:
+      message:
+        - "Here is a list of dates by year and month"
+        - "Here are the dates"
+      sql: >
+        SELECT d.year, d.month_name
+        FROM dim_date AS d
+        GROUP BY d.year, d.month_name
+    
+  - id: "1.4"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_code
+              type: VARCHAR
+              description: "Store code identifier"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+            - name: city
+              type: VARCHAR
+              description: "City where the store is located"
+    human:
+      - list all stores with their codes, names, and cities
+    assistant:
+      message:
+        - "Here is a list of stores with their details"
+        - "Here are the stores"
+      sql: >
+        SELECT s.store_code, s.store_name, s.city
+        FROM dim_store AS s
+    
+  - id: "1.5"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: dim_region
+          description: "Region dimension table containing geographic region information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique region identifier (primary key)"
+            - name: region_name
+              type: VARCHAR
+              description: "Name of the region"
+            - name: country_code
+              type: VARCHAR
+              description: "ISO country code"
+    human:
+      - list all regions by name and country code
+    assistant:
+      message:
+        - "Here is a list of regions"
+        - "Here are the regions you requested"
+      sql: >
+        SELECT r.region_name AS region_name, r.country_code AS country_code
+        FROM dim_region AS r
+    
+  - id: "1.6"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: order_timestamp
+              type: TIMESTAMP
+              description: "Timestamp when the order was placed"
+            - name: order_status
+              type: VARCHAR
+              description: "Current status of the order (e.g., SHIPPED, COMPLETED, CANCELLED)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+            - name: dim_marketing_channel_id
+              type: INTEGER
+              description: "Foreign key to dim_marketing_channel.id"
+    human:
+      - list all orders with their order numbers, timestamps, and status
+    assistant:
+      message:
+        - "Here is a list of orders"
+        - "Here are all the orders"
+      sql: >
+        SELECT o.order_number AS order_number, o.order_timestamp AS order_timestamp, o.order_status AS order_status
+        FROM fct_orders AS o
+    
+  - id: "1.7"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: order_item_number
+              type: VARCHAR
+              description: "Item number within an order"
+            - name: quantity
+              type: INTEGER
+              description: "Quantity of items ordered"
+            - name: unit_price
+              type: DECIMAL
+              description: "Price per unit at time of order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+    human:
+      - list all order items with their quantities and prices
+    assistant:
+      message:
+        - "Here is a list of order items"
+        - "Here are the order items you requested"
+      sql: >
+        SELECT oi.order_item_number, oi.quantity, oi.unit_price
+        FROM fct_order_items AS oi
+    
+  - id: "1.8"
+    description: Simple select-from
+    metadata:
+      tables:
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_reference
+              type: VARCHAR
+              description: "Payment reference number"
+            - name: payment_method
+              type: VARCHAR
+              description: "Method of payment (e.g., CREDIT_CARD, PAYPAL)"
+            - name: payment_amount
+              type: DECIMAL
+              description: "Amount of the payment"
+            - name: fct_orders_id
+              type: INTEGER
+              description: "Foreign key to fct_orders.id"
+            - name: dim_currency_id
+              type: INTEGER
+              description: "Foreign key to dim_currency.id"
+    human:
+      - list all payments with their references, methods, and amounts
+    assistant:
+      message:
+        - "Here is a list of payments"
+        - "Here are the payments"
+      sql: >
+        SELECT p.payment_reference AS reference, p.payment_method AS method, p.payment_amount AS amount
+        FROM fct_payments AS p
+    
+  - id: "1.9"
+    description: SELECT with scalar function, no FROM clause
+    metadata:
+      tables: []
+    human:
+      - what is today's date
+    assistant:
+      message:
+        - "Today's date is shown below"
+        - "Here is today's date"
+      sql: >
+        SELECT CURRENT_DATE()
+    
+  - id: "1.10"
+    description: SELECT with scalar functions, no FROM clause
+    metadata:
+      tables: []
+    human:
+      - what is the current timestamp and time
+    assistant:
+      message:
+        - "Here is the current timestamp and time"
+        - "Here you go"
+      sql: >
+        SELECT CURRENT_TIMESTAMP AS current_timestamp, CURRENT_TIME AS current_time
+    
+  - id: "1.11"
+    description: SELECT-FROM with JOIN
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+    human:
+      - show me all orders with their customer names
+    assistant:
+      message:
+        - "Here are the orders with customer names"
+        - "Here are the results"
+      sql: >
+        SELECT o.id AS order_id, c.name AS customer_name
+        FROM orders AS o 
+        INNER JOIN customers AS c ON o.customer_id = c.id
+    
+  - id: "1.12"
+    description: SELECT-FROM with JOIN
+    metadata:
+      tables:
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: order_item_number
+              type: VARCHAR
+              description: "Item number within an order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_sku
+              type: VARCHAR
+              description: "Product stock keeping unit identifier"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+    human:
+      - show me all order items with product information
+    assistant:
+      message:
+        - "Here are the order items with product information"
+        - "Here you go"
+      sql: >
+        SELECT oi.*, p.*
+        FROM order_items AS oi 
+        INNER JOIN products AS p ON oi.product_id = p.id
+    
+  - id: "1.13"
+    description: SELECT-FROM with JOIN
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: calendar_date
+              type: DATE
+              description: "Calendar date"
+            - name: year
+              type: INTEGER
+              description: "Year component of the date"
+    human:
+      - show me all orders with their dates and years
+    assistant:
+      message:
+        - "Here are the orders with dates"
+        - "Here are the results"
+      sql: >
+        SELECT o.order_id, o.order_date, EXTRACT(YEAR FROM o.order_date) AS year
+        FROM orders AS o
+    
+  - id: "1.14"
+    description: SELECT-FROM with JOIN
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_code
+              type: VARCHAR
+              description: "Store code identifier"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+    human:
+      - show me all orders with the store information
+    assistant:
+      message:
+        - "Here are the orders with store information"
+        - "Here you go"
+      sql: >
+        SELECT o.*, s.*
+        FROM orders AS o 
+        INNER JOIN stores AS s ON o.store_id = s.id
+    
+  - id: "1.15"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: calendar_date
+              type: DATE
+              description: "Calendar date"
+    human:
+      - show me all orders with customer names and order dates
+    assistant:
+      message:
+        - "Here are the orders with customer names and dates"
+        - "Here are the results you requested"
+      sql: >
+        SELECT o.id AS order_id, c.name AS customer_name, o.order_date AS order_date
+        FROM orders AS o 
+        INNER JOIN customers AS c ON c.id = o.customer_id
+    
+  - id: "1.16"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: email_address
+              type: VARCHAR
+              description: "Customer's email address"
+            - name: dim_region_id
+              type: INTEGER
+              description: "Foreign key to dim_region.id"
+        - name: dim_region
+          description: "Region dimension table containing geographic region information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique region identifier (primary key)"
+            - name: region_name
+              type: VARCHAR
+              description: "Name of the region"
+    human:
+      - show me all orders with customer email addresses and their regions
+    assistant:
+      message:
+        - "Here are the orders with customer emails and regions"
+        - "Here you go"
+      sql: >
+        SELECT o.id AS order_id, c.email AS customer_email, c.region AS customer_region
+        FROM orders AS o 
+        INNER JOIN customers AS c ON c.id = o.customer_id
+    
+  - id: "1.17"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: order_item_number
+              type: VARCHAR
+              description: "Item number within an order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+    human:
+      - show me all order items with product names and store names
+    assistant:
+      message:
+        - "Here are the order items with product and store names"
+        - "Here are the results"
+      sql: >
+        SELECT oi.id AS order_item_id, p.name AS product_name, s.name AS store_name
+        FROM order_items AS oi 
+        INNER JOIN products AS p ON oi.product_id = p.id 
+        INNER JOIN stores AS s ON oi.store_id = s.id
+    
+  - id: "1.18"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_reference
+              type: VARCHAR
+              description: "Payment reference number"
+            - name: fct_orders_id
+              type: INTEGER
+              description: "Foreign key to fct_orders.id"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+    human:
+      - show me all payments with their order numbers and customer names
+    assistant:
+      message:
+        - "Here are the payments with order and customer information"
+        - "Here you go"
+      sql: >
+        SELECT p.*, o.order_number, c.name
+        FROM payments AS p 
+        INNER JOIN orders AS o ON p.order_id = o.id 
+        INNER JOIN customers AS c ON o.customer_id = c.id
+    
+  - id: "1.19"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_pageviews
+          description: "Fact table of website page view events"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique pageview identifier (primary key)"
+            - name: session_id
+              type: VARCHAR
+              description: "Session identifier for the pageview"
+            - name: page_path
+              type: VARCHAR
+              description: "URL path of the page viewed"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+            - name: dim_device_id
+              type: INTEGER
+              description: "Foreign key to dim_device.id"
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: calendar_date
+              type: DATE
+              description: "Calendar date"
+        - name: dim_device
+          description: "Device dimension table containing device type information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique device identifier (primary key)"
+            - name: device_type
+              type: VARCHAR
+              description: "Type of device (e.g., MOBILE, DESKTOP, TABLET)"
+    human:
+      - show me all pageviews with their dates and device types
+    assistant:
+      message:
+        - "Here are the pageviews with dates and device types"
+        - "Here are the results"
+      sql: >
+        SELECT d.calendar_date AS day_date, dv.device_type
+        FROM pageviews AS p
+        INNER JOIN dim_date AS d ON p.dim_date_id = d.id
+        INNER JOIN dim_device AS dv ON p.dim_device_id = dv.id
+    
+  - id: "1.20"
+    description: SELECT-FROM with multiple JOINs
+    metadata:
+      tables:
+        - name: fct_subscriptions
+          description: "Fact table of customer subscriptions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription identifier (primary key)"
+            - name: subscription_number
+              type: VARCHAR
+              description: "Subscription number identifier"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+            - name: dim_subscription_plan_id
+              type: INTEGER
+              description: "Foreign key to dim_subscription_plan.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+        - name: dim_subscription_plan
+          description: "Subscription plan dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription plan identifier (primary key)"
+            - name: plan_name
+              type: VARCHAR
+              description: "Name of the subscription plan"
+    human:
+      - show me all subscriptions with customer names and plan names
+    assistant:
+      message:
+        - "Here are the subscriptions with customer and plan information"
+        - "Here you go"
+      sql: >
+        SELECT s.id AS subscription_id, c.name AS customer_name, p.name AS plan_name
+        FROM subscriptions AS s 
+        INNER JOIN customers AS c ON c.id = s.customer_id 
+        INNER JOIN plans AS p ON p.id = s.plan_id
+    
+  - id: "2.1"
+    description: SELECT-FROM-JOIN with WHERE clause
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: order_status
+              type: VARCHAR
+              description: "Current status of the order (e.g., SHIPPED, COMPLETED, CANCELLED)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+    human:
+      - show me all shipped orders with customer names
+    assistant:
+      message:
+        - "Here are the shipped orders with customer names"
+        - "Here are the results"
+      sql: >
+        SELECT o.id AS order_id, c.name AS customer_name, o.status AS status
+        FROM orders AS o 
+        INNER JOIN customers AS c ON c.id = o.customer_id 
+        WHERE o.status = 'shipped'
+    
+  - id: "2.2"
+    description: SELECT-FROM-JOIN with WHERE clause
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: calendar_date
+              type: DATE
+              description: "Calendar date"
+            - name: year
+              type: INTEGER
+              description: "Year component of the date"
+    human:
+      - show me all orders
+        FROM 2024
+    assistant:
+      message:
+        - "Here are the orders
+        FROM 2024"
+        - "Here you go"
+      sql: >
+        SELECT *
+        FROM orders AS o 
+        WHERE o.order_date >= '2024-01-01' AND o.order_date < '2025-01-01'
+    
+  - id: "2.3"
+    description: SELECT-FROM-JOIN with WHERE clause
+    metadata:
+      tables:
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: order_item_number
+              type: VARCHAR
+              description: "Item number within an order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+            - name: unit_price
+              type: DECIMAL
+              description: "Price per unit of the product"
+    human:
+      - show me order items for products priced over 100
+    assistant:
+      message:
+        - "Here are the order items for products priced over 100"
+        - "Here are the results"
+      sql: >
+        SELECT oi.*
+        FROM order_items AS oi 
+        INNER JOIN products AS p ON oi.product_id = p.id 
+        WHERE p.price > 100
+    
+  - id: "2.4"
+    description: SELECT-FROM with WHERE clause using LIKE
+    metadata:
+      tables:
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+            - name: email_address
+              type: VARCHAR
+              description: "Customer's email address"
+    human:
+      - show me all customers with gmail email addresses
+    assistant:
+      message:
+        - "Here are the customers with gmail addresses"
+        - "Here you go"
+      sql: >
+        SELECT *
+        FROM customers AS c 
+        WHERE c.email ILIKE '%gmail.com'
+    
+  - id: "2.5"
+    description: SELECT-FROM-JOIN with WHERE clause
+    metadata:
+      tables:
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+            - name: dim_region_id
+              type: INTEGER
+              description: "Foreign key to dim_region.id"
+        - name: dim_region
+          description: "Region dimension table containing geographic region information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique region identifier (primary key)"
+            - name: region_name
+              type: VARCHAR
+              description: "Name of the region"
+            - name: country_code
+              type: VARCHAR
+              description: "ISO country code"
+    human:
+      - show me all customers in Germany
+    assistant:
+      message:
+        - "Here are the customers in Germany"
+        - "Here are the results"
+      sql: >
+        SELECT *
+        FROM customers AS c 
+        WHERE c.country = 'Germany'
+    
+  - id: "2.6"
+    description: SELECT-FROM-JOIN with WHERE clause using ILIKE
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+            - name: city
+              type: VARCHAR
+              description: "City where the store is located"
+    human:
+      - show me all orders
+        FROM stores in Berlin
+    assistant:
+      message:
+        - "Here are the orders
+        FROM stores in Berlin"
+        - "Here you go"
+      sql: >
+        SELECT *
+        FROM orders AS o 
+        INNER JOIN stores AS s ON s.store_id = o.store_id 
+        WHERE s.city = 'Berlin'
+    
+  - id: "2.7"
+    description: SELECT-FROM-JOIN with WHERE clause using AND
+    metadata:
+      tables:
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_reference
+              type: VARCHAR
+              description: "Payment reference number"
+            - name: payment_amount
+              type: DECIMAL
+              description: "Amount of the payment"
+            - name: payment_method
+              type: VARCHAR
+              description: "Method of payment (e.g., CREDIT_CARD, PAYPAL)"
+            - name: fct_orders_id
+              type: INTEGER
+              description: "Foreign key to fct_orders.id"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_number
+              type: VARCHAR
+              description: "Human-readable order number"
+    human:
+      - show me credit card payments of 500 or more
+    assistant:
+      message:
+        - "Here are the credit card payments of 500 or more"
+        - "Here are the results"
+      sql: >
+        SELECT *
+        FROM credit_card_payments AS ccp 
+        WHERE ccp.amount >= 500
+    
+  - id: "2.8"
+    description: SELECT-FROM-JOIN with WHERE clause using AND and LIKE
+    metadata:
+      tables:
+        - name: fct_pageviews
+          description: "Fact table of website page view events"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique pageview identifier (primary key)"
+            - name: session_id
+              type: VARCHAR
+              description: "Session identifier for the pageview"
+            - name: page_path
+              type: VARCHAR
+              description: "URL path of the page viewed"
+            - name: dim_device_id
+              type: INTEGER
+              description: "Foreign key to dim_device.id"
+        - name: dim_device
+          description: "Device dimension table containing device type information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique device identifier (primary key)"
+            - name: device_type
+              type: VARCHAR
+              description: "Type of device (e.g., MOBILE, DESKTOP, TABLET)"
+    human:
+      - show me mobile pageviews on checkout pages
+    assistant:
+      message:
+        - "Here are the mobile pageviews on checkout pages"
+        - "Here you go"
+      sql: >
+        SELECT COUNT(*) AS mobile_checkout_pageviews
+        FROM pageviews AS p 
+        WHERE p.device_type = 'mobile' AND p.page_url LIKE '%checkout%'
+    
+  - id: "2.9"
+    description: SELECT-FROM-JOIN with WHERE clause using inequality operator
+    metadata:
+      tables:
+        - name: fct_subscriptions
+          description: "Fact table of customer subscriptions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription identifier (primary key)"
+            - name: subscription_number
+              type: VARCHAR
+              description: "Subscription number identifier"
+            - name: subscription_status
+              type: VARCHAR
+              description: "Status of the subscription (e.g., ACTIVE, CANCELLED)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+    human:
+      - show me all active subscriptions (not cancelled)
+    assistant:
+      message:
+        - "Here are the active subscriptions"
+        - "Here are the results"
+      sql: >
+        SELECT *
+        FROM subscriptions AS s 
+        WHERE s.status <> 'cancelled'
+    
+  - id: "2.10"
+    description: SELECT-FROM-JOIN with WHERE clause using AND and inequality operator
+    metadata:
+      tables:
+        - name: fct_tickets
+          description: "Fact table of support tickets"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique ticket identifier (primary key)"
+            - name: ticket_number
+              type: VARCHAR
+              description: "Ticket number identifier"
+            - name: priority
+              type: VARCHAR
+              description: "Priority level of the ticket (e.g., HIGH, MEDIUM, LOW)"
+            - name: status
+              type: VARCHAR
+              description: "Status of the ticket (e.g., RESOLVED, OPEN, PENDING)"
+            - name: dim_support_agent_id
+              type: INTEGER
+              description: "Foreign key to dim_support_agent.id"
+        - name: dim_support_agent
+          description: "Support agent dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique support agent identifier (primary key)"
+            - name: agent_name
+              type: VARCHAR
+              description: "Name of the support agent"
+    human:
+      - show me all unresolved high priority tickets with their assigned agents
+    assistant:
+      message:
+        - "Here are the unresolved high priority tickets"
+        - "Here you go"
+      sql: >
+        SELECT t.id AS ticket_id, t.priority, t.status, a.id AS agent_id, a.name AS agent_name
+        FROM tickets AS t 
+        INNER JOIN agents AS a ON a.id = t.agent_id 
+        WHERE t.status = 'unresolved' AND t.priority = 'high'
+    
+  - id: "3.1"
+    description: SELECT-FROM with COUNT aggregate function
+    metadata:
+      tables:
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+    human:
+      - how many total orders do we have
+    assistant:
+      message:
+        - "Here is the total count of orders"
+        - "The total number of orders is shown below"
+      sql: >
+        SELECT COUNT(*) AS total_orders
+    
+  - id: "3.2"
+    description: SELECT-FROM-JOIN with COUNT and GROUP BY
+    metadata:
+      tables:
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+    human:
+      - how many orders does each customer have
+    assistant:
+      message:
+        - "Here is the order count for each customer"
+        - "Here are the results grouped by customer"
+      sql: >
+        SELECT o.customer_id AS customer_id, COUNT(o.id) AS order_count
+        FROM orders AS o
+        GROUP BY o.customer_id
+    
+  - id: "3.3"
+    description: SELECT-FROM-JOIN with SUM and GROUP BY
+    metadata:
+      tables:
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: quantity
+              type: INTEGER
+              description: "Quantity of items ordered"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+    human:
+      - what is the total quantity sold for each product
+    assistant:
+      message:
+        - "Here is the total quantity sold for each product"
+        - "Here are the totals by product"
+      sql: >
+        SELECT s.product_id, SUM(s.quantity) AS total_quantity
+        FROM sales AS s
+        GROUP BY s.product_id
+    
+  - id: "3.4"
+    description: SELECT-FROM-JOIN with COUNT and GROUP BY
+    metadata:
+      tables:
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+    human:
+      - how many orders does each store have
+    assistant:
+      message:
+        - "Here is the order count for each store"
+        - "Here are the results grouped by store"
+      sql: >
+        SELECT o.store_id AS store_id, COUNT(o.id) AS order_count
+        FROM orders AS o
+        GROUP BY o.store_id
+    
+  - id: "3.5"
+    description: SELECT-FROM-JOIN with COUNT, GROUP BY, and ORDER BY
+    metadata:
+      tables:
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: year
+              type: INTEGER
+              description: "Year component of the date"
+            - name: month_name
+              type: VARCHAR
+              description: "Name of the month"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+    human:
+      - show me the number of orders by year and month
+    assistant:
+      message:
+        - "Here is the monthly order count"
+        - "Here are the orders grouped by month"
+      sql: >
+        SELECT
+          EXTRACT(YEAR FROM o.order_date) AS year,
+          EXTRACT(MONTH FROM o.order_date) AS month,
+          COUNT(o.order_id) AS order_count
+        FROM orders AS o
+        GROUP BY
+          EXTRACT(YEAR FROM o.order_date),
+          EXTRACT(MONTH FROM o.order_date)
+        ORDER BY year, month
+    
+  - id: "3.6"
+    description: SELECT-FROM-JOIN with COUNT and GROUP BY
+    metadata:
+      tables:
+        - name: dim_region
+          description: "Region dimension table containing geographic region information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique region identifier (primary key)"
+            - name: region_name
+              type: VARCHAR
+              description: "Name of the region"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: dim_region_id
+              type: INTEGER
+              description: "Foreign key to dim_region.id"
+    human:
+      - how many customers are in each region
+    assistant:
+      message:
+        - "Here is the customer count for each region"
+        - "Here are the results by region"
+      sql: >
+        SELECT c.region, COUNT(c.id) AS customer_count
+        FROM customers AS c
+        GROUP BY c.region
+    
+  - id: "3.7"
+    description: SELECT-FROM-JOIN with AVG, MIN, MAX, and GROUP BY
+    metadata:
+      tables:
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: unit_price
+              type: DECIMAL
+              description: "Price per unit at time of order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+    human:
+      - what are the average, minimum, and maximum prices for each product
+    assistant:
+      message:
+        - "Here are the price statistics for each product"
+        - "Here are the aggregated price metrics"
+      sql: >
+        SELECT p.product_name AS product, AVG(p.price) AS average_price, MIN(p.price) AS minimum_price, MAX(p.price) AS maximum_price
+        FROM products AS p
+        GROUP BY p.product_name
+    
+  - id: "3.8"
+    description: SELECT-FROM with COUNT, SUM, and GROUP BY
+    metadata:
+      tables:
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_method
+              type: VARCHAR
+              description: "Method of payment (e.g., CREDIT_CARD, PAYPAL)"
+            - name: payment_amount
+              type: DECIMAL
+              description: "Amount of the payment"
+    human:
+      - show me the count and total amount for each payment method
+    assistant:
+      message:
+        - "Here are the payment statistics by method"
+        - "Here are the totals grouped by payment method"
+      sql: >
+        SELECT
+          p.payment_method AS payment_method,
+          COUNT(p.payment_method) AS payment_count,
+          SUM(p.amount) AS total_amount
+        FROM payments AS p
+        GROUP BY p.payment_method
+    
+  - id: "3.9"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, and GROUP BY
+    metadata:
+      tables:
+        - name: dim_device
+          description: "Device dimension table containing device type information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique device identifier (primary key)"
+            - name: device_type
+              type: VARCHAR
+              description: "Type of device (e.g., MOBILE, DESKTOP, TABLET)"
+        - name: fct_pageviews
+          description: "Fact table of website page view events"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique pageview identifier (primary key)"
+            - name: page_path
+              type: VARCHAR
+              description: "URL path of the page viewed"
+            - name: dim_device_id
+              type: INTEGER
+              description: "Foreign key to dim_device.id"
+    human:
+      - how many product page views are there by device type
+    assistant:
+      message:
+        - "Here is the pageview count by device type"
+        - "Here are the results grouped by device"
+      sql: >
+        SELECT pv.device_type, COUNT(*) AS product_page_views
+        FROM page_views AS pv 
+        WHERE pv.page_type = 'product'
+        GROUP BY pv.device_type
+    
+  - id: "3.10"
+    description: SELECT-FROM-JOIN with COUNT and GROUP BY
+    metadata:
+      tables:
+        - name: dim_subscription_plan
+          description: "Subscription plan dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription plan identifier (primary key)"
+            - name: plan_name
+              type: VARCHAR
+              description: "Name of the subscription plan"
+        - name: fct_subscriptions
+          description: "Fact table of customer subscriptions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription identifier (primary key)"
+            - name: subscription_status
+              type: VARCHAR
+              description: "Status of the subscription (e.g., ACTIVE, CANCELLED)"
+            - name: dim_subscription_plan_id
+              type: INTEGER
+              description: "Foreign key to dim_subscription_plan.id"
+    human:
+      - show me subscription counts by plan and status
+    assistant:
+      message:
+        - "Here are the subscription counts by plan and status"
+        - "Here are the results grouped by plan"
+      sql: >
+        SELECT s.plan, s.status, COUNT(1) AS subscription_count
+        FROM subscription AS s
+        GROUP BY s.plan, s.status
+    
+  - id: "4.1"
+    description: SELECT-FROM-JOIN with COUNT, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: first_name
+              type: VARCHAR
+              description: "Customer's first name"
+            - name: last_name
+              type: VARCHAR
+              description: "Customer's last name"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+    human:
+      - show me customers who have placed more than 5 orders
+    assistant:
+      message:
+        - "Here are the customers with more than 5 orders"
+        - "Here are the high-volume customers"
+      sql: >
+        SELECT c.customer_id, COUNT(o.order_id) AS order_count
+        FROM orders AS o 
+        INNER JOIN customers AS c ON c.customer_id = o.customer_id
+        GROUP BY c.customer_id
+        HAVING COUNT(o.order_id) > 5
+    
+  - id: "4.2"
+    description: SELECT-FROM-JOIN with SUM, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_product
+          description: "Product dimension table containing product information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique product identifier (primary key)"
+            - name: product_name
+              type: VARCHAR
+              description: "Name of the product"
+        - name: fct_order_items
+          description: "Fact table of individual items within orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order item identifier (primary key)"
+            - name: quantity
+              type: INTEGER
+              description: "Quantity of items ordered"
+            - name: unit_price
+              type: DECIMAL
+              description: "Price per unit at time of order"
+            - name: dim_product_id
+              type: INTEGER
+              description: "Foreign key to dim_product.id"
+    human:
+      - show me products with total revenue of at least 10000
+    assistant:
+      message:
+        - "Here are the products with revenue of at least 10000"
+        - "Here are the high-revenue products"
+      sql: >
+        SELECT p.product_name, SUM(oi.quantity * oi.unit_price) AS total_revenue
+        FROM products AS p 
+        INNER JOIN order_items AS oi ON p.product_id = oi.product_id
+        GROUP BY p.product_name
+        HAVING SUM(oi.quantity * oi.unit_price) >= 10000
+    
+  - id: "4.3"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_store
+          description: "Store dimension table containing store location information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique store identifier (primary key)"
+            - name: store_name
+              type: VARCHAR
+              description: "Name of the store"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_status
+              type: VARCHAR
+              description: "Current status of the order (e.g., SHIPPED, COMPLETED, CANCELLED)"
+            - name: dim_store_id
+              type: INTEGER
+              description: "Foreign key to dim_store.id"
+    human:
+      - show me stores with 100 or more shipped orders
+    assistant:
+      message:
+        - "Here are the stores with 100 or more shipped orders"
+        - "Here are the high-performing stores"
+      sql: >
+        SELECT s.store_id AS store_id, s.store_name AS store_name, COUNT(o.order_id) AS shipped_orders
+        FROM stores AS s 
+        INNER JOIN orders AS o ON s.store_id = o.store_id 
+        WHERE o.status = 'shipped'
+        GROUP BY s.store_id, s.store_name
+        HAVING COUNT(o.order_id) >= 100
+    
+  - id: "4.4"
+    description: SELECT-FROM with multiple JOINs, SUM, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_region
+          description: "Region dimension table containing geographic region information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique region identifier (primary key)"
+            - name: region_name
+              type: VARCHAR
+              description: "Name of the region"
+        - name: dim_customer
+          description: "Customer dimension table containing customer information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique customer identifier (primary key)"
+            - name: dim_region_id
+              type: INTEGER
+              description: "Foreign key to dim_region.id"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: dim_customer_id
+              type: INTEGER
+              description: "Foreign key to dim_customer.id"
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_amount
+              type: DECIMAL
+              description: "Amount of the payment"
+            - name: fct_orders_id
+              type: INTEGER
+              description: "Foreign key to fct_orders.id"
+    human:
+      - show me regions with total payments exceeding 50000
+    assistant:
+      message:
+        - "Here are the regions with payments exceeding 50000"
+        - "Here are the high-revenue regions"
+      sql: >
+        SELECT r.region_name, SUM(pay.payment_amount) AS total_paid       
+        FROM dim_region AS r
+        JOIN dim_customer AS c ON r.id = c.dim_region_id
+        JOIN fct_orders AS o ON c.id = o.dim_customer_id
+        JOIN fct_payments AS pay ON o.id = pay.fct_orders_id
+        GROUP BY r.region_name       
+        HAVING SUM(pay.payment_amount) > 50000
+    
+  - id: "4.5"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_date
+          description: "Date dimension table for time-based analysis"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique date identifier (primary key)"
+            - name: year
+              type: INTEGER
+              description: "Year component of the date"
+            - name: month_name
+              type: VARCHAR
+              description: "Name of the month"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_status
+              type: VARCHAR
+              description: "Current status of the order (e.g., SHIPPED, COMPLETED, CANCELLED)"
+            - name: dim_date_id
+              type: INTEGER
+              description: "Foreign key to dim_date.id"
+    human:
+      - show me months with 1000 or more non-cancelled orders
+    assistant:
+      message:
+        - "Here are the months with 1000 or more non-cancelled orders"
+        - "Here are the high-volume months"
+      sql: >
+        SELECT
+          EXTRACT(YEAR FROM o.order_date) AS year,
+          EXTRACT(MONTH FROM o.order_date) AS month,
+          COUNT(*) AS order_count
+        FROM orders AS o 
+        WHERE o.status <> 'cancelled'
+        GROUP BY
+          EXTRACT(YEAR FROM o.order_date),
+          EXTRACT(MONTH FROM o.order_date)
+        HAVING COUNT(*) >= 1000
+    
+
+  - id: "4.6"
+    description: SELECT-FROM-JOIN with COUNT, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_device
+          description: "Device dimension table containing device type information"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique device identifier (primary key)"
+            - name: device_type
+              type: VARCHAR
+              description: "Type of device (e.g., MOBILE, DESKTOP, TABLET)"
+        - name: fct_pageviews
+          description: "Fact table of website page view events"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique pageview identifier (primary key)"
+            - name: dim_device_id
+              type: INTEGER
+              description: "Foreign key to dim_device.id"
+    human:
+      - show me device types with more than 10000 pageviews
+    assistant:
+      message:
+        - "Here are the device types with more than 10000 pageviews"
+        - "Here are the high-traffic devices"
+      sql: >
+        SELECT p.device_type
+        FROM pageviews AS p
+        GROUP BY p.device_type
+        HAVING COUNT(*) > 10000
+    
+  - id: "4.7"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_subscription_plan
+          description: "Subscription plan dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription plan identifier (primary key)"
+            - name: plan_name
+              type: VARCHAR
+              description: "Name of the subscription plan"
+        - name: fct_subscriptions
+          description: "Fact table of customer subscriptions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique subscription identifier (primary key)"
+            - name: subscription_status
+              type: VARCHAR
+              description: "Status of the subscription (e.g., ACTIVE, CANCELLED)"
+            - name: dim_subscription_plan_id
+              type: INTEGER
+              description: "Foreign key to dim_subscription_plan.id"
+    human:
+      - show me subscription plans with 500 or more active subscriptions
+    assistant:
+      message:
+        - "Here are the plans with 500 or more active subscriptions"
+        - "Here are the popular subscription plans"
+      sql: >
+        SELECT sp.id, sp.name, COUNT(s.id) AS active_subscriptions
+        FROM subscription_plans AS sp 
+        INNER JOIN subscriptions AS s ON sp.id = s.plan_id 
+        WHERE s.status = 'active'
+        GROUP BY sp.id, sp.name
+        HAVING COUNT(s.id) >= 500
+    
+  - id: "4.8"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_support_agent
+          description: "Support agent dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique support agent identifier (primary key)"
+            - name: agent_name
+              type: VARCHAR
+              description: "Name of the support agent"
+        - name: fct_tickets
+          description: "Fact table of support tickets"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique ticket identifier (primary key)"
+            - name: priority
+              type: VARCHAR
+              description: "Priority level of the ticket (e.g., HIGH, MEDIUM, LOW)"
+            - name: status
+              type: VARCHAR
+              description: "Status of the ticket (e.g., RESOLVED, OPEN, PENDING)"
+            - name: dim_support_agent_id
+              type: INTEGER
+              description: "Foreign key to dim_support_agent.id"
+    human:
+      - show me support agents with more than 20 unresolved tickets by priority
+    assistant:
+      message:
+        - "Here are the agents with more than 20 unresolved tickets"
+        - "Here are the high-workload support agents"
+      sql: >
+        SELECT s.name AS agent_name, t.priority, COUNT(t.id) AS unresolved_ticket_count
+        FROM tickets AS t 
+        INNER JOIN support_agents AS s ON s.id = t.agent_id 
+        WHERE t.status = 'unresolved'
+        GROUP BY s.name, t.priority
+        HAVING COUNT(t.id) > 20
+    
+  - id: "4.9"
+    description: SELECT-FROM-JOIN with COUNT, WHERE, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_marketing_channel
+          description: "Marketing channel dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique marketing channel identifier (primary key)"
+            - name: channel_name
+              type: VARCHAR
+              description: "Name of the marketing channel"
+        - name: fct_orders
+          description: "Fact table of customer orders"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique order identifier (primary key)"
+            - name: order_status
+              type: VARCHAR
+              description: "Current status of the order (e.g., SHIPPED, COMPLETED, CANCELLED)"
+            - name: dim_marketing_channel_id
+              type: INTEGER
+              description: "Foreign key to dim_marketing_channel.id"
+    human:
+      - show me marketing channels with 200 or more completed orders
+    assistant:
+      message:
+        - "Here are the channels with 200 or more completed orders"
+        - "Here are the high-performing marketing channels"
+      sql: >
+        SELECT o.marketing_channel
+        FROM orders AS o 
+        WHERE o.status = 'COMPLETED'
+        GROUP BY o.marketing_channel
+        HAVING COUNT(o.id) >= 200
+    
+  - id: "4.10"
+    description: SELECT-FROM-JOIN with COUNT, SUM, GROUP BY, and HAVING
+    metadata:
+      tables:
+        - name: dim_currency
+          description: "Currency dimension table"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique currency identifier (primary key)"
+            - name: currency_code
+              type: VARCHAR
+              description: "ISO currency code (e.g., USD, EUR, GBP)"
+        - name: fct_payments
+          description: "Fact table of payment transactions"
+          columns:
+            - name: id
+              type: INTEGER
+              description: "Unique payment identifier (primary key)"
+            - name: payment_amount
+              type: DECIMAL
+              description: "Amount of the payment"
+            - name: dim_currency_id
+              type: INTEGER
+              description: "Foreign key to dim_currency.id"
+    human:
+      - show me currencies with total payment amounts exceeding 100000
+    assistant:
+      message:
+        - "Here are the currencies with payments exceeding 100000"
+        - "Here are the high-volume currencies"
+      sql: >
+        SELECT p.currency, SUM(p.amount) AS total_amount
+        FROM payments AS p
+        GROUP BY p.currency
+        HAVING SUM(p.amount) > 100000
