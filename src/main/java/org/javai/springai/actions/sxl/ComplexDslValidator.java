@@ -1,6 +1,7 @@
 package org.javai.springai.actions.sxl;
 
 import java.util.List;
+import java.util.Map;
 import org.javai.springai.actions.sxl.meta.SxlGrammar;
 
 /**
@@ -8,9 +9,11 @@ import org.javai.springai.actions.sxl.meta.SxlGrammar;
  * 
  * This validator:
  * - Parses tokens universally (no grammar needed for parsing)
- * - Validates using a root DSL grammar
- * - Supports embedded DSLs via EMBED nodes
+ * - Expects root expression to be wrapped in an EMBED node
+ * - Validates using the DSL grammar specified in the root EMBED node
+ * - Supports nested embedded DSLs via EMBED nodes
  * - Is thread-safe (stateless validators)
+ * - Provides uniform handling of all DSL nodes (root and embedded)
  * 
  * Example usage:
  * 
@@ -22,10 +25,10 @@ import org.javai.springai.actions.sxl.meta.SxlGrammar;
  * 
  * ComplexDslValidator validator = new ComplexDslValidator(registry);
  * 
- * // Parse and validate
- * SxlTokenizer tokenizer = new SxlTokenizer("(WORKFLOW (STEP ...))");
+ * // Parse and validate - root must be wrapped in EMBED
+ * SxlTokenizer tokenizer = new SxlTokenizer("(EMBED sxl-workflow (WORKFLOW (STEP ...)))");
  * List&lt;SxlToken&gt; tokens = tokenizer.tokenize();
- * List&lt;SxlNode&gt; ast = validator.parseAndValidate(tokens, "sxl-workflow");
+ * List&lt;SxlNode&gt; ast = validator.parseAndValidate(tokens);
  * </pre>
  */
 public class ComplexDslValidator {
@@ -46,47 +49,52 @@ public class ComplexDslValidator {
 	}
 
 	/**
-	 * Parses tokens universally, then validates using the specified root DSL grammar.
-	 * Supports embedded DSLs via EMBED nodes.
+	 * Parses tokens universally, then validates using the DSL grammar specified in the root EMBED node.
+	 * The root expression must be wrapped in an EMBED node: (EMBED dsl-id ...)
+	 * Supports nested embedded DSLs via EMBED nodes.
 	 * 
-	 * @param tokens the tokens to parse
-	 * @param rootDslId the DSL ID to use for top-level validation (must be registered)
-	 * @return validated AST nodes
+	 * @param tokens the tokens to parse (must start with EMBED node)
+	 * @return validated AST nodes (root will be an EMBED node)
 	 * @throws SxlParseException if parsing or validation fails
-	 * @throws IllegalArgumentException if rootDslId is not registered
+	 * @throws IllegalArgumentException if tokens is null
 	 */
-	public List<SxlNode> parseAndValidate(List<SxlToken> tokens, String rootDslId) {
+	public List<SxlNode> parseAndValidate(List<SxlToken> tokens) {
 		if (tokens == null) {
 			throw new IllegalArgumentException("Tokens cannot be null");
 		}
-		if (rootDslId == null || rootDslId.isBlank()) {
-			throw new IllegalArgumentException("Root DSL ID cannot be null or empty");
-		}
 		
-		// Get root grammar
-		SxlGrammar rootGrammar = registry.getGrammar(rootDslId);
-		if (rootGrammar == null) {
-			throw new SxlParseException(
-				"Root DSL '" + rootDslId + "' is not registered in the validator registry. " +
-				"Available DSLs: " + getAvailableDslIds());
-		}
-		
-		// Parse and validate using the validator (it does universal parsing internally)
-		DslParsingStrategy validator = new DslParsingStrategy(rootGrammar, registry);
+		// Use a "universal" grammar that accepts EMBED nodes at root
+		// DslParsingStrategy will handle validation of the EMBED node and its payload
+		SxlGrammar universalGrammar = createUniversalGrammar();
+		DslParsingStrategy validator = new DslParsingStrategy(universalGrammar, registry);
 		return validator.parse(tokens);
 	}
-
+	
 	/**
-	 * Gets a list of available DSL IDs in the registry.
-	 * This is a helper method for error messages.
-	 * 
-	 * @return comma-separated list of DSL IDs
+	 * Creates a universal grammar that accepts EMBED nodes at the root level.
+	 * This allows uniform validation of all DSL nodes through EMBED.
 	 */
-	private String getAvailableDslIds() {
-		// Note: This would require exposing registry's keys
-		// For now, return a generic message
-		// In a full implementation, DefaultValidatorRegistry could expose getRegisteredIds()
-		return "[registry contents not exposed]";
+	private SxlGrammar createUniversalGrammar() {
+		org.javai.springai.actions.sxl.meta.ParameterDefinition embedParam = new org.javai.springai.actions.sxl.meta.ParameterDefinition(
+			"root", "Root DSL", "node", List.of("EMBED"), 
+			org.javai.springai.actions.sxl.meta.Cardinality.oneOrMore, true, null);
+		
+		org.javai.springai.actions.sxl.meta.SymbolDefinition rootSymbol = new org.javai.springai.actions.sxl.meta.SymbolDefinition(
+			"Root", org.javai.springai.actions.sxl.meta.SymbolKind.node,
+			List.of(embedParam), List.of(), List.of());
+		
+		return new SxlGrammar(
+			"1.2",
+			new org.javai.springai.actions.sxl.meta.DslMetadata("universal", "Universal DSL", "1.0"),
+			Map.of("EMBED", rootSymbol),
+			new org.javai.springai.actions.sxl.meta.LiteralDefinitions(null, null, null, null),
+			new org.javai.springai.actions.sxl.meta.IdentifierRule("Identifier", ".*"),
+			List.of(),
+			null,
+			List.of(),
+			null
+		);
 	}
+
 }
 

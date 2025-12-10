@@ -42,14 +42,16 @@ class DslEmbeddingTest {
 	@Test
 	void embedSingleSqlQueryInWorkflow() {
 		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED sxl-sql
-			      (Q
-			        (F fact_sales f)
-			        (S
-			          (AS f.id order_id)
-			          (AS f.amount total)
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED sxl-sql
+			        (Q
+			          (F fact_sales f)
+			          (S
+			            (AS f.id order_id)
+			            (AS f.amount total)
+			          )
 			        )
 			      )
 			    )
@@ -61,20 +63,27 @@ class DslEmbeddingTest {
 		List<SxlToken> tokens = tokenizer.tokenize();
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
-		List<SxlNode> nodes = validator.parseAndValidate(tokens, "sxl-workflow");
+		List<SxlNode> nodes = validator.parseAndValidate(tokens);
 		
 		assertThat(nodes).hasSize(1);
-		assertThat(nodes.get(0).symbol()).isEqualTo("WORKFLOW");
+		assertThat(nodes.get(0).symbol()).isEqualTo("EMBED");
+		// Extract WORKFLOW from EMBED payload
+		SxlNode embed = nodes.get(0);
+		assertThat(embed.args()).hasSize(2); // dsl-id + WORKFLOW
+		SxlNode workflow = embed.args().get(1);
+		assertThat(workflow.symbol()).isEqualTo("WORKFLOW");
 	}
 
 	@Test
 	void embedMultipleSqlQueriesInWorkflow() {
 		String input = """
-			(WORKFLOW
-			  (STEP complex
-			    (EMBED sxl-sql
-			      (Q (F table1 t1) (S (AS t1.id id1)))
-			      (Q (F table2 t2) (S (AS t2.id id2)))
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP complex
+			      (EMBED sxl-sql
+			        (Q (F table1 t1) (S (AS t1.id id1)))
+			        (Q (F table2 t2) (S (AS t2.id id2)))
+			      )
 			    )
 			  )
 			)
@@ -84,19 +93,23 @@ class DslEmbeddingTest {
 		List<SxlToken> tokens = tokenizer.tokenize();
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
-		List<SxlNode> nodes = validator.parseAndValidate(tokens, "sxl-workflow");
+		List<SxlNode> nodes = validator.parseAndValidate(tokens);
 		
 		assertThat(nodes).hasSize(1);
-		assertThat(nodes.get(0).symbol()).isEqualTo("WORKFLOW");
+		assertThat(nodes.get(0).symbol()).isEqualTo("EMBED");
+		SxlNode workflow = nodes.get(0).args().get(1);
+		assertThat(workflow.symbol()).isEqualTo("WORKFLOW");
 	}
 
 	@Test
 	void embedUnknownDslThrowsException() {
 		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED unknown-dsl
-			      (SOME_SYMBOL)
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED unknown-dsl
+			        (SOME_SYMBOL)
+			      )
 			    )
 			  )
 			)
@@ -107,7 +120,7 @@ class DslEmbeddingTest {
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
 		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "sxl-workflow"))
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
 			.isInstanceOf(SxlParseException.class)
 			.hasMessageContaining("unknown DSL")
 			.hasMessageContaining("unknown-dsl");
@@ -116,10 +129,12 @@ class DslEmbeddingTest {
 	@Test
 	void embedWithInvalidInnerDslSyntaxThrowsException() {
 		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED sxl-sql
-			      (INVALID_SYMBOL)
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED sxl-sql
+			        (INVALID_SYMBOL)
+			      )
 			    )
 			  )
 			)
@@ -130,7 +145,7 @@ class DslEmbeddingTest {
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
 		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "sxl-workflow"))
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
 			.isInstanceOf(SxlParseException.class)
 			.hasMessageContaining("Unknown symbol")
 			.hasMessageContaining("INVALID_SYMBOL");
@@ -139,50 +154,10 @@ class DslEmbeddingTest {
 	@Test
 	void embedWithMissingDslIdThrowsException() {
 		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED)
-			  )
-			)
-			""";
-		
-		SxlTokenizer tokenizer = new SxlTokenizer(input);
-		List<SxlToken> tokens = tokenizer.tokenize();
-		
-		ComplexDslValidator validator = new ComplexDslValidator(registry);
-		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "sxl-workflow"))
-			.isInstanceOf(SxlParseException.class)
-			.hasMessageContaining("EMBED requires at least one argument");
-	}
-
-	@Test
-	void embedWithMissingPayloadThrowsException() {
-		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED sxl-sql)
-			  )
-			)
-			""";
-		
-		SxlTokenizer tokenizer = new SxlTokenizer(input);
-		List<SxlToken> tokens = tokenizer.tokenize();
-		
-		ComplexDslValidator validator = new ComplexDslValidator(registry);
-		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "sxl-workflow"))
-			.isInstanceOf(SxlParseException.class)
-			.hasMessageContaining("EMBED requires at least one payload node");
-	}
-
-	@Test
-	void embedWithInvalidDslIdTypeThrowsException() {
-		String input = """
-			(WORKFLOW
-			  (STEP load_data
-			    (EMBED "sxl-sql"
-			      (Q (F table t) (S t.id))
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED)
 			    )
 			  )
 			)
@@ -193,23 +168,69 @@ class DslEmbeddingTest {
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
 		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "sxl-workflow"))
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
 			.isInstanceOf(SxlParseException.class)
-			.hasMessageContaining("EMBED first argument must be a DSL identifier");
+			.hasMessageContaining("EMBED requires at least one argument");
 	}
 
 	@Test
-	void rootDslNotRegisteredThrowsException() {
-		String input = "(WORKFLOW (STEP test))";
+	void embedWithMissingPayloadThrowsException() {
+		String input = """
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED sxl-sql)
+			    )
+			  )
+			)
+			""";
 		
 		SxlTokenizer tokenizer = new SxlTokenizer(input);
 		List<SxlToken> tokens = tokenizer.tokenize();
 		
 		ComplexDslValidator validator = new ComplexDslValidator(registry);
 		
-		assertThatThrownBy(() -> validator.parseAndValidate(tokens, "unknown-dsl"))
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
 			.isInstanceOf(SxlParseException.class)
-			.hasMessageContaining("not registered")
+			.hasMessageContaining("EMBED requires at least one payload node");
+	}
+
+	@Test
+	void embedWithInvalidDslIdTypeThrowsException() {
+		String input = """
+			(EMBED sxl-workflow
+			  (WORKFLOW
+			    (STEP load_data
+			      (EMBED "sxl-sql"
+			        (Q (F table t) (S t.id))
+			      )
+			    )
+			  )
+			)
+			""";
+		
+		SxlTokenizer tokenizer = new SxlTokenizer(input);
+		List<SxlToken> tokens = tokenizer.tokenize();
+		
+		ComplexDslValidator validator = new ComplexDslValidator(registry);
+		
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
+			.isInstanceOf(SxlParseException.class)
+			.hasMessageContaining("EMBED first argument must be a DSL identifier");
+	}
+
+	@Test
+	void rootDslNotRegisteredThrowsException() {
+		String input = "(EMBED unknown-dsl (WORKFLOW (STEP test)))";
+		
+		SxlTokenizer tokenizer = new SxlTokenizer(input);
+		List<SxlToken> tokens = tokenizer.tokenize();
+		
+		ComplexDslValidator validator = new ComplexDslValidator(registry);
+		
+		assertThatThrownBy(() -> validator.parseAndValidate(tokens))
+			.isInstanceOf(SxlParseException.class)
+			.hasMessageContaining("unknown DSL")
 			.hasMessageContaining("unknown-dsl");
 	}
 
