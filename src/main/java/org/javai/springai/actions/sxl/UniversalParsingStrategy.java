@@ -37,11 +37,7 @@ public class UniversalParsingStrategy implements ParsingStrategy {
 				state.advance();
 				yield SxlNode.symbol(token.value());
 			}
-			case STRING -> {
-				state.advance();
-				yield SxlNode.literal(token.value());
-			}
-			case NUMBER -> {
+			case STRING, NUMBER -> {
 				state.advance();
 				yield SxlNode.literal(token.value());
 			}
@@ -153,7 +149,7 @@ public class UniversalParsingStrategy implements ParsingStrategy {
 		}
 
 		public int getCurrentPosition() {
-			return isAtEnd() ? (tokens.isEmpty() ? 0 : tokens.get(tokens.size() - 1).position()) : peek().position();
+			return isAtEnd() ? (tokens.isEmpty() ? 0 : tokens.getLast().position()) : peek().position();
 		}
 
 		public int getCurrentIndex() {

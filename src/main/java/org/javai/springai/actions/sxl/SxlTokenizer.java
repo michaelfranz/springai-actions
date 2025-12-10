@@ -53,7 +53,7 @@ public class SxlTokenizer {
 				advance();
 				yield new SxlToken(SxlToken.TokenType.COMMA, ",", start);
 			}
-			case '\'' -> scanString();
+			case '\'', '"' -> scanString();
 			default -> {
 				if (isDigit(c) || (c == '-' && pos + 1 < input.length() && isDigit(input.charAt(pos + 1)))) {
 					yield scanNumber();
@@ -68,10 +68,11 @@ public class SxlTokenizer {
 	
 	private SxlToken scanString() {
 		int start = pos;
-		advance(); // consume opening '
+		char quoteChar = peek();
+		advance(); // consume opening quote
 		
 		StringBuilder sb = new StringBuilder();
-		while (!isAtEnd() && peek() != '\'') {
+		while (!isAtEnd() && peek() != quoteChar) {
 			char c = advance();
 			if (c == '\\' && !isAtEnd()) {
 				// Handle escaped characters
@@ -162,7 +163,7 @@ public class SxlTokenizer {
 	}
 	
 	private boolean isIdentifierChar(char c) {
-		return isIdentifierStart(c) || isDigit(c) || c == '.';
+		return isIdentifierStart(c) || isDigit(c) || c == '.' || c == '-';
 	}
 }
 

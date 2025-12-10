@@ -21,36 +21,138 @@ import org.javai.springai.actions.sxl.meta.SymbolDefinition;
  * - Validates parameter counts match cardinality rules
  * - Validates parameter types (allowed symbols, literal types, identifier patterns)
  * - Enforces DSL-specific constraints
- * - Provides detailed error messages with token positions
+ * - Supports embedded DSLs via EMBED nodes
+ * - Provides detailed error messages with token positions and context chains
+ * 
+ * This class is stateless - all validation state is passed explicitly to methods.
  */
 public class DslParsingStrategy implements ParsingStrategy {
 
-	private final SxlGrammar grammar;
-	private Map<SxlNode, Integer> nodePositions; // Maps nodes to token positions
+	private static final String EMBED_SYMBOL = "EMBED";
 
+	private final SxlGrammar grammar;
+	private final ValidatorRegistry registry;
+
+	/**
+	 * Creates a validator with a grammar but no registry (no embedding support).
+	 * 
+	 * @param grammar the DSL grammar to validate against
+	 */
 	public DslParsingStrategy(SxlGrammar grammar) {
+		this(grammar, null);
+	}
+
+	/**
+	 * Creates a validator with a grammar and registry (embedding support).
+	 * 
+	 * @param grammar the DSL grammar to validate against
+	 * @param registry the registry for looking up embedded DSL grammars (can be null)
+	 */
+	public DslParsingStrategy(SxlGrammar grammar, ValidatorRegistry registry) {
 		if (grammar == null) {
 			throw new IllegalArgumentException("Grammar cannot be null");
 		}
 		this.grammar = grammar;
+		this.registry = registry;
+	}
+
+	/**
+	 * Creates a validator with a grammar, registry, and shared position map.
+	 * Used when validating embedded subtrees to preserve position information.
+	 * 
+	 * @param grammar the DSL grammar to validate against
+	 * @param registry the registry for looking up embedded DSL grammars (can be null)
+	 * @param positionMap the shared position map to use (can be null)
+	 */
+	public DslParsingStrategy(SxlGrammar grammar, ValidatorRegistry registry, Map<SxlNode, Integer> positionMap) {
+		this(grammar, registry);
+		// Note: positionMap is passed via ValidationState, not stored here
 	}
 
 	@Override
 	public List<SxlNode> parse(List<SxlToken> tokens) throws SxlParseException {
 		// Parse with position tracking
-		nodePositions = new IdentityHashMap<>();
+		Map<SxlNode, Integer> nodePositions = new IdentityHashMap<>();
 		PositionAwareParser parser = new PositionAwareParser(tokens, nodePositions);
 		List<SxlNode> nodes = parser.parse();
 		
+		// Create validation state
+		ValidationState state = new ValidationState(nodePositions, new ArrayList<>());
+		
 		// Validate against grammar rules
 		for (SxlNode node : nodes) {
-			validateNode(node, null, 0);
+			validateNode(node, null, 0, state);
 		}
 		
 		// Validate global constraints
-		validateGlobalConstraints(nodes);
+		validateGlobalConstraints(nodes, state);
 		
 		return nodes;
+	}
+
+	/**
+	 * Validates already-parsed nodes (used when parsing was done separately).
+	 * 
+	 * @param nodes the nodes to validate
+	 * @param positionMap the position map for these nodes
+	 * @return the validated nodes (same as input)
+	 * @throws SxlParseException if validation fails
+	 */
+	public List<SxlNode> validateNodes(List<SxlNode> nodes, Map<SxlNode, Integer> positionMap) {
+		ValidationState state = new ValidationState(positionMap, new ArrayList<>());
+		
+		for (SxlNode node : nodes) {
+			validateNode(node, null, 0, state);
+		}
+		
+		validateGlobalConstraints(nodes, state);
+		return nodes;
+	}
+
+	/**
+	 * Validates a pre-parsed subtree (used for embedded DSLs).
+	 * 
+	 * @param nodes the nodes to validate (typically a single root node)
+	 * @param positionMap the position map for these nodes
+	 * @throws SxlParseException if validation fails
+	 */
+	public void validateSubtree(List<SxlNode> nodes, Map<SxlNode, Integer> positionMap) {
+		validateSubtree(nodes, positionMap, new ValidationState(positionMap, new ArrayList<>()));
+	}
+
+	/**
+	 * Validates a pre-parsed subtree with context (used for embedded DSLs).
+	 * 
+	 * @param nodes the nodes to validate (typically a single root node)
+	 * @param positionMap the position map for these nodes
+	 * @param state the validation state with context
+	 * @throws SxlParseException if validation fails
+	 */
+	private void validateSubtree(List<SxlNode> nodes, Map<SxlNode, Integer> positionMap, ValidationState state) {
+		for (SxlNode node : nodes) {
+			validateNode(node, null, 0, state);
+		}
+		validateGlobalConstraints(nodes, state);
+	}
+
+	/**
+	 * Validation state passed to all validation methods.
+	 * Holds position information and context chain for error messages.
+	 */
+	private static class ValidationState {
+		final Map<SxlNode, Integer> nodePositions;
+		final List<String> contextChain;
+
+		ValidationState(Map<SxlNode, Integer> nodePositions, List<String> contextChain) {
+			this.nodePositions = nodePositions;
+			this.contextChain = contextChain;
+		}
+
+		ValidationState withContext(String context) {
+			List<String> newChain = new ArrayList<>(contextChain);
+			newChain.add(context);
+			return new ValidationState(nodePositions, newChain);
+		}
 	}
 
 	/**
@@ -181,12 +283,8 @@ public class DslParsingStrategy implements ParsingStrategy {
 
 	/**
 	 * Validates a node against the grammar rules.
-	 * 
-	 * @param node the node to validate
-	 * @param parentSymbol the parent symbol name (for context in error messages)
-	 * @param argIndex the argument index in the parent (for context)
 	 */
-	private void validateNode(SxlNode node, String parentSymbol, int argIndex) {
+	private void validateNode(SxlNode node, String parentSymbol, int argIndex, ValidationState state) {
 		if (node.isLiteral()) {
 			// Literal validation happens at parameter level
 			return;
@@ -194,10 +292,17 @@ public class DslParsingStrategy implements ParsingStrategy {
 
 		String symbol = node.symbol();
 		
+		// Check for EMBED node first - EMBED should always be validated, even with empty args
+		if (EMBED_SYMBOL.equals(symbol)) {
+			validateEmbedNode(node, parentSymbol, argIndex, state);
+			return; // Don't validate children - inner validator handles them
+		}
+		
 		// Check if this is a function call (has args) or a bare identifier
-		// Bare identifiers (no args) are validated at parameter type level, not here
-		if (node.args().isEmpty()) {
-			// This is a bare identifier - it will be validated when checking parameter types
+		// Bare identifiers (no args) used as arguments are validated at parameter type level, not here
+		// But top-level nodes (parentSymbol == null) should always be validated, even with no args
+		if (node.args().isEmpty() && parentSymbol != null) {
+			// This is a bare identifier used as an argument - it will be validated when checking parameter types
 			// Don't validate it as a symbol here
 			return;
 		}
@@ -208,36 +313,102 @@ public class DslParsingStrategy implements ParsingStrategy {
 			// Check if it's a reserved symbol
 			if (grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(symbol)) {
 				throw new SxlParseException(
-					createContextMessage(parentSymbol, argIndex) +
+					buildContextMessage(state, parentSymbol, argIndex) +
 					"Reserved symbol '" + symbol + "' cannot be used as a regular symbol at position " +
-					findNodePosition(node) + ". Reserved symbols: " + grammar.reservedSymbols());
+					findNodePosition(node, state) + ". Reserved symbols: " + grammar.reservedSymbols());
 			}
 			throw new SxlParseException(
-				createContextMessage(parentSymbol, argIndex) +
-				"Unknown symbol '" + symbol + "' at position " + findNodePosition(node) +
+				buildContextMessage(state, parentSymbol, argIndex) +
+				"Unknown symbol '" + symbol + "' at position " + findNodePosition(node, state) +
 				". Expected one of: " + getKnownSymbols());
 		}
 
 		// Validate parameters
-		validateParameters(symbol, symbolDef, node.args(), node);
+		validateParameters(symbol, symbolDef, node.args(), node, state);
 
 		// Recursively validate children (they might be function calls or identifiers)
+		ValidationState childState = state.withContext(symbol);
 		int index = 0;
 		for (SxlNode arg : node.args()) {
-			validateNode(arg, symbol, index++);
+			validateNode(arg, symbol, index++, childState);
 		}
 	}
 
+	/**
+	 * Validates an EMBED node and delegates to the inner DSL validator.
+	 */
+	private void validateEmbedNode(SxlNode embedNode, String parentSymbol, int argIndex, ValidationState state) {
+		List<SxlNode> args = embedNode.args();
+		
+		if (args.isEmpty()) {
+			throw new SxlParseException(
+				buildContextMessage(state, parentSymbol, argIndex) +
+				"EMBED requires at least one argument (dsl-id) at position " + findNodePosition(embedNode, state));
+		}
+		
+		// First argument is the dsl-id
+		SxlNode dslIdNode = args.getFirst();
+		if (dslIdNode.isLiteral() || !dslIdNode.args().isEmpty()) {
+			throw new SxlParseException(
+				buildContextMessage(state, parentSymbol, argIndex) +
+				"EMBED first argument must be a DSL identifier (dsl-id), but found " +
+				(dslIdNode.isLiteral() ? "literal" : "node") + " at position " + findNodePosition(dslIdNode, state));
+		}
+		
+		String dslId = dslIdNode.symbol();
+		
+		// Validate dsl-id is registered
+		if (registry == null || !registry.isRegistered(dslId)) {
+			String available = registry != null 
+				? " Available DSLs: " + String.join(", ", getAvailableDslIds())
+				: " No validator registry configured.";
+			throw new SxlParseException(
+				buildContextMessage(state, parentSymbol, argIndex) +
+				"EMBED references unknown DSL '" + dslId + "' at position " + findNodePosition(dslIdNode, state) +
+				available);
+		}
+		
+		// Extract payload nodes (all arguments after dsl-id)
+		List<SxlNode> payloadNodes = args.subList(1, args.size());
+		
+		if (payloadNodes.isEmpty()) {
+			throw new SxlParseException(
+				buildContextMessage(state, parentSymbol, argIndex) +
+				"EMBED requires at least one payload node after dsl-id at position " + findNodePosition(embedNode, state));
+		}
+		
+		// Get inner grammar and validate payload
+		SxlGrammar innerGrammar = registry.getGrammar(dslId);
+		
+		// Add EMBED context to the state for better error messages
+		ValidationState embedState = state;
+		if (parentSymbol != null) {
+			embedState = embedState.withContext(parentSymbol);
+		}
+		embedState = embedState.withContext("EMBED");
+		
+		DslParsingStrategy innerValidator = new DslParsingStrategy(innerGrammar, registry, embedState.nodePositions);
+		
+		// Validate payload with context
+		innerValidator.validateSubtree(payloadNodes, embedState.nodePositions, embedState);
+	}
+
+	private List<String> getAvailableDslIds() {
+		// This would require exposing registry's keys, but for now return empty
+		// In practice, this would be implemented if needed
+		return List.of();
+	}
+
 	private void validateParameters(String symbol, SymbolDefinition symbolDef, 
-	                                  List<SxlNode> actualArgs, SxlNode node) {
+	                                  List<SxlNode> actualArgs, SxlNode node, ValidationState state) {
 		List<ParameterDefinition> paramDefs = symbolDef.params();
 		
 		if (paramDefs == null || paramDefs.isEmpty()) {
 			if (!actualArgs.isEmpty()) {
 				throw new SxlParseException(
-					createContextMessage(symbol, -1) +
+					buildContextMessage(state, symbol, -1) +
 					"Symbol '" + symbol + "' does not accept parameters, but found " + actualArgs.size() +
-					" argument(s) at position " + findNodePosition(node));
+					" argument(s) at position " + findNodePosition(node, state));
 			}
 			return;
 		}
@@ -250,21 +421,54 @@ public class DslParsingStrategy implements ParsingStrategy {
 			ParameterDefinition paramDef = paramDefs.get(paramIndex);
 			Cardinality cardinality = paramDef.cardinality();
 
-			int argCount = countMatchingArgs(actualArgs, argIndex, paramDef, symbol, node);
+			int argCount = countMatchingArgs(actualArgs, argIndex, paramDef, symbol, node, state);
 
-			// If no match and parameter is optional, skip to next parameter
-			if (argCount == 0 && cardinality == Cardinality.optional) {
+			// If no match and parameter is optional, check if argument is right category but wrong type
+			if (argCount == 0 && cardinality == Cardinality.optional && argIndex < actualArgs.size()) {
+				SxlNode firstArg = actualArgs.get(argIndex);
+				String paramType = paramDef.type();
+				// EMBED is always a node type, never an identifier, even with empty args
+				if (EMBED_SYMBOL.equals(firstArg.symbol()) && "identifier".equals(paramType)) {
+					// Skip this optional identifier parameter - EMBED should match a node parameter
+					paramIndex++;
+					continue;
+				}
+				// If argument category matches parameter category (both literals, both identifiers, etc.), validate to give proper error
+				boolean categoryMatch = (firstArg.isLiteral() && paramType != null && paramType.startsWith("literal(")) ||
+				                        (!firstArg.isLiteral() && !firstArg.args().isEmpty() && "node".equals(paramType)) ||
+				                        (!firstArg.isLiteral() && firstArg.args().isEmpty() && !EMBED_SYMBOL.equals(firstArg.symbol()) && "identifier".equals(paramType));
+				if (categoryMatch) {
+					// Right category but wrong type - validate to give proper error
+					validateParameterType(symbol, paramDef, firstArg, argIndex, node, state);
+					// If validation doesn't throw, skip to next param
+					paramIndex++;
+					continue;
+				}
+				// Wrong category - skip this optional parameter
 				paramIndex++;
 				continue;
 			}
 
+			// If no match but we have arguments, check if it's a type mismatch
+			// This applies to required/oneOrMore - we want to give proper error messages
+			if (argCount == 0 && argIndex < actualArgs.size() && 
+			    (cardinality == Cardinality.required || cardinality == Cardinality.oneOrMore)) {
+				SxlNode firstArg = actualArgs.get(argIndex);
+				// Check if it's a type mismatch (e.g., not in allowed_symbols, wrong literal type)
+				validateParameterType(symbol, paramDef, firstArg, argIndex, node, state);
+				// If we get here, type was OK but something else is wrong - fall through to cardinality check
+			}
+
 			// Validate cardinality
-			validateCardinality(symbol, paramDef, argCount, argIndex, node);
+			validateCardinality(symbol, paramDef, argCount, argIndex, node, state);
 
 			// Validate each matching argument
 			for (int i = 0; i < argCount; i++) {
 				SxlNode arg = actualArgs.get(argIndex + i);
-				validateParameterType(symbol, paramDef, arg, argIndex + i, node);
+				// Skip validation for embedded parameters - defer to inner validator
+				if (!"embedded".equals(paramDef.type())) {
+					validateParameterType(symbol, paramDef, arg, argIndex + i, node, state);
+				}
 			}
 
 			argIndex += argCount;
@@ -274,7 +478,7 @@ public class DslParsingStrategy implements ParsingStrategy {
 				// Check if next argument also matches this parameter
 				if (argIndex < actualArgs.size()) {
 					SxlNode nextArg = actualArgs.get(argIndex);
-					if (!matchesParameter(nextArg, paramDef)) {
+					if (!matchesParameter(nextArg, paramDef, state)) {
 						paramIndex++; // Move to next parameter
 					}
 					// Otherwise, continue with same parameter
@@ -291,10 +495,17 @@ public class DslParsingStrategy implements ParsingStrategy {
 			ParameterDefinition paramDef = paramDefs.get(paramIndex);
 			if (paramDef.cardinality() == Cardinality.required) {
 				throw new SxlParseException(
-					createContextMessage(symbol, -1) +
+					buildContextMessage(state, symbol, -1) +
 					"Symbol '" + symbol + "' requires parameter '" + paramDef.name() +
-					"' (type: " + paramDef.type() + ") at position " + findNodePosition(node) +
+					"' (type: " + paramDef.type() + ") at position " + findNodePosition(node, state) +
 					", but it was not provided");
+			}
+			if (paramDef.cardinality() == Cardinality.oneOrMore) {
+				throw new SxlParseException(
+					buildContextMessage(state, symbol, -1) +
+					"Symbol '" + symbol + "' requires at least one occurrence of parameter '" +
+					paramDef.name() + "' (type: " + paramDef.type() + ") at position " +
+					findNodePosition(node, state) + ", but it was not provided");
 			}
 			paramIndex++;
 		}
@@ -302,16 +513,16 @@ public class DslParsingStrategy implements ParsingStrategy {
 		// Check for extra arguments
 		if (argIndex < actualArgs.size()) {
 			throw new SxlParseException(
-				createContextMessage(symbol, -1) +
+				buildContextMessage(state, symbol, -1) +
 				"Symbol '" + symbol + "' has too many arguments. Expected parameters: " +
-				formatParameterList(paramDefs) + " at position " + findNodePosition(node));
+				formatParameterList(paramDefs) + " at position " + findNodePosition(node, state));
 		}
 	}
 
 	private int countMatchingArgs(List<SxlNode> args, int startIndex, 
-	                                ParameterDefinition paramDef, String parentSymbol, SxlNode parentNode) {
+	                                ParameterDefinition paramDef, String parentSymbol, SxlNode parentNode, ValidationState state) {
 		if (paramDef.cardinality() == Cardinality.required || paramDef.cardinality() == Cardinality.optional) {
-			if (startIndex < args.size() && matchesParameter(args.get(startIndex), paramDef)) {
+			if (startIndex < args.size() && matchesParameter(args.get(startIndex), paramDef, state)) {
 				return 1;
 			}
 			return 0;
@@ -320,7 +531,7 @@ public class DslParsingStrategy implements ParsingStrategy {
 		// For zeroOrMore and oneOrMore, count consecutive matching arguments
 		int count = 0;
 		for (int i = startIndex; i < args.size(); i++) {
-			if (matchesParameter(args.get(i), paramDef)) {
+			if (matchesParameter(args.get(i), paramDef, state)) {
 				count++;
 			} else {
 				break;
@@ -329,7 +540,7 @@ public class DslParsingStrategy implements ParsingStrategy {
 		return count;
 	}
 
-	private boolean matchesParameter(SxlNode arg, ParameterDefinition paramDef) {
+	private boolean matchesParameter(SxlNode arg, ParameterDefinition paramDef, ValidationState state) {
 		String type = paramDef.type();
 		
 		if (type == null || "any".equals(type)) {
@@ -345,42 +556,49 @@ public class DslParsingStrategy implements ParsingStrategy {
 			return false; // Expected literal but got symbol
 		}
 
-		if ("identifier".equals(type)) {
-			// Identifier type must be a bare identifier (no args), not a function call
-			if (!arg.args().isEmpty()) {
-				return false; // This is a function call, not an identifier
+		switch (type) {
+			case "identifier" -> {
+				// EMBED is always a node type, not an identifier, even with empty args
+				if (EMBED_SYMBOL.equals(arg.symbol())) {
+					return false; // EMBED is a node, not an identifier
+				}
+				// Identifier type must be a bare identifier (no args), not a function call
+				if (!arg.args().isEmpty()) {
+					return false; // This is a function call, not an identifier
+				}
+				// Check identifier pattern if specified
+				if (paramDef.identifierRules() != null && paramDef.identifierRules().pattern() != null) {
+					Pattern pattern = Pattern.compile(paramDef.identifierRules().pattern());
+					return pattern.matcher(arg.symbol()).matches();
+				}
+				// Check global identifier pattern
+				if (grammar.identifier() != null && grammar.identifier().pattern() != null) {
+					Pattern pattern = Pattern.compile(grammar.identifier().pattern());
+					return pattern.matcher(arg.symbol()).matches();
+				}
+				return true; // No pattern specified, accept any identifier
 			}
-			// Check identifier pattern if specified
-			if (paramDef.identifierRules() != null && paramDef.identifierRules().pattern() != null) {
-				Pattern pattern = Pattern.compile(paramDef.identifierRules().pattern());
-				return pattern.matcher(arg.symbol()).matches();
+			case "node" -> {
+				// Node type must be a function call (has args), not a bare identifier
+				// Exception: EMBED is always treated as a node type, even with empty args
+				if (arg.args().isEmpty() && !EMBED_SYMBOL.equals(arg.symbol())) {
+					return false; // This is a bare identifier, not a function call
+				}
+				// Check if symbol is in allowed_symbols
+				List<String> allowed = paramDef.allowedSymbols();
+				if (allowed != null && !allowed.isEmpty()) {
+					return allowed.contains(arg.symbol());
+				}
+				// If no allowed_symbols specified, accept any symbol (but validate it exists in grammar)
+				return grammar.symbols().containsKey(arg.symbol()) ||
+						(grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(arg.symbol())) ||
+						EMBED_SYMBOL.equals(arg.symbol()); // EMBED is always allowed
+				// If no allowed_symbols specified, accept any symbol (but validate it exists in grammar)
 			}
-			// Check global identifier pattern
-			if (grammar.identifier() != null && grammar.identifier().pattern() != null) {
-				Pattern pattern = Pattern.compile(grammar.identifier().pattern());
-				return pattern.matcher(arg.symbol()).matches();
+			case "dsl-id", "embedded" -> {
+				// These are special types that we can't validate at parse time
+				return true;
 			}
-			return true; // No pattern specified, accept any identifier
-		}
-
-		if ("node".equals(type)) {
-			// Node type must be a function call (has args), not a bare identifier
-			if (arg.args().isEmpty()) {
-				return false; // This is a bare identifier, not a function call
-			}
-			// Check if symbol is in allowed_symbols
-			List<String> allowed = paramDef.allowedSymbols();
-			if (allowed != null && !allowed.isEmpty()) {
-				return allowed.contains(arg.symbol());
-			}
-			// If no allowed_symbols specified, accept any symbol (but validate it exists in grammar)
-			return grammar.symbols().containsKey(arg.symbol()) || 
-			       (grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(arg.symbol()));
-		}
-
-		if ("dsl-id".equals(type) || "embedded".equals(type)) {
-			// These are special types that we can't validate at parse time
-			return true;
 		}
 
 		return true; // Default: accept
@@ -397,92 +615,94 @@ public class DslParsingStrategy implements ParsingStrategy {
 
 		for (String type : types) {
 			type = type.trim();
-			
-			if ("string".equals(type)) {
-				if (grammar.literals() != null && grammar.literals().string() != null) {
-					Pattern pattern = Pattern.compile(grammar.literals().string().regex());
-					// Try matching both with and without quotes (tokenizer strips quotes)
-					if (pattern.matcher(literalValue).matches() || 
-					    pattern.matcher("\"" + literalValue + "\"").matches() ||
-					    pattern.matcher("'" + literalValue + "'").matches()) {
-						return true;
-					}
-				}
-				// Default: accept any value (tokenizer already validated it as a string)
-				return true;
-			}
 
-			if ("number".equals(type)) {
-				if (grammar.literals() != null && grammar.literals().number() != null) {
-					Pattern pattern = Pattern.compile(grammar.literals().number().regex());
-					if (pattern.matcher(literalValue).matches()) {
-						return true;
+			switch (type) {
+				case "string" -> {
+					if (grammar.literals() != null && grammar.literals().string() != null) {
+						Pattern pattern = Pattern.compile(grammar.literals().string().regex());
+						// Try matching both with and without quotes (tokenizer strips quotes)
+						if (pattern.matcher(literalValue).matches() ||
+								pattern.matcher("\"" + literalValue + "\"").matches() ||
+								pattern.matcher("'" + literalValue + "'").matches()) {
+							return true;
+						}
 					}
-				}
-				// Default: try to parse as number
-				try {
-					Double.parseDouble(literalValue);
+					// Default: accept any value (tokenizer already validated it as a string)
 					return true;
-				} catch (NumberFormatException e) {
-					return false;
+					// Default: accept any value (tokenizer already validated it as a string)
+				}
+				case "number" -> {
+					if (grammar.literals() != null && grammar.literals().number() != null) {
+						Pattern pattern = Pattern.compile(grammar.literals().number().regex());
+						if (pattern.matcher(literalValue).matches()) {
+							return true;
+						}
+					}
+					// Default: try to parse as number
+					try {
+						Double.parseDouble(literalValue);
+						return true;
+					} catch (NumberFormatException e) {
+						return false;
+					}
+					// Default: try to parse as number
+				}
+				case "boolean" -> {
+					if (grammar.literals() != null && grammar.literals().boolean_() != null) {
+						List<Object> values = grammar.literals().boolean_().values();
+						return values != null && (values.contains(Boolean.parseBoolean(literalValue)) ||
+								literalValue.equals("true") || literalValue.equals("false"));
+					}
+					return literalValue.equals("true") || literalValue.equals("false");
+				}
+				case "null" -> {
+					return literalValue.equals("null");
 				}
 			}
 
-			if ("boolean".equals(type)) {
-				if (grammar.literals() != null && grammar.literals().boolean_() != null) {
-					List<Object> values = grammar.literals().boolean_().values();
-					return values != null && (values.contains(Boolean.parseBoolean(literalValue)) || 
-					                          literalValue.equals("true") || literalValue.equals("false"));
-				}
-				return literalValue.equals("true") || literalValue.equals("false");
-			}
-
-			if ("null".equals(type)) {
-				return literalValue.equals("null");
-			}
 		}
 
 		return false;
 	}
 
 	private void validateCardinality(String symbol, ParameterDefinition paramDef, 
-	                                   int actualCount, int argIndex, SxlNode node) {
+	                                   int actualCount, int argIndex, SxlNode node, ValidationState state) {
 		Cardinality cardinality = paramDef.cardinality();
 		
 		switch (cardinality) {
 			case required:
 				if (actualCount == 0) {
 					throw new SxlParseException(
-						createContextMessage(symbol, -1) +
+						buildContextMessage(state, symbol, -1) +
 						"Symbol '" + symbol + "' requires parameter '" + paramDef.name() +
-						"' (type: " + paramDef.type() + ") at position " + findNodePosition(node));
+						"' (type: " + paramDef.type() + ") at position " + findNodePosition(node, state));
 				}
 				if (actualCount > 1) {
 					throw new SxlParseException(
-						createContextMessage(symbol, argIndex) +
+						buildContextMessage(state, symbol, argIndex) +
 						"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 						"' should appear once, but found " + actualCount + " occurrences at position " +
-						findNodePosition(node));
+						findNodePosition(node, state));
 				}
 				break;
 			
 			case optional:
 				if (actualCount > 1) {
 					throw new SxlParseException(
-						createContextMessage(symbol, argIndex) +
+						buildContextMessage(state, symbol, argIndex) +
 						"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 						"' is optional and should appear at most once, but found " + actualCount +
-						" occurrences at position " + findNodePosition(node));
+						" occurrences at position " + findNodePosition(node, state));
 				}
 				break;
 			
 			case oneOrMore:
 				if (actualCount == 0) {
 					throw new SxlParseException(
-						createContextMessage(symbol, -1) +
+						buildContextMessage(state, symbol, -1) +
 						"Symbol '" + symbol + "' requires at least one occurrence of parameter '" +
 						paramDef.name() + "' (type: " + paramDef.type() + ") at position " +
-						findNodePosition(node));
+						findNodePosition(node, state));
 				}
 				break;
 			
@@ -493,7 +713,7 @@ public class DslParsingStrategy implements ParsingStrategy {
 	}
 
 	private void validateParameterType(String symbol, ParameterDefinition paramDef, 
-	                                     SxlNode arg, int argIndex, SxlNode parentNode) {
+	                                     SxlNode arg, int argIndex, SxlNode parentNode, ValidationState state) {
 		String type = paramDef.type();
 		
 		if (type == null || "any".equals(type)) {
@@ -503,18 +723,18 @@ public class DslParsingStrategy implements ParsingStrategy {
 		if (arg.isLiteral()) {
 			if (!type.startsWith("literal(")) {
 				throw new SxlParseException(
-					createContextMessage(symbol, argIndex) +
+					buildContextMessage(state, symbol, argIndex) +
 					"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 					"' expects type " + type + ", but found literal '" + arg.literalValue() +
-					"' at position " + findNodePosition(arg));
+					"' at position " + findNodePosition(arg, state));
 			}
 			
 			if (!matchesLiteralType(arg.literalValue(), type)) {
 				throw new SxlParseException(
-					createContextMessage(symbol, argIndex) +
+					buildContextMessage(state, symbol, argIndex) +
 					"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 					"' expects literal type " + type + ", but found '" + arg.literalValue() +
-					"' at position " + findNodePosition(arg));
+					"' at position " + findNodePosition(arg, state));
 			}
 			return;
 		}
@@ -522,43 +742,51 @@ public class DslParsingStrategy implements ParsingStrategy {
 		// Argument is a symbol node
 		if (type.startsWith("literal(")) {
 			throw new SxlParseException(
-				createContextMessage(symbol, argIndex) +
+				buildContextMessage(state, symbol, argIndex) +
 				"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 				"' expects " + type + ", but found symbol '" + arg.symbol() +
-				"' at position " + findNodePosition(arg));
+				"' at position " + findNodePosition(arg, state));
 		}
 
 		if ("identifier".equals(type)) {
+			// EMBED is always a node type, not an identifier
+			if (EMBED_SYMBOL.equals(arg.symbol())) {
+				throw new SxlParseException(
+					buildContextMessage(state, symbol, argIndex) +
+					"Symbol '" + symbol + "' parameter '" + paramDef.name() +
+					"' expects an identifier, but found EMBED node at position " + findNodePosition(arg, state));
+			}
 			// Validate identifier pattern
 			String identifier = arg.symbol();
 			if (paramDef.identifierRules() != null && paramDef.identifierRules().pattern() != null) {
 				Pattern pattern = Pattern.compile(paramDef.identifierRules().pattern());
 				if (!pattern.matcher(identifier).matches()) {
 					throw new SxlParseException(
-						createContextMessage(symbol, argIndex) +
+						buildContextMessage(state, symbol, argIndex) +
 						"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 						"' identifier '" + identifier + "' does not match required pattern: " +
-						paramDef.identifierRules().pattern() + " at position " + findNodePosition(arg));
+						paramDef.identifierRules().pattern() + " at position " + findNodePosition(arg, state));
 				}
 			} else if (grammar.identifier() != null && grammar.identifier().pattern() != null) {
 				Pattern pattern = Pattern.compile(grammar.identifier().pattern());
 				if (!pattern.matcher(identifier).matches()) {
 					throw new SxlParseException(
-						createContextMessage(symbol, argIndex) +
+						buildContextMessage(state, symbol, argIndex) +
 						"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 						"' identifier '" + identifier + "' does not match identifier pattern: " +
-						grammar.identifier().pattern() + " at position " + findNodePosition(arg));
+						grammar.identifier().pattern() + " at position " + findNodePosition(arg, state));
 				}
 			}
 			
-			// Check that identifier is not a known symbol (unless it's in allowed_symbols)
+			// Check that identifier is not a known symbol (unless it's in allowed_symbols or is EMBED)
 			if (grammar.symbols().containsKey(identifier) && 
-			    (paramDef.allowedSymbols() == null || !paramDef.allowedSymbols().contains(identifier))) {
+			    (paramDef.allowedSymbols() == null || !paramDef.allowedSymbols().contains(identifier)) &&
+			    !EMBED_SYMBOL.equals(identifier)) {
 				throw new SxlParseException(
-					createContextMessage(symbol, argIndex) +
+					buildContextMessage(state, symbol, argIndex) +
 					"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 					"' expects an identifier, but '" + identifier + "' is a defined symbol. " +
-					"Identifiers should not match symbol names at position " + findNodePosition(arg));
+					"Identifiers should not match symbol names at position " + findNodePosition(arg, state));
 			}
 			return;
 		}
@@ -567,40 +795,41 @@ public class DslParsingStrategy implements ParsingStrategy {
 			// Check allowed symbols
 			List<String> allowed = paramDef.allowedSymbols();
 			if (allowed != null && !allowed.isEmpty()) {
-				if (!allowed.contains(arg.symbol())) {
+				if (!allowed.contains(arg.symbol()) && !EMBED_SYMBOL.equals(arg.symbol())) {
 					throw new SxlParseException(
-						createContextMessage(symbol, argIndex) +
+						buildContextMessage(state, symbol, argIndex) +
 						"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 						"' expects one of: " + allowed + ", but found '" + arg.symbol() +
-						"' at position " + findNodePosition(arg));
+						"' at position " + findNodePosition(arg, state));
 				}
 			}
-			// Additional validation: ensure the symbol exists in grammar
+			// Additional validation: ensure the symbol exists in grammar or is EMBED
 			if (!grammar.symbols().containsKey(arg.symbol()) && 
-			    (grammar.reservedSymbols() == null || !grammar.reservedSymbols().contains(arg.symbol()))) {
+			    (grammar.reservedSymbols() == null || !grammar.reservedSymbols().contains(arg.symbol())) &&
+			    !EMBED_SYMBOL.equals(arg.symbol())) {
 				throw new SxlParseException(
-					createContextMessage(symbol, argIndex) +
+					buildContextMessage(state, symbol, argIndex) +
 					"Symbol '" + symbol + "' parameter '" + paramDef.name() +
 					"' contains unknown symbol '" + arg.symbol() + "' at position " +
-					findNodePosition(arg) + ". Expected one of: " + getKnownSymbols());
+					findNodePosition(arg, state) + ". Expected one of: " + getKnownSymbols());
 			}
-			return;
 		}
 
 		// dsl-id and embedded types are validated elsewhere
 	}
 
-	private void validateGlobalConstraints(List<SxlNode> nodes) {
+	private void validateGlobalConstraints(List<SxlNode> nodes, ValidationState state) {
 		if (grammar.constraints() == null) {
 			return;
 		}
 
 		for (var constraint : grammar.constraints()) {
 			if ("must_have_root".equals(constraint.rule())) {
-				if (nodes.isEmpty() || !nodes.get(0).symbol().equals(constraint.symbol())) {
+				if (nodes.isEmpty() || !nodes.getFirst().symbol().equals(constraint.symbol())) {
 					throw new SxlParseException(
+						buildContextMessage(state, null, -1) +
 						"Global constraint violation: must have root symbol '" + constraint.symbol() +
-						"', but found: " + (nodes.isEmpty() ? "empty" : nodes.get(0).symbol()));
+						"', but found: " + (nodes.isEmpty() ? "empty" : nodes.getFirst().symbol()));
 				}
 			}
 			
@@ -608,25 +837,36 @@ public class DslParsingStrategy implements ParsingStrategy {
 		}
 	}
 
-	private String createContextMessage(String parentSymbol, int argIndex) {
-		if (parentSymbol == null) {
-			return "";
+	private String buildContextMessage(ValidationState state, String parentSymbol, int argIndex) {
+		StringBuilder sb = new StringBuilder();
+		
+		// Add context chain
+		if (!state.contextChain.isEmpty()) {
+			sb.append("In ").append(String.join(".", state.contextChain));
+			if (parentSymbol != null) {
+				sb.append(".").append(parentSymbol);
+			}
+			sb.append(": ");
+		} else if (parentSymbol != null) {
+			if (argIndex < 0) {
+				sb.append("In symbol '").append(parentSymbol).append("': ");
+			} else {
+				sb.append("In symbol '").append(parentSymbol).append("' parameter ").append(argIndex).append(": ");
+			}
 		}
-		if (argIndex < 0) {
-			return "In symbol '" + parentSymbol + "': ";
-		}
-		return "In symbol '" + parentSymbol + "' parameter " + argIndex + ": ";
+		
+		return sb.toString();
 	}
 
-	private int findNodePosition(SxlNode node) {
-		if (nodePositions != null && nodePositions.containsKey(node)) {
-			return nodePositions.get(node);
+	private int findNodePosition(SxlNode node, ValidationState state) {
+		if (state.nodePositions != null && state.nodePositions.containsKey(node)) {
+			return state.nodePositions.get(node);
 		}
 		// Fallback: try to find position of first child or use 0
 		if (!node.isLiteral() && !node.args().isEmpty()) {
-			SxlNode firstArg = node.args().get(0);
-			if (nodePositions != null && nodePositions.containsKey(firstArg)) {
-				return nodePositions.get(firstArg);
+			SxlNode firstArg = node.args().getFirst();
+			if (state.nodePositions != null && state.nodePositions.containsKey(firstArg)) {
+				return state.nodePositions.get(firstArg);
 			}
 		}
 		return 0; // Default if position not found
@@ -646,4 +886,3 @@ public class DslParsingStrategy implements ParsingStrategy {
 			.collect(Collectors.joining(", "));
 	}
 }
-

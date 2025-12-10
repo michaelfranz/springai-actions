@@ -127,6 +127,14 @@ public class MetaSxlParser {
 		Map<String, SymbolDefinition> symbols = new LinkedHashMap<>();
 		for (Map.Entry<String, Object> entry : symbolsMap.entrySet()) {
 			String symbolName = entry.getKey();
+			
+			// EMBED is a universal reserved symbol and cannot be defined by any DSL
+			if ("EMBED".equals(symbolName)) {
+				throw new SxlParseException(
+					"Symbol 'EMBED' is a universal reserved symbol and cannot be defined in a DSL grammar. " +
+					"EMBED is automatically available to all DSLs for embedding other DSLs.");
+			}
+			
 			Map<String, Object> symbolData = (Map<String, Object>) entry.getValue();
 			symbols.put(symbolName, buildSymbolDefinition(symbolData));
 		}
