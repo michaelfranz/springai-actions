@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 
 	protected final StringBuilder sql = new StringBuilder();
-	protected int indentLevel = 0;
 	protected boolean needsSpace = false;
 
 	/**
@@ -182,7 +181,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (whereClause != null && !whereClause.isEmpty()) {
 			append(" WHERE ");
 			SqlNodeVisitor visitor = createVisitor();
-			whereClause.get(0).accept(visitor);
+			whereClause.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 		}
 		
@@ -202,7 +201,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (havingClause != null && !havingClause.isEmpty()) {
 			append(" HAVING ");
 			SqlNodeVisitor visitor = createVisitor();
-			havingClause.get(0).accept(visitor);
+			havingClause.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 		}
 		
@@ -219,9 +218,9 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		}
 		
 		// LIMIT ...
-		if (limitClause != null && !limitClause.isEmpty() && limitClause.get(0).isLiteral()) {
+		if (limitClause != null && !limitClause.isEmpty() && limitClause.getFirst().isLiteral()) {
 			append(" LIMIT ");
-			append(limitClause.get(0).literalValue());
+			append(limitClause.getFirst().literalValue());
 		}
 	}
 
@@ -285,7 +284,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (args.size() >= 2) {
 			// Expression
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" AS ");
 			// Alias name (identifier)
@@ -296,7 +295,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitWhere(List<SxlNode> args) {
 		if (!args.isEmpty()) {
 			append(" WHERE ");
-			args.get(0).accept(this);
+			args.getFirst().accept(this);
 			needsSpace = true;
 		}
 	}
@@ -316,7 +315,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitHaving(List<SxlNode> args) {
 		if (!args.isEmpty()) {
 			append(" HAVING ");
-			args.get(0).accept(this);
+			args.getFirst().accept(this);
 			needsSpace = true;
 		}
 	}
@@ -351,13 +350,13 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 			if ("DESC".equals(symbol)) {
 				// This is (DESC (expr)) - output the expression followed by DESC
 				if (!item.args().isEmpty()) {
-					itemBuilder.append(item.args().get(0).accept(visitor));
+					itemBuilder.append(item.args().getFirst().accept(visitor));
 					itemBuilder.append(" DESC");
 				}
 			} else if ("ASC".equals(symbol)) {
 				// This is (ASC (expr)) - output the expression followed by ASC
 				if (!item.args().isEmpty()) {
-					itemBuilder.append(item.args().get(0).accept(visitor));
+					itemBuilder.append(item.args().getFirst().accept(visitor));
 					itemBuilder.append(" ASC");
 				}
 			} else {
@@ -373,9 +372,9 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	}
 
 	protected void visitLimit(List<SxlNode> args) {
-		if (!args.isEmpty() && args.get(0).isLiteral()) {
+		if (!args.isEmpty() && args.getFirst().isLiteral()) {
 			append(" LIMIT ");
-			append(args.get(0).literalValue());
+			append(args.getFirst().literalValue());
 		}
 	}
 
@@ -383,7 +382,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (args.size() == 2) {
 			append("(");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" ");
 			append(op);
@@ -396,7 +395,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 			append(op);
 			append("(");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(")");
 		}
@@ -426,7 +425,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (!args.isEmpty()) {
 			append("NOT (");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(")");
 		}
@@ -435,7 +434,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitLike(List<SxlNode> args) {
 		if (args.size() == 2) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" LIKE ");
 			visitor = createVisitor();
@@ -449,7 +448,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (args.size() == 2) {
 			append("UPPER(");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(") LIKE UPPER(");
 			visitor = createVisitor();
@@ -462,7 +461,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitBetween(List<SxlNode> args) {
 		if (args.size() == 3) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" BETWEEN ");
 			visitor = createVisitor();
@@ -478,7 +477,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitIn(List<SxlNode> args) {
 		if (args.size() >= 2) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" IN (");
 			String values = args.stream()
@@ -496,7 +495,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitNotIn(List<SxlNode> args) {
 		if (args.size() >= 2) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" NOT IN (");
 			String values = args.stream()
@@ -514,7 +513,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitIsNull(List<SxlNode> args) {
 		if (!args.isEmpty()) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" IS NULL");
 		}
@@ -523,7 +522,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected void visitIsNotNull(List<SxlNode> args) {
 		if (!args.isEmpty()) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" IS NOT NULL");
 		}
@@ -576,7 +575,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (args.size() == 2) {
 			append("DATE_TRUNC(");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor); // unit (string literal)
+			args.getFirst().accept(visitor); // unit (string literal)
 			append(visitor.sql.toString());
 			append(", ");
 			visitor = createVisitor();
@@ -590,7 +589,7 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		if (args.size() == 2) {
 			append("EXTRACT(");
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor); // part (string literal)
+			args.getFirst().accept(visitor); // part (string literal)
 			append(visitor.sql.toString());
 			append(" FROM ");
 			visitor = createVisitor();

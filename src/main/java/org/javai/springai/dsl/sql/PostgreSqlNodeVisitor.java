@@ -31,7 +31,7 @@ public class PostgreSqlNodeVisitor extends SqlNodeVisitor {
 		// PostgreSQL supports ILIKE natively
 		if (args.size() == 2) {
 			SqlNodeVisitor visitor = createVisitor();
-			args.get(0).accept(visitor);
+			args.getFirst().accept(visitor);
 			append(visitor.sql.toString());
 			append(" ILIKE ");
 			visitor = createVisitor();

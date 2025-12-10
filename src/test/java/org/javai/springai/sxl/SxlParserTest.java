@@ -884,5 +884,208 @@ class SxlParserTest {
 		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
 		assertThat(validated).hasSize(1);
 	}
+
+	// ============================================================
+	// NEW STRING FUNCTIONS (LOWER, LENGTH, CONCAT, SUBSTR, TRIM, etc.)
+	// ============================================================
+
+	@Test
+	void validateSqlLowerFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (LOWER c.name) name_lower)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLengthFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (LENGTH c.email) email_length)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlConcatFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (CONCAT c.first_name \" \" c.last_name) full_name)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlSubstrFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (SUBSTR c.email 1 5) email_prefix)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlTrimFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (TRIM c.name) trimmed_name)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLtrimRtrimFunctions() {
+		String sqlExpr = "(Q (F customers c) (S (AS (LTRIM c.name) left_trim) (AS (RTRIM c.name) right_trim)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlReplaceFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (REPLACE c.email \"@old.com\" \"@new.com\") new_email)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlLpadRpadFunctions() {
+		String sqlExpr = "(Q (F orders o) (S (AS (LPAD o.id 5) padded_id) (AS (RPAD o.status 10) padded_status)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlInstrFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (INSTR c.email \"@\") at_position)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// NEW NUMERIC FUNCTIONS (ABS, ROUND, CEIL, FLOOR, POWER, SQRT, MOD)
+	// ============================================================
+
+	@Test
+	void validateSqlAbsFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (ABS (SUB o.expected o.actual)) difference)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlRoundFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (ROUND o.amount 2) rounded_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlCeilFloorFunctions() {
+		String sqlExpr = "(Q (F orders o) (S (AS (CEIL o.amount) ceiling) (AS (FLOOR o.amount) flooring)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlPowerSqrtFunctions() {
+		String sqlExpr = "(Q (F orders o) (S (AS (POWER o.amount 2) squared) (AS (SQRT o.amount) square_root)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlModFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (MOD o.id 3) modulo)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// NEW DATE/TIME FUNCTIONS (CURRENT_DATE, CURRENT_TIMESTAMP, DATE_ADD, DATE_DIFF)
+	// ============================================================
+
+	@Test
+	void validateSqlCurrentDateFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id) (AS (CURRENT_DATE) today)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlCurrentTimestampFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id) (AS (CURRENT_TIMESTAMP) now)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlDateAddFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (DATE_ADD o.order_date \"1 MONTH\") due_date)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlDateDiffFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (DATE_DIFF o.shipped_date o.order_date) days_to_ship)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// NEW NULL HANDLING FUNCTIONS (COALESCE, NULLIF, NVL)
+	// ============================================================
+
+	@Test
+	void validateSqlCoalesceFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (COALESCE c.phone_work c.phone_home c.phone_mobile) phone)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlNullifFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (NULLIF o.discount 0) discount_or_null)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlNvlFunction() {
+		String sqlExpr = "(Q (F customers c) (S (AS (NVL c.phone \"No phone\") contact_phone)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// NEW TYPE CONVERSION FUNCTIONS (TO_DATE, TO_NUMBER)
+	// ============================================================
+
+	@Test
+	void validateSqlToDateFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS o.id id)) (W (EQ (TO_DATE o.order_date \"YYYY-MM-DD\") (CURRENT_DATE))))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	@Test
+	void validateSqlToNumberFunction() {
+		String sqlExpr = "(Q (F orders o) (S (AS (TO_NUMBER o.amount) numeric_amount)))";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
+
+	// ============================================================
+	// COMPLEX EXPRESSIONS WITH NEW FUNCTIONS
+	// ============================================================
+
+	@Test
+	void validateComplexQueryWithNewFunctions() {
+		String sqlExpr = """
+			(Q
+			  (F orders o)
+			  (J customers c (EQ o.customer_id c.id))
+			  (S 
+			    (AS (CONCAT (UPPER (SUBSTR c.first_name 1 1)) \".\" (LOWER c.last_name)) customer)
+			    (AS (ROUND o.amount 2) total)
+			    (AS (COALESCE o.discount 0) discount)
+			  )
+			  (W (AND (GT o.amount 100) (NE o.status "CANCELLED")))
+			)
+			""";
+		List<SxlNode> validated = parseAndValidateSql(sqlExpr);
+		assertThat(validated).hasSize(1);
+	}
 }
 

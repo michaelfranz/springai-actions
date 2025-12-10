@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Comprehensive tests for SQL DSL instance generation.
- * 
  * This test suite validates the SQL DSL by testing the generation of valid
  * S-expression DSL instances that conform to the SQL grammar. Tests progress
  * from simple cases to complex scenarios, ensuring critical branches in
@@ -29,7 +28,6 @@ import org.junit.jupiter.api.Test;
 @DisplayName("SQL DSL Tests")
 class SqlDslTest {
 
-	private SxlGrammar sqlGrammar;
 	private DefaultValidatorRegistry registry;
 
 	@BeforeEach
@@ -37,7 +35,7 @@ class SqlDslTest {
 		SxlGrammarParser parser = new SxlGrammarParser();
 		
 		// Load SQL grammar from resources
-		sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
+		SxlGrammar sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
 		
 		// Create registry with SQL grammar
 		registry = new DefaultValidatorRegistry();
@@ -46,17 +44,13 @@ class SqlDslTest {
 
 	private SxlGrammar loadGrammar(String resourceName, SxlGrammarParser parser) {
 		InputStream stream = getClass().getClassLoader().getResourceAsStream(resourceName);
-		if (stream == null) {
-			throw new IllegalStateException("Could not load grammar resource: " + resourceName);
-		}
-		try {
-			return parser.parse(stream);
-		} finally {
-			try {
-				stream.close();
-			} catch (Exception e) {
-				// Ignore
+		try (stream) {
+			if (stream == null) {
+				throw new IllegalStateException("Could not load grammar resource: " + resourceName);
 			}
+			return parser.parse(stream);
+		} catch (Exception e) {
+			throw new IllegalStateException("Could not parse grammar resource: " + resourceName, e);
 		}
 	}
 
@@ -79,7 +73,7 @@ class SqlDslTest {
 			List<SxlNode> nodes = parseAndValidate(input);
 			
 			assertThat(nodes).hasSize(1);
-			SxlNode embed = nodes.get(0);
+			SxlNode embed = nodes.getFirst();
 			assertThat(embed.symbol()).isEqualTo("EMBED");
 			SxlNode query = embed.args().get(1);
 			assertThat(query.symbol()).isEqualTo("Q");
@@ -104,7 +98,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 			
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			assertThat(query.symbol()).isEqualTo("Q");
 			
 			// Find SELECT clause
@@ -128,7 +122,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 			
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			assertThat(query.symbol()).isEqualTo("Q");
 			assertThat(query.args()).hasSize(1); // Only SELECT
 		}
@@ -170,7 +164,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 			
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			assertThat(query.args()).hasSize(3); // DISTINCT, FROM, SELECT
 			
 			// Verify DISTINCT is present
@@ -193,7 +187,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 			
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			assertThat(query.args()).hasSize(2); // DISTINCT and SELECT
 		}
 	}
@@ -216,7 +210,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 			
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			SxlNode from = query.args().stream()
 				.filter(n -> n.symbol().equals("F"))
 				.findFirst()
@@ -293,7 +287,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				long joinCount = query.args().stream()
 					.filter(n -> n.symbol().equals("J"))
 					.count();
@@ -315,7 +309,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasLeftJoin = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("J_LEFT"));
 				assertThat(hasLeftJoin).isTrue();
@@ -336,7 +330,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasRightJoin = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("J_RIGHT"));
 				assertThat(hasRightJoin).isTrue();
@@ -357,7 +351,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasFullJoin = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("J_FULL"));
 				assertThat(hasFullJoin).isTrue();
@@ -379,7 +373,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				long joinCount = query.args().stream()
 					.filter(n -> n.symbol().startsWith("J"))
 					.count();
@@ -406,7 +400,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasWhere = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("W"));
 				assertThat(hasWhere).isTrue();
@@ -427,7 +421,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasWhere = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("W"));
 				assertThat(hasWhere).isTrue();
@@ -453,7 +447,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasGroupBy = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("G"));
 				assertThat(hasGroupBy).isTrue();
@@ -475,7 +469,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasGroupBy = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("G"));
 				boolean hasHaving = query.args().stream()
@@ -504,7 +498,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasOrderBy = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("O"));
 				assertThat(hasOrderBy).isTrue();
@@ -525,7 +519,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasLimit = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("L"));
 				assertThat(hasLimit).isTrue();
@@ -547,7 +541,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				boolean hasOrderBy = query.args().stream()
 					.anyMatch(n -> n.symbol().equals("O"));
 				boolean hasLimit = query.args().stream()
@@ -589,7 +583,7 @@ class SqlDslTest {
 			// indicates a parser limitation.
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				assertThat(query.symbol()).isEqualTo("Q");
 				// Should have: D, F, J, S, W, G, H, O, L = 9 clauses
 				assertThat(query.args().size()).isGreaterThanOrEqualTo(9);
@@ -616,7 +610,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				SxlNode select = query.args().stream()
 					.filter(n -> n.symbol().equals("S"))
 					.findFirst()
@@ -664,7 +658,7 @@ class SqlDslTest {
 			
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				SxlNode select = query.args().stream()
 					.filter(n -> n.symbol().equals("S"))
 					.findFirst()
@@ -695,7 +689,7 @@ class SqlDslTest {
 			// If it fails due to parameter ordering, document as known limitation
 			List<SxlNode> nodes = parseAndValidate(input);
 				
-				SxlNode query = nodes.get(0).args().get(1);
+				SxlNode query = nodes.getFirst().args().get(1);
 				SxlNode select = query.args().stream()
 					.filter(n -> n.symbol().equals("S"))
 					.findFirst()
@@ -757,8 +751,372 @@ class SqlDslTest {
 				""";
 			
 			List<SxlNode> nodes = parseAndValidate(input);
-			SxlNode query = nodes.get(0).args().get(1);
+			SxlNode query = nodes.getFirst().args().get(1);
 			assertThat(query.symbol()).isEqualTo("Q");
+		}
+	}
+
+	@Nested
+	@DisplayName("New SQL Functions Tests")
+	class NewSqlFunctionsTests {
+
+		// STRING FUNCTIONS
+		@Test
+		@DisplayName("Should generate query with LOWER function")
+		void shouldGenerateQueryWithLowerFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (LOWER c.name) name_lower))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with LENGTH function")
+		void shouldGenerateQueryWithLengthFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (LENGTH c.email) email_length))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with CONCAT function")
+		void shouldGenerateQueryWithConcatFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (CONCAT c.first_name " " c.last_name) full_name))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with TRIM function")
+		void shouldGenerateQueryWithTrimFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (TRIM c.name) trimmed_name))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with LTRIM and RTRIM functions")
+		void shouldGenerateQueryWithLtrimRtrimFunctions() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (LTRIM c.name) left_trimmed) (AS (RTRIM c.name) right_trimmed))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with REPLACE function")
+		void shouldGenerateQueryWithReplaceFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (REPLACE c.email "@old.com" "@new.com") new_email))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with LPAD and RPAD functions")
+		void shouldGenerateQueryWithLpadRpadFunctions() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (LPAD o.id 5) padded_id) (AS (RPAD o.status 10) padded_status))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with INSTR function")
+		void shouldGenerateQueryWithInstrFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (INSTR c.email "@") at_position))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		// NUMERIC FUNCTIONS
+		@Test
+		@DisplayName("Should generate query with ABS function")
+		void shouldGenerateQueryWithAbsFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (ABS (SUB o.expected o.actual)) difference))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with ROUND function")
+		void shouldGenerateQueryWithRoundFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (ROUND o.amount 2) rounded_amount))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with CEIL and FLOOR functions")
+		void shouldGenerateQueryWithCeilFloorFunctions() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (CEIL o.amount) ceiling) (AS (FLOOR o.amount) flooring))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with POWER and SQRT functions")
+		void shouldGenerateQueryWithPowerSqrtFunctions() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (POWER o.amount 2) squared) (AS (SQRT o.amount) square_root))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with MOD function")
+		void shouldGenerateQueryWithModFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (MOD o.id 3) modulo))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		// DATE/TIME FUNCTIONS
+		@Test
+		@DisplayName("Should generate query with CURRENT_DATE function")
+		void shouldGenerateQueryWithCurrentDateFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS o.id id) (AS (CURRENT_DATE) today))
+				    (W (EQ (CURRENT_DATE) o.order_date))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with CURRENT_TIMESTAMP function")
+		void shouldGenerateQueryWithCurrentTimestampFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS o.id id) (AS (CURRENT_TIMESTAMP) now))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with DATE_ADD function")
+		void shouldGenerateQueryWithDateAddFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (DATE_ADD o.order_date "1 MONTH") due_date))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with DATE_DIFF function")
+		void shouldGenerateQueryWithDateDiffFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (DATE_DIFF o.shipped_date o.order_date) days_to_ship))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		// NULL HANDLING FUNCTIONS
+		@Test
+		@DisplayName("Should generate query with COALESCE function")
+		void shouldGenerateQueryWithCoalesceFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (COALESCE c.phone_work c.phone_home c.phone_mobile) phone))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with NULLIF function")
+		void shouldGenerateQueryWithNullifFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (NULLIF o.discount 0) discount_or_null))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with NVL function")
+		void shouldGenerateQueryWithNvlFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F customers c)
+				    (S (AS (NVL c.phone "No phone") contact_phone))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		// TYPE CONVERSION FUNCTIONS
+		@Test
+		@DisplayName("Should generate query with TO_DATE function")
+		void shouldGenerateQueryWithToDateFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS o.id id))
+				    (W (EQ (TO_DATE o.order_date "YYYY-MM-DD") (CURRENT_DATE)))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate query with TO_NUMBER function")
+		void shouldGenerateQueryWithToNumberFunction() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (S (AS (TO_NUMBER o.amount) numeric_amount))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should generate complex query with multiple new functions")
+		void shouldGenerateComplexQueryWithMultipleNewFunctions() {
+			String input = """
+				(EMBED sxl-sql
+				  (Q
+				    (F orders o)
+				    (J customers c (EQ o.customer_id c.id))
+				    (S
+				      (AS (CONCAT (UPPER (SUBSTR c.first_name 1 1)) ". " (LOWER c.last_name)) customer)
+				      (AS (ROUND o.amount 2) total)
+				      (AS (COALESCE o.discount 0) discount)
+				      (AS (DATE_DIFF o.shipped_date o.order_date) days)
+				    )
+				    (W (AND (GT o.amount 100) (NE o.status "CANCELLED")))
+				  )
+				)
+				""";
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
 		}
 	}
 

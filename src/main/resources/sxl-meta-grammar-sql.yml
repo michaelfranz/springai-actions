@@ -830,6 +830,473 @@ symbols:
         code: |
           (UPPER c.name)
 
+  LOWER:
+    description: "LOWER function (convert to lowercase)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "LOWER"
+        code: |
+          (LOWER c.name)
+
+  LENGTH:
+    description: "LENGTH function (get string length)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "LENGTH"
+        code: |
+          (LENGTH c.email)
+
+  CONCAT:
+    description: "CONCAT function (concatenate string values)"
+    kind: operator
+    params:
+      - name: expressions
+        description: "String expressions to concatenate (two or more)"
+        type: any
+        cardinality: oneOrMore
+        ordered: true
+    
+    examples:
+      - label: "CONCAT multiple columns"
+        code: |
+          (CONCAT c.first_name " " c.last_name)
+
+  SUBSTR:
+    description: "SUBSTR function (extract substring from string)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression to extract from"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: start_position
+        description: "Starting position (1-based index)"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: length
+        description: "Length of substring to extract (optional)"
+        type: any
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "SUBSTR with start position only"
+        code: |
+          (SUBSTR c.email 1)
+      - label: "SUBSTR with start position and length"
+        code: |
+          (SUBSTR c.email 1 5)
+
+  TRIM:
+    description: "TRIM function (remove leading/trailing whitespace)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  LTRIM:
+    description: "LTRIM function (remove leading whitespace)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  RTRIM:
+    description: "RTRIM function (remove trailing whitespace)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  REPLACE:
+    description: "REPLACE function (replace substring)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: from_str
+        description: "Substring to find"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: to_str
+        description: "Replacement string"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "REPLACE"
+        code: |
+          (REPLACE c.email "@old.com" "@new.com")
+
+  LPAD:
+    description: "LPAD function (left pad string)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: length
+        description: "Target length"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: pad_str
+        description: "Padding string (optional, default space)"
+        type: any
+        cardinality: optional
+        ordered: true
+
+  RPAD:
+    description: "RPAD function (right pad string)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: length
+        description: "Target length"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: pad_str
+        description: "Padding string (optional, default space)"
+        type: any
+        cardinality: optional
+        ordered: true
+
+  INSTR:
+    description: "INSTR function (find substring position)"
+    kind: operator
+    params:
+      - name: str
+        description: "String to search in"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: substr
+        description: "Substring to find"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "INSTR"
+        code: |
+          (INSTR c.email "@")
+
+  ABS:
+    description: "ABS function (absolute value)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "ABS"
+        code: |
+          (ABS (SUB o.expected_amount o.actual_amount))
+
+  ROUND:
+    description: "ROUND function (round numeric value)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: decimals
+        description: "Number of decimal places (optional)"
+        type: any
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "ROUND with decimals"
+        code: |
+          (ROUND o.amount 2)
+
+  CEIL:
+    description: "CEIL function (round up)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  FLOOR:
+    description: "FLOOR function (round down)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  POWER:
+    description: "POWER function (exponentiation)"
+    kind: operator
+    params:
+      - name: base
+        description: "Base number"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: exponent
+        description: "Exponent"
+        type: any
+        cardinality: required
+        ordered: true
+
+  SQRT:
+    description: "SQRT function (square root)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression"
+        type: any
+        cardinality: required
+        ordered: true
+
+  MOD:
+    description: "MOD function (modulo operator)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Dividend"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: divisor
+        description: "Divisor"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "MOD"
+        code: |
+          (MOD o.id 3)
+
+  CURRENT_DATE:
+    description: "CURRENT_DATE function (get current date)"
+    kind: operator
+    params: []
+    
+    examples:
+      - label: "CURRENT_DATE"
+        code: |
+          (CURRENT_DATE)
+
+  CURRENT_TIMESTAMP:
+    description: "CURRENT_TIMESTAMP function (get current timestamp)"
+    kind: operator
+    params: []
+    
+    examples:
+      - label: "CURRENT_TIMESTAMP"
+        code: |
+          (CURRENT_TIMESTAMP)
+
+  COALESCE:
+    description: "COALESCE function (return first non-null value)"
+    kind: operator
+    params:
+      - name: expressions
+        description: "Expressions to evaluate (one or more)"
+        type: any
+        cardinality: oneOrMore
+        ordered: true
+    
+    examples:
+      - label: "COALESCE"
+        code: |
+          (COALESCE c.phone_work c.phone_home c.phone_mobile)
+
+  NULLIF:
+    description: "NULLIF function (return NULL if values equal)"
+    kind: operator
+    params:
+      - name: expr1
+        description: "First expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: expr2
+        description: "Second expression"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "NULLIF"
+        code: |
+          (NULLIF o.discount 0)
+
+  NVL:
+    description: "NVL function (NULL value replacement)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Expression to check"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: replacement
+        description: "Replacement value if NULL"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "NVL"
+        code: |
+          (NVL c.phone "No phone")
+
+  TO_DATE:
+    description: "TO_DATE function (convert string to date)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: format
+        description: "Date format (optional)"
+        type: any
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "TO_DATE with format"
+        code: |
+          (TO_DATE "2024-01-15" "YYYY-MM-DD")
+
+  TO_NUMBER:
+    description: "TO_NUMBER function (convert string to number)"
+    kind: operator
+    params:
+      - name: expr
+        description: "String expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: format
+        description: "Number format (optional)"
+        type: any
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "TO_NUMBER"
+        code: |
+          (TO_NUMBER "12345.67")
+
+  DATE_ADD:
+    description: "DATE_ADD function (add interval to date)"
+    kind: operator
+    params:
+      - name: date_expr
+        description: "Date expression"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: interval
+        description: "Interval (e.g., '1 DAY', '2 MONTH')"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "DATE_ADD"
+        code: |
+          (DATE_ADD o.order_date "1 MONTH")
+
+  DATE_DIFF:
+    description: "DATE_DIFF function (difference between dates)"
+    kind: operator
+    params:
+      - name: date1
+        description: "First date"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: date2
+        description: "Second date"
+        type: any
+        cardinality: required
+        ordered: true
+      
+      - name: unit
+        description: "Unit (e.g., 'DAY', 'MONTH')"
+        type: any
+        cardinality: optional
+        ordered: true
+    
+    examples:
+      - label: "DATE_DIFF"
+        code: |
+          (DATE_DIFF o.shipped_date o.order_date)
+
   DATE_TRUNC:
     description: "DATE_TRUNC function (truncate date to unit)"
     kind: operator
