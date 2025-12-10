@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.List;
 import java.util.Map;
@@ -18,5 +18,8 @@ public record SxlGrammar(
 	List<GlobalConstraint> constraints,
 	LlmSpecs llmSpecs
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitSxlGrammar(this);
+	}
 }
 

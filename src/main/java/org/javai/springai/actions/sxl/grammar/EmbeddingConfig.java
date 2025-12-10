@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.List;
 
@@ -11,5 +11,8 @@ public record EmbeddingConfig(
 	Boolean autoRegisterSymbol,
 	List<ParameterDefinition> params
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitEmbeddingConfig(this);
+	}
 }
 

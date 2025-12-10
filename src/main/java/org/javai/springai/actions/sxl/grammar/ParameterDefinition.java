@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.List;
 
@@ -14,5 +14,8 @@ public record ParameterDefinition(
 	Boolean ordered,
 	IdentifierRules identifierRules
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitParameterDefinition(this);
+	}
 }
 

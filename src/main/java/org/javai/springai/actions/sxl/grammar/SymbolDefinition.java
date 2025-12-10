@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.List;
 
@@ -12,5 +12,8 @@ public record SymbolDefinition(
 	List<SymbolConstraint> constraints,
 	List<Example> examples
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitSymbolDefinition(this);
+	}
 }
 

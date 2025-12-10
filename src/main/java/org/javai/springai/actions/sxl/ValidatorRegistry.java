@@ -1,6 +1,6 @@
 package org.javai.springai.actions.sxl;
 
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 
 /**
  * Registry for DSL grammars used during validation of embedded DSLs.

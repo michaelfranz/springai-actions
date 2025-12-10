@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.Map;
 
@@ -11,5 +11,8 @@ public record LlmSpecs(
 	Map<String, Map<String, LlmModelOverrides>> models,
 	Map<String, LlmProfile> profiles
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitLlmSpecs(this);
+	}
 }
 

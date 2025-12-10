@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.util.List;
 
@@ -9,5 +9,8 @@ public record LiteralRule(
 	String regex,  // regex pattern (for string, number)
 	List<Object> values  // allowed values (for boolean, null)
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitLiteralRule(this);
+	}
 }
 

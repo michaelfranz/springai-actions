@@ -9,8 +9,8 @@ import org.javai.springai.actions.sxl.DefaultValidatorRegistry;
 import org.javai.springai.actions.sxl.SxlNode;
 import org.javai.springai.actions.sxl.SxlParseException;
 import org.javai.springai.actions.sxl.SxlTokenizer;
-import org.javai.springai.actions.sxl.meta.MetaSxlParser;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.SxlGrammarParser;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,7 +33,7 @@ class SqlDslTest {
 
 	@BeforeEach
 	void setUp() {
-		MetaSxlParser parser = new MetaSxlParser();
+		SxlGrammarParser parser = new SxlGrammarParser();
 		
 		// Load SQL grammar from resources
 		sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
@@ -43,7 +43,7 @@ class SqlDslTest {
 		registry.addGrammar("sxl-sql", sqlGrammar);
 	}
 
-	private SxlGrammar loadGrammar(String resourceName, MetaSxlParser parser) {
+	private SxlGrammar loadGrammar(String resourceName, SxlGrammarParser parser) {
 		InputStream stream = getClass().getClassLoader().getResourceAsStream(resourceName);
 		if (stream == null) {
 			throw new IllegalStateException("Could not load grammar resource: " + resourceName);

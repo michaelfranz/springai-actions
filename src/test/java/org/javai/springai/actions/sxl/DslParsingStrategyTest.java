@@ -4,15 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.sxl.meta.Cardinality;
-import org.javai.springai.actions.sxl.meta.DslMetadata;
-import org.javai.springai.actions.sxl.meta.EmbeddingConfig;
-import org.javai.springai.actions.sxl.meta.IdentifierRule;
-import org.javai.springai.actions.sxl.meta.LiteralDefinitions;
-import org.javai.springai.actions.sxl.meta.ParameterDefinition;
-import org.javai.springai.actions.sxl.meta.SymbolDefinition;
-import org.javai.springai.actions.sxl.meta.SymbolKind;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.Cardinality;
+import org.javai.springai.actions.sxl.grammar.DslMetadata;
+import org.javai.springai.actions.sxl.grammar.EmbeddingConfig;
+import org.javai.springai.actions.sxl.grammar.IdentifierRule;
+import org.javai.springai.actions.sxl.grammar.LiteralDefinitions;
+import org.javai.springai.actions.sxl.grammar.ParameterDefinition;
+import org.javai.springai.actions.sxl.grammar.SymbolDefinition;
+import org.javai.springai.actions.sxl.grammar.SymbolKind;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -439,8 +439,8 @@ class DslParsingStrategyTest {
 
 	private SxlGrammar createGrammarWithFactoryAndRootConstraint(String rootSymbol) {
 		SxlGrammar base = createGrammarWithFactory();
-		org.javai.springai.actions.sxl.meta.GlobalConstraint constraint = 
-			new org.javai.springai.actions.sxl.meta.GlobalConstraint(
+		org.javai.springai.actions.sxl.grammar.GlobalConstraint constraint = 
+			new org.javai.springai.actions.sxl.grammar.GlobalConstraint(
 				"must_have_root", null, rootSymbol, null);
 		
 		return new SxlGrammar(
@@ -450,8 +450,8 @@ class DslParsingStrategyTest {
 
 	private SxlGrammar createGrammarWithNestedFactoryAndRootConstraint() {
 		SxlGrammar base = createGrammarWithNestedAndFactory();
-		org.javai.springai.actions.sxl.meta.GlobalConstraint constraint = 
-			new org.javai.springai.actions.sxl.meta.GlobalConstraint(
+		org.javai.springai.actions.sxl.grammar.GlobalConstraint constraint = 
+			new org.javai.springai.actions.sxl.grammar.GlobalConstraint(
 				"must_have_root", null, "NESTED", null);
 		
 		return new SxlGrammar(
@@ -462,8 +462,8 @@ class DslParsingStrategyTest {
 	// Base grammar factory - creates grammar with common settings, no constraints
 	private SxlGrammar createBaseGrammar(Map<String, SymbolDefinition> symbols) {
 		LiteralDefinitions literals = new LiteralDefinitions(
-			new org.javai.springai.actions.sxl.meta.LiteralRule("^\"?.*\"?$", null), // string
-			new org.javai.springai.actions.sxl.meta.LiteralRule("^-?[0-9]+(\\.[0-9]+)?$", null), // number
+			new org.javai.springai.actions.sxl.grammar.LiteralRule("^\"?.*\"?$", null), // string
+			new org.javai.springai.actions.sxl.grammar.LiteralRule("^-?[0-9]+(\\.[0-9]+)?$", null), // number
 			null, // boolean
 			null  // null
 		);

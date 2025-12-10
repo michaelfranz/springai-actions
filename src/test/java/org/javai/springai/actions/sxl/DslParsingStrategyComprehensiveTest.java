@@ -5,14 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.sxl.meta.Cardinality;
-import org.javai.springai.actions.sxl.meta.DslMetadata;
-import org.javai.springai.actions.sxl.meta.IdentifierRule;
-import org.javai.springai.actions.sxl.meta.LiteralDefinitions;
-import org.javai.springai.actions.sxl.meta.ParameterDefinition;
-import org.javai.springai.actions.sxl.meta.SymbolDefinition;
-import org.javai.springai.actions.sxl.meta.SymbolKind;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.Cardinality;
+import org.javai.springai.actions.sxl.grammar.DslMetadata;
+import org.javai.springai.actions.sxl.grammar.IdentifierRule;
+import org.javai.springai.actions.sxl.grammar.LiteralDefinitions;
+import org.javai.springai.actions.sxl.grammar.ParameterDefinition;
+import org.javai.springai.actions.sxl.grammar.SymbolDefinition;
+import org.javai.springai.actions.sxl.grammar.SymbolKind;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -764,8 +764,8 @@ class DslParsingStrategyComprehensiveTest {
 			new DslMetadata("outer-dsl", "Outer DSL", "1.0"),
 			Map.of("OUTER", outer),
 			new LiteralDefinitions(
-				new org.javai.springai.actions.sxl.meta.LiteralRule("^\"?.*\"?$", null),
-				new org.javai.springai.actions.sxl.meta.LiteralRule("^-?[0-9]+(\\.[0-9]+)?$", null),
+				new org.javai.springai.actions.sxl.grammar.LiteralRule("^\"?.*\"?$", null),
+				new org.javai.springai.actions.sxl.grammar.LiteralRule("^-?[0-9]+(\\.[0-9]+)?$", null),
 				null, null),
 			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
 			List.of(),
@@ -795,7 +795,7 @@ class DslParsingStrategyComprehensiveTest {
 			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
 			List.of(),
 			null,
-			List.of(new org.javai.springai.actions.sxl.meta.GlobalConstraint(
+			List.of(new org.javai.springai.actions.sxl.grammar.GlobalConstraint(
 				"must_have_root", null, "INNER", null)),
 			null
 		);
@@ -819,7 +819,7 @@ class DslParsingStrategyComprehensiveTest {
 			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
 			List.of(),
 			null,
-			List.of(new org.javai.springai.actions.sxl.meta.GlobalConstraint(
+			List.of(new org.javai.springai.actions.sxl.grammar.GlobalConstraint(
 				"must_have_root", null, "DEEP", null)),
 			null
 		);
@@ -871,7 +871,7 @@ class DslParsingStrategyComprehensiveTest {
 			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
 			List.of(),
 			null,
-			List.of(new org.javai.springai.actions.sxl.meta.GlobalConstraint(
+			List.of(new org.javai.springai.actions.sxl.grammar.GlobalConstraint(
 				"must_have_root", null, "INNER", null)),
 			null
 		);

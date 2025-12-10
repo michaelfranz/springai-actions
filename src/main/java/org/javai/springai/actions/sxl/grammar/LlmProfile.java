@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 /**
  * Named profile for LLM specification generation.
@@ -8,5 +8,8 @@ public record LlmProfile(
 	Boolean includeConstraints,
 	Integer maxExamples
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitLlmProfile(this);
+	}
 }
 

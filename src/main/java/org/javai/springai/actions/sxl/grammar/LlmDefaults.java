@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 /**
  * Default LLM specification settings.
@@ -15,5 +15,8 @@ public record LlmDefaults(
 	Boolean preamble,
 	Boolean postamble
 ) {
+	public <R> R accept(SxlGrammarVisitor<R> visitor) {
+		return visitor.visitLlmDefaults(this);
+	}
 }
 

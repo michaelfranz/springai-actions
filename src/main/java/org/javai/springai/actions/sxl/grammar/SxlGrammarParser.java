@@ -1,4 +1,4 @@
-package org.javai.springai.actions.sxl.meta;
+package org.javai.springai.actions.sxl.grammar;
 
 import java.io.InputStream;
 import java.io.Reader;
@@ -16,7 +16,7 @@ import org.yaml.snakeyaml.Yaml;
  * Parser for meta-grammar YAML files.
  * Parses YAML and creates an SxlGrammar AST instance.
  */
-public class MetaSxlParser {
+public class SxlGrammarParser {
 
 	private final Yaml yaml = new Yaml();
 
@@ -231,22 +231,56 @@ public class MetaSxlParser {
 			return new LiteralDefinitions(null, null, null, null);
 		}
 		
-		Map<String, Object> stringMap = (Map<String, Object>) literalsMap.get("string");
+		// Build a map of all literal types by iterating through entries
+		// This ensures we capture the "null" key correctly, as some YAML parsers
+		// may handle null keys specially. We iterate through the raw map entries
+		// to handle any key type issues.
+		Map<String, Object> stringMap = null;
+		Map<String, Object> numberMap = null;
+		Map<String, Object> booleanMap = null;
+		Map<String, Object> nullMap = null;
+		
+		// Cast to raw Map to access entries without type restrictions
+		Map<?, ?> rawMap = literalsMap;
+		for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+			Object keyObj = entry.getKey();
+			String key = keyObj != null ? keyObj.toString() : null;
+			
+			if (entry.getValue() instanceof Map) {
+				Map<String, Object> valueMap = (Map<String, Object>) entry.getValue();
+				if ("string".equals(key)) {
+					stringMap = valueMap;
+				} else if ("number".equals(key)) {
+					numberMap = valueMap;
+				} else if ("boolean".equals(key)) {
+					booleanMap = valueMap;
+				} else if ("null".equals(key) || (key == null && entry.getValue() instanceof Map)) {
+					// Handle both "null" string key and actual null key (though unlikely)
+					nullMap = valueMap;
+				}
+			}
+		}
+		
+		// Also try direct lookup as fallback
+		if (nullMap == null) {
+			Object nullValue = literalsMap.get("null");
+			if (nullValue instanceof Map) {
+				nullMap = (Map<String, Object>) nullValue;
+			}
+		}
+		
 		LiteralRule string = stringMap != null 
 			? new LiteralRule((String) stringMap.get("regex"), null)
 			: null;
 		
-		Map<String, Object> numberMap = (Map<String, Object>) literalsMap.get("number");
 		LiteralRule number = numberMap != null
 			? new LiteralRule((String) numberMap.get("regex"), null)
 			: null;
 		
-		Map<String, Object> booleanMap = (Map<String, Object>) literalsMap.get("boolean");
 		LiteralRule boolean_ = booleanMap != null
 			? new LiteralRule(null, (List<Object>) booleanMap.get("values"))
 			: null;
 		
-		Map<String, Object> nullMap = (Map<String, Object>) literalsMap.get("null");
 		LiteralRule null_ = nullMap != null
 			? new LiteralRule(null, (List<Object>) nullMap.get("values"))
 			: null;

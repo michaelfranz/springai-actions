@@ -2,7 +2,7 @@ package org.javai.springai.actions.sxl;
 
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 
 /**
  * High-level validator for complex DSL expressions that may contain embedded DSLs.
@@ -75,20 +75,20 @@ public class ComplexDslValidator {
 	 * This allows uniform validation of all DSL nodes through EMBED.
 	 */
 	private SxlGrammar createUniversalGrammar() {
-		org.javai.springai.actions.sxl.meta.ParameterDefinition embedParam = new org.javai.springai.actions.sxl.meta.ParameterDefinition(
+		org.javai.springai.actions.sxl.grammar.ParameterDefinition embedParam = new org.javai.springai.actions.sxl.grammar.ParameterDefinition(
 			"root", "Root DSL", "node", List.of("EMBED"), 
-			org.javai.springai.actions.sxl.meta.Cardinality.oneOrMore, true, null);
+			org.javai.springai.actions.sxl.grammar.Cardinality.oneOrMore, true, null);
 		
-		org.javai.springai.actions.sxl.meta.SymbolDefinition rootSymbol = new org.javai.springai.actions.sxl.meta.SymbolDefinition(
-			"Root", org.javai.springai.actions.sxl.meta.SymbolKind.node,
+		org.javai.springai.actions.sxl.grammar.SymbolDefinition rootSymbol = new org.javai.springai.actions.sxl.grammar.SymbolDefinition(
+			"Root", org.javai.springai.actions.sxl.grammar.SymbolKind.node,
 			List.of(embedParam), List.of(), List.of());
 		
 		return new SxlGrammar(
 			"1.2",
-			new org.javai.springai.actions.sxl.meta.DslMetadata("universal", "Universal DSL", "1.0"),
+			new org.javai.springai.actions.sxl.grammar.DslMetadata("universal", "Universal DSL", "1.0"),
 			Map.of("EMBED", rootSymbol),
-			new org.javai.springai.actions.sxl.meta.LiteralDefinitions(null, null, null, null),
-			new org.javai.springai.actions.sxl.meta.IdentifierRule("Identifier", ".*"),
+			new org.javai.springai.actions.sxl.grammar.LiteralDefinitions(null, null, null, null),
+			new org.javai.springai.actions.sxl.grammar.IdentifierRule("Identifier", ".*"),
 			List.of(),
 			null,
 			List.of(),

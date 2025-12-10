@@ -1,7 +1,7 @@
 package org.javai.springai.actions.sxl;
 
 import java.util.List;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
 
 /**
  * S-expression parser with pluggable parsing strategies.

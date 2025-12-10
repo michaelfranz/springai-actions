@@ -7,10 +7,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import org.javai.springai.actions.sxl.meta.Cardinality;
-import org.javai.springai.actions.sxl.meta.ParameterDefinition;
-import org.javai.springai.actions.sxl.meta.SxlGrammar;
-import org.javai.springai.actions.sxl.meta.SymbolDefinition;
+import org.javai.springai.actions.sxl.grammar.Cardinality;
+import org.javai.springai.actions.sxl.grammar.ParameterDefinition;
+import org.javai.springai.actions.sxl.grammar.SxlGrammar;
+import org.javai.springai.actions.sxl.grammar.SymbolDefinition;
 
 /**
  * DSL-aware parsing strategy that validates token sequences against a meta-grammar.
