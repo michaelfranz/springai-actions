@@ -1,0 +1,176 @@
+meta_grammar_version: 1.2
+
+# ============================================================
+# DSL METADATA
+# ============================================================
+dsl:
+  id: sxl-plan
+  description: "S-expression language for expressing execution plans with steps"
+  version: 2.0
+
+
+# ============================================================
+# SYMBOL DEFINITIONS
+# ============================================================
+symbols:
+
+  # Top-level plan
+  P:
+    description: "Top level plan node"
+    kind: node
+    params:
+      - name: description
+        description: "A description of how the plan steps address the overall goal of the plan"
+        type: literal(string)
+        cardinality: optional
+        ordered: true
+      
+      - name: steps
+        description: "List of steps in the plan (one or more)"
+        type: node
+        allowed_symbols: [PS]
+        cardinality: zeroOrMore
+        ordered: true
+      
+    examples:
+      - label: "Simple PLAN"
+        code: |
+          (EMBED sxl-plan
+            (P "Find all orders with status COMPLETED"
+              (PS queryCompletedOrders (EMBED sxl-sql (Q (F fact_sales f) (W (EQ f.status "COMPLETED")) (S (AS f.id order_id)))))
+              (PS getOrderStatuses (EMBED sxl-sql (Q (F orders o) (S (AS o.status order_status)))))
+            )
+          )
+  PS:
+    description: "Single step in a plan"
+    kind: node
+    params:
+      - name: action-name
+        description: "The name of the Java method to execute for this step (must be a valid Java method name)"
+        type: identifier
+        cardinality: required
+        ordered: true
+        identifier_rules:
+          pattern: "^[a-zA-Z_$][a-zA-Z0-9_$]*$"
+
+      - name: dsl-instance
+        description: "Statement of action to perform in some DSL of what to do in this step"
+        type: embedded(dsl-id)
+        cardinality: required
+        ordered: true
+
+# ============================================================
+# LITERAL DEFINITIONS
+# ============================================================
+literals:
+  string:
+    regex: "^\".*\"$"                      # DSL strings must use double quotes
+  number:
+    regex: "^-?[0-9]+(\\.[0-9]+)?$"
+  boolean:
+    values: [true, false]
+  null:
+    values: [null]
+
+
+# ============================================================
+# IDENTIFIER RULES
+# ============================================================
+identifier:
+  description: "Default identifier rule for table names, aliases, column references"
+  pattern: "^[A-Za-z_][A-Za-z0-9_\\.\\-]*$"
+
+
+# ============================================================
+# RESERVED SYMBOLS
+# ============================================================
+reserved_symbols:
+  - AS
+
+
+# ============================================================
+# EMBEDDING RULES
+# ============================================================
+embedding:
+  enabled: true  # PLAN DSL support embeddings other DSLs
+
+
+# ============================================================
+# DSL-WIDE CONSTRAINTS (GLOBAL RULES)
+# ============================================================
+constraints:
+  - rule: "must_have_root"
+    symbol: "P"
+
+
+# ============================================================
+# LLM SPECIFICATION CONFIGURATION
+# ============================================================
+llm_specs:
+
+  # ----------------------------------------------------------
+  # DEFAULT CONFIGURATIONS for all providers/models
+  # ----------------------------------------------------------
+  defaults:
+    style: strict
+    max_examples: 3
+    include_constraints: true
+    include_symbol_summaries: true
+    include_literal_rules: true
+    include_identifier_rules: true
+    formatting: block
+    enforce_canonical_form: true
+    preamble: true
+    postamble: false
+
+  # ----------------------------------------------------------
+  # PROVIDER-LEVEL DEFAULTS
+  # ----------------------------------------------------------
+  provider_defaults:
+    openai:
+      style: strict
+      max_examples: 2
+
+    anthropic:
+      style: explanatory
+      max_examples: 5
+
+    mistral:
+      style: concise
+
+    llama:
+      style: strict
+
+  # ----------------------------------------------------------
+  # MODEL-SPECIFIC OVERRIDES
+  # ----------------------------------------------------------
+  models:
+    openai:
+      gpt-4.1:
+        overrides:
+          style: concise
+          max_examples: 2
+
+      gpt-5:
+        overrides:
+          max_examples: 4
+
+    anthropic:
+      claude-3:
+        overrides:
+          style: explanatory
+
+    mistral:
+      mistral-large:
+        overrides:
+          style: compact
+
+  # ----------------------------------------------------------
+  # OPTIONAL NAMED PROFILES
+  # ----------------------------------------------------------
+  profiles:
+    testing:
+      style: verbose
+      include_constraints: true
+      max_examples: 10
+

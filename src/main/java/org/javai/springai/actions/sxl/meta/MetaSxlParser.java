@@ -69,7 +69,10 @@ public class MetaSxlParser {
 
 	@SuppressWarnings("unchecked")
 	private SxlGrammar buildGrammar(Map<String, Object> data) {
-		String metaGrammarVersion = (String) data.get("meta_grammar_version");
+		Object versionObj = data.get("meta_grammar_version");
+		String metaGrammarVersion = versionObj instanceof String 
+			? (String) versionObj 
+			: String.valueOf(versionObj);
 		
 		Map<String, Object> dslMap = (Map<String, Object>) data.get("dsl");
 		DslMetadata dsl = buildDslMetadata(dslMap);
@@ -112,10 +115,14 @@ public class MetaSxlParser {
 			throw new SxlParseException("Missing required 'dsl' section");
 		}
 		return new DslMetadata(
-			(String) dslMap.get("id"),
-			(String) dslMap.get("description"),
-			(String) dslMap.get("version")
+			toString(dslMap.get("id")),
+			toString(dslMap.get("description")),
+			toString(dslMap.get("version"))
 		);
+	}
+
+	private String toString(Object obj) {
+		return obj instanceof String ? (String) obj : String.valueOf(obj);
 	}
 
 	@SuppressWarnings("unchecked")

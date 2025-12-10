@@ -110,7 +110,7 @@ symbols:
             (W (EQ f.status "COMPLETED"))
             (G c.name)
             (H (GT (SUM f.amount) 5000))
-            (O ((SUM f.amount) DESC))
+            (O (DESC (SUM f.amount)))
             (L 10)
           )
 
@@ -256,8 +256,7 @@ symbols:
     params:
       - name: select_items
         description: "Select items (expressions or AS clauses)"
-        type: node
-        allowed_symbols: [AS]
+        type: any
         cardinality: oneOrMore
         ordered: true
     
@@ -361,9 +360,12 @@ symbols:
         ordered: true
     
     examples:
-      - label: "ORDER BY"
+      - label: "ORDER BY with simple column"
         code: |
-          (O ((SUM f.amount) DESC))
+          (O (DESC o.amount))
+      - label: "ORDER BY with function"
+        code: |
+          (O (DESC (SUM f.amount)))
 
   # LIMIT clause
   L:
@@ -768,6 +770,51 @@ symbols:
         code: |
           (SUM f.amount)
 
+  AVG:
+    description: "AVG aggregate function (average)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Numeric expression to average"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "AVG"
+        code: |
+          (AVG f.amount)
+
+  MIN:
+    description: "MIN aggregate function (minimum)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Expression to find minimum value"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "MIN"
+        code: |
+          (MIN f.amount)
+
+  MAX:
+    description: "MAX aggregate function (maximum)"
+    kind: operator
+    params:
+      - name: expr
+        description: "Expression to find maximum value"
+        type: any
+        cardinality: required
+        ordered: true
+    
+    examples:
+      - label: "MAX"
+        code: |
+          (MAX f.amount)
+
   UPPER:
     description: "UPPER function (convert to uppercase)"
     kind: operator
@@ -829,12 +876,22 @@ symbols:
   ASC:
     description: "ASC keyword for ORDER BY (ascending order)"
     kind: operator
-    params: []
+    params:
+      - name: expr
+        description: "Expression to sort by in ascending order"
+        type: any
+        cardinality: required
+        ordered: true
 
   DESC:
     description: "DESC keyword for ORDER BY (descending order)"
     kind: operator
-    params: []
+    params:
+      - name: expr
+        description: "Expression to sort by in descending order"
+        type: any
+        cardinality: required
+        ordered: true
 
 
 # ============================================================

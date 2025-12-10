@@ -75,14 +75,24 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 			case "IS_NOT_NULL" -> visitIsNotNull(args);
 			// Functions
 			case "COUNT" -> visitCount(args);
-			case "SUM" -> visitSum(args);
-			case "UPPER" -> visitUpper(args);
 			case "DATE_TRUNC" -> visitDateTrunc(args);
 			case "EXTRACT" -> visitExtract(args);
+			// Standard SQL functions (SUM, AVG, MIN, MAX, UPPER, and any others added to grammar)
+			// These all follow the pattern: FUNCTION_NAME(expr1, expr2, ...)
+			case "SUM", "AVG", "MIN", "MAX", "UPPER" -> visitStandardFunction(symbol, args);
 			// ORDER BY keywords
 			case "ASC" -> visitAsc();
 			case "DESC" -> visitDesc();
-			default -> visitIdentifierOrExpression(symbol, args);
+			default -> {
+				// For unknown symbols with arguments, check if it's likely a function
+				// Standard SQL functions follow the pattern: FUNCTION_NAME(args)
+				// If a symbol has args and isn't one of our special cases, treat it as a function
+				if (!args.isEmpty() && isLikelyFunction(symbol)) {
+					visitStandardFunction(symbol, args);
+				} else {
+					visitIdentifierOrExpression(symbol, args);
+				}
+			}
 		}
 		return sql.toString();
 	}
@@ -329,42 +339,33 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		SqlNodeVisitor visitor = createVisitor();
 		
 		// ORDER BY items can be:
-		// 1. Simple expression: (expr)
-		// 2. Expression with DESC: ((expr) DESC)
-		// 3. Expression with ASC: ((expr) ASC)
+		// 1. Simple expression: (expr) - e.g., (o.amount) or (SUM o.amount)
+		// 2. Expression with DESC: (DESC (expr)) - e.g., (DESC o.amount) or (DESC (SUM o.amount))
+		// 3. Expression with ASC: (ASC (expr)) - e.g., (ASC o.amount) or (ASC (SUM o.amount))
+		// 4. Multiple ORDER BY items are separate arguments to O
 		
 		if (!item.args().isEmpty()) {
-			// Check if first arg is an expression wrapped in parentheses
-			SxlNode firstArg = item.args().get(0);
+			String symbol = item.symbol();
 			
-			// If first arg has args, it's an expression; otherwise it might be DESC/ASC
-			if (!firstArg.args().isEmpty()) {
-				// Expression wrapped in list
-				itemBuilder.append(firstArg.accept(visitor));
-			} else {
-				// First arg might be an identifier or a keyword
-				itemBuilder.append(firstArg.accept(visitor));
-			}
-			
-			// Check remaining args for DESC/ASC
-			for (int i = 1; i < item.args().size(); i++) {
-				SxlNode arg = item.args().get(i);
-				if (!arg.args().isEmpty()) {
-					// Expression
-					itemBuilder.append(", ");
-					itemBuilder.append(arg.accept(visitor));
-				} else if ("DESC".equals(arg.symbol())) {
+			// Check if this item is wrapped in DESC or ASC
+			if ("DESC".equals(symbol)) {
+				// This is (DESC (expr)) - output the expression followed by DESC
+				if (!item.args().isEmpty()) {
+					itemBuilder.append(item.args().get(0).accept(visitor));
 					itemBuilder.append(" DESC");
-				} else if ("ASC".equals(arg.symbol())) {
-					itemBuilder.append(" ASC");
-				} else {
-					// Another expression part
-					itemBuilder.append(", ");
-					itemBuilder.append(arg.accept(visitor));
 				}
+			} else if ("ASC".equals(symbol)) {
+				// This is (ASC (expr)) - output the expression followed by ASC
+				if (!item.args().isEmpty()) {
+					itemBuilder.append(item.args().get(0).accept(visitor));
+					itemBuilder.append(" ASC");
+				}
+			} else {
+				// This is just an expression without DESC/ASC
+				itemBuilder.append(item.accept(visitor));
 			}
 		} else {
-			// Simple identifier
+			// Simple identifier with no args
 			itemBuilder.append(item.accept(visitor));
 		}
 		
@@ -544,24 +545,31 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 		append(")");
 	}
 
-	protected void visitSum(List<SxlNode> args) {
-		if (!args.isEmpty()) {
-			append("SUM(");
-			SqlNodeVisitor visitor = new SqlNodeVisitor();
-			args.get(0).accept(visitor);
-			append(visitor.sql.toString());
-			append(")");
-		}
-	}
-
-	protected void visitUpper(List<SxlNode> args) {
-		if (!args.isEmpty()) {
-			append("UPPER(");
-			SqlNodeVisitor visitor = new SqlNodeVisitor();
-			args.get(0).accept(visitor);
-			append(visitor.sql.toString());
-			append(")");
-		}
+	/**
+	 * Generic handler for standard SQL functions.
+	 * Handles any function that follows the pattern: FUNCTION_NAME(expr1, expr2, ...)
+	 * 
+	 * This allows new functions to be added to the grammar without requiring
+	 * code changes in the visitor. Functions like SUM, AVG, MIN, MAX, UPPER
+	 * all follow this standard pattern.
+	 * 
+	 * Special functions that require different syntax (like COUNT with optional args,
+	 * DATE_TRUNC, EXTRACT) should have their own visit methods.
+	 * 
+	 * @param functionName The name of the function (e.g., "SUM", "AVG", "MIN")
+	 * @param args The function arguments
+	 */
+	protected void visitStandardFunction(String functionName, List<SxlNode> args) {
+		append(functionName);
+		append("(");
+		String items = args.stream()
+			.map(arg -> {
+				SqlNodeVisitor visitor = createVisitor();
+				return arg.accept(visitor);
+			})
+			.collect(Collectors.joining(", "));
+		append(items);
+		append(")");
 	}
 
 	protected void visitDateTrunc(List<SxlNode> args) {
@@ -637,6 +645,29 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 
 	protected String escapeString(String value) {
 		return value.replace("'", "''");
+	}
+
+	/**
+	 * Determines if a symbol is likely a SQL function.
+	 * SQL functions are typically:
+	 * - All uppercase (e.g., SUM, AVG, COUNT)
+	 * - Not containing dots (column references like o.id have dots)
+	 * - Not one of the special SQL keywords/clauses
+	 * 
+	 * This allows new functions added to the grammar to be automatically
+	 * handled without code changes.
+	 */
+	protected boolean isLikelyFunction(String symbol) {
+		if (symbol == null || symbol.isEmpty()) {
+			return false;
+		}
+		// Column references and identifiers often contain dots (e.g., o.id, table.column)
+		if (symbol.contains(".")) {
+			return false;
+		}
+		// SQL functions are typically all uppercase
+		// If the symbol is all uppercase, it's likely a function
+		return symbol.equals(symbol.toUpperCase());
 	}
 }
 

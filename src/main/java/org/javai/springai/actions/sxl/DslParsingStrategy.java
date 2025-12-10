@@ -300,15 +300,29 @@ public class DslParsingStrategy implements ParsingStrategy {
 		
 		// Check if this is a function call (has args) or a bare identifier
 		// Bare identifiers (no args) used as arguments are validated at parameter type level, not here
-		// But top-level nodes (parentSymbol == null) should always be validated, even with no args
-		if (node.args().isEmpty() && parentSymbol != null) {
-			// This is a bare identifier used as an argument - it will be validated when checking parameter types
-			// Don't validate it as a symbol here
-			return;
-		}
+		// But function calls (nodes that exist in the grammar) should always be validated, even with no args,
+		// because they might have required parameters that need to be checked
+		// Top-level nodes (parentSymbol == null) should always be validated, even with no args
 		
 		// This is a function call - validate as a symbol
 		SymbolDefinition symbolDef = grammar.symbols().get(symbol);
+		
+		// If this symbol is not in the grammar and has no args and has a parent, it's a bare identifier
+		// Skip validation here - it will be validated at parameter type level
+		if (symbolDef == null && node.args().isEmpty() && parentSymbol != null) {
+			// This is a bare identifier used as an argument - it will be validated when checking parameter types
+			// But first check if it's a reserved symbol
+			if (grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(symbol)) {
+				throw new SxlParseException(
+					buildContextMessage(state, parentSymbol, argIndex) +
+					"Reserved symbol '" + symbol + "' cannot be used as a regular symbol at position " +
+					findNodePosition(node, state) + ". Reserved symbols: " + grammar.reservedSymbols());
+			}
+			// Unknown bare identifier - will be validated at parameter type level
+			return;
+		}
+		
+		// If symbol is not in grammar at all, it's an unknown symbol
 		if (symbolDef == null) {
 			// Check if it's a reserved symbol
 			if (grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(symbol)) {
@@ -417,14 +431,46 @@ public class DslParsingStrategy implements ParsingStrategy {
 		int paramIndex = 0;
 		int argIndex = 0;
 
+		// If there are no arguments, check if any required parameters are missing
+		if (actualArgs.isEmpty()) {
+			for (ParameterDefinition paramDef : paramDefs) {
+				if (paramDef.cardinality() == Cardinality.required) {
+					throw new SxlParseException(
+						buildContextMessage(state, symbol, -1) +
+						"Symbol '" + symbol + "' requires parameter '" + paramDef.name() +
+						"' (type: " + paramDef.type() + ") at position " + findNodePosition(node, state) +
+						", but it was not provided");
+				}
+				if (paramDef.cardinality() == Cardinality.oneOrMore) {
+					throw new SxlParseException(
+						buildContextMessage(state, symbol, -1) +
+						"Symbol '" + symbol + "' requires at least one occurrence of parameter '" +
+						paramDef.name() + "' (type: " + paramDef.type() + ") at position " +
+						findNodePosition(node, state) + ", but it was not provided");
+				}
+			}
+			return; // No arguments and no required parameters - validation complete
+		}
+
 		while (paramIndex < paramDefs.size() && argIndex < actualArgs.size()) {
 			ParameterDefinition paramDef = paramDefs.get(paramIndex);
 			Cardinality cardinality = paramDef.cardinality();
 
 			int argCount = countMatchingArgs(actualArgs, argIndex, paramDef, symbol, node, state);
 
-			// If no match and parameter is optional, check if argument is right category but wrong type
-			if (argCount == 0 && cardinality == Cardinality.optional && argIndex < actualArgs.size()) {
+			// If no match and parameter is optional or zeroOrMore, handle based on whether it's ordered
+			if (argCount == 0 && argIndex < actualArgs.size() && 
+			    (cardinality == Cardinality.optional || cardinality == Cardinality.zeroOrMore)) {
+				// For ordered parameters, skip without validating - the argument might match a later parameter
+				// Ordered defaults to true, so we check for explicit false
+				Boolean isOrdered = paramDef.ordered();
+				if (isOrdered == null || isOrdered) {
+					// Ordered optional/zeroOrMore parameter with no match - skip it, argument might match later parameter
+					paramIndex++;
+					continue;
+				}
+				
+				// For non-ordered optional parameters, we can check category to give better error messages
 				SxlNode firstArg = actualArgs.get(argIndex);
 				String paramType = paramDef.type();
 				// EMBED is always a node type, never an identifier, even with empty args
@@ -579,21 +625,23 @@ public class DslParsingStrategy implements ParsingStrategy {
 				return true; // No pattern specified, accept any identifier
 			}
 			case "node" -> {
-				// Node type must be a function call (has args), not a bare identifier
+				// Check if symbol is in allowed_symbols first
+				// If allowed_symbols is specified, use it as the definitive check
+				List<String> allowed = paramDef.allowedSymbols();
+				if (allowed != null && !allowed.isEmpty()) {
+					// If symbol is in allowed list, match regardless of whether it has arguments
+					// This allows symbols like (D) to match even though they have no args
+					return allowed.contains(arg.symbol());
+				}
+				// If no allowed_symbols specified, node type must be a function call (has args), not a bare identifier
 				// Exception: EMBED is always treated as a node type, even with empty args
 				if (arg.args().isEmpty() && !EMBED_SYMBOL.equals(arg.symbol())) {
 					return false; // This is a bare identifier, not a function call
-				}
-				// Check if symbol is in allowed_symbols
-				List<String> allowed = paramDef.allowedSymbols();
-				if (allowed != null && !allowed.isEmpty()) {
-					return allowed.contains(arg.symbol());
 				}
 				// If no allowed_symbols specified, accept any symbol (but validate it exists in grammar)
 				return grammar.symbols().containsKey(arg.symbol()) ||
 						(grammar.reservedSymbols() != null && grammar.reservedSymbols().contains(arg.symbol())) ||
 						EMBED_SYMBOL.equals(arg.symbol()); // EMBED is always allowed
-				// If no allowed_symbols specified, accept any symbol (but validate it exists in grammar)
 			}
 			case "dsl-id", "embedded" -> {
 				// These are special types that we can't validate at parse time
