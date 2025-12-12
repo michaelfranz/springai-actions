@@ -56,7 +56,9 @@ public @interface Action {
 	int cost() default 1;
 
 	/**
-	 * Human-readable purpose of the action, forwarded to planner prompts.
+	 * Human-readable purpose of the action, forwarded to planner prompts and used
+	 * by LLM to determine applicability of action. Not mandatory but recommended
+	 * if the action's method name is not self-explanatory.
 	 */
 	String description() default "";
 

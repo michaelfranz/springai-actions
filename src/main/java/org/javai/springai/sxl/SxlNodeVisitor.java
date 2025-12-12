@@ -17,7 +17,7 @@ public interface SxlNodeVisitor<R> {
 	 * @param args the child nodes (arguments)
 	 * @return the result of visiting this node
 	 */
-	R visitSymbol(String symbol, java.util.List<SxlNode> args);
+	default R visitSymbol(String symbol, java.util.List<SxlNode> args) { return null; };
 
 	/**
 	 * Visits a literal node (string, number, boolean, null).
@@ -25,6 +25,6 @@ public interface SxlNodeVisitor<R> {
 	 * @param value the literal value as a string
 	 * @return the result of visiting this node
 	 */
-	R visitLiteral(String value);
+	default R visitLiteral(String value) { return null; }
 }
 

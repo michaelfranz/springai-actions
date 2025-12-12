@@ -1,0 +1,125 @@
+package org.javai.springai.dsl.plan;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.util.List;
+import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
+import org.javai.springai.dsl.sql.Query;
+import org.javai.springai.sxl.DefaultValidatorRegistry;
+import org.javai.springai.sxl.DslParsingStrategy;
+import org.javai.springai.sxl.ParsingStrategy;
+import org.javai.springai.sxl.SxlNode;
+import org.javai.springai.sxl.SxlParser;
+import org.javai.springai.sxl.SxlToken;
+import org.javai.springai.sxl.SxlTokenizer;
+import org.javai.springai.sxl.grammar.SxlGrammar;
+import org.javai.springai.sxl.grammar.SxlGrammarParser;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+class PlanNodeVisitorTest {
+
+	private static SxlGrammar planGrammar;
+	private static SxlGrammar sqlGrammar;
+
+	@BeforeAll
+	static void setUpBeforeClass() {
+		SxlGrammarParser grammarParser = new SxlGrammarParser();
+		planGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("sxl-meta-grammar-plan.yml"));
+		sqlGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("sxl-meta-grammar-sql.yml"));
+		TypeFactoryBootstrap.registerBuiltIns();
+	}
+
+
+	@Test
+	void generateMinimalPlan() {
+		String zeroStepPlan = """
+				(P "Minimal plan")
+				""";
+		SxlNode planNode = parse(zeroStepPlan);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan).isNotNull();
+		assertThat(plan.assistantMessage()).isEqualTo("Minimal plan");
+		assertThat(plan.planSteps()).isEmpty();
+	}
+
+	@Test
+	void generatePlanWithEmbeddedSql() {
+		String planText = """
+				(P "Query plan"
+				  (PS "run query" fetchOrders (EMBED sxl-sql (Q (S 1))))
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan).isNotNull();
+		assertThat(plan.assistantMessage()).isEqualTo("Query plan");
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep ps1 = plan.planSteps().getFirst();
+		assertThat(ps1).isInstanceOf(PlanStep.Action.class);
+		PlanStep.Action a1 = (PlanStep.Action)ps1;
+		assertThat(a1.assistantMessage()).isEqualTo("run query");
+		assertThat(a1.actionId()).isEqualTo("fetchOrders");
+		assertThat(a1.actionArguments()).hasSize(1);
+		assertThat(a1.actionArguments()[0]).isInstanceOf(Query.class);
+	}
+
+	@Test
+	void generatePlanWithErrorStep() {
+		String planText = """
+				(P "Plan with error"
+				  (PS "failed step" someAction (ERROR "LLM timeout"))
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan.planSteps()).hasSize(1);
+		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.Error.class);
+		PlanStep.Error error = (PlanStep.Error) plan.planSteps().getFirst();
+		assertThat(error.assistantMessage()).isEqualTo("LLM timeout");
+	}
+
+	@Test
+	void rejectsNonLiteralPlanDescription() {
+		String planText = """
+				(P (Q (S 1)))
+				""";
+		assertThatThrownBy(() -> parse(planText))
+				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+	}
+
+	@Test
+	void rejectsNonLiteralActionId() {
+		String planText = """
+				(P "desc"
+				  (PS "msg" (Q (S 1)) (EMBED sxl-sql (Q (S 1))))
+				)
+				""";
+		assertThatThrownBy(() -> parse(planText))
+				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+	}
+
+	@Test
+	void rejectsUnknownEmbeddedDsl() {
+		String planText = """
+				(P "desc"
+				  (PS "msg" actionId (EMBED sxl-unknown (Q (S 1))))
+				)
+				""";
+		assertThatThrownBy(() -> parse(planText))
+				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+	}
+
+	private SxlNode parse(String sxl) {
+		SxlTokenizer tokenizer = new SxlTokenizer(sxl);
+		List<SxlToken> tokens = tokenizer.tokenize();
+		DefaultValidatorRegistry validatorRegistry = new DefaultValidatorRegistry();
+		validatorRegistry.addGrammar("sxl-plan", planGrammar);
+		validatorRegistry.addGrammar("sxl-sql", sqlGrammar);
+		ParsingStrategy parsingStrategy = new DslParsingStrategy(planGrammar, validatorRegistry);
+		SxlParser parser = new SxlParser(tokens, parsingStrategy);
+		List<SxlNode> nodes = parser.parse();
+		return nodes.getFirst();
+	}
+
+}

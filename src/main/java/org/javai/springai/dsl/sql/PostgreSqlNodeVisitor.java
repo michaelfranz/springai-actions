@@ -16,9 +16,15 @@ public class PostgreSqlNodeVisitor extends SqlNodeVisitor {
 	/**
 	 * Generate PostgreSQL SQL from a node AST.
 	 */
-	public static String generate(SxlNode node) {
+	public static String generate(SxlNode queryNode) {
+		if (queryNode.isLiteral()) {
+			throw new IllegalArgumentException("Cannot create a query from a literal");
+		}
+		if (!queryNode.symbol().equals("Q")) {
+			throw new IllegalArgumentException("Cannot create a query from a node that is not a query");
+		}
 		PostgreSqlNodeVisitor visitor = new PostgreSqlNodeVisitor();
-		return node.accept(visitor);
+		return queryNode.accept(visitor);
 	}
 
 	@Override

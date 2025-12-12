@@ -28,7 +28,7 @@ symbols:
       - name: steps
         description: "List of steps in the plan (one or more)"
         type: node
-        allowed_symbols: [PS]
+        allowed_symbols: [PS, ES]
         cardinality: zeroOrMore
         ordered: true
       
@@ -45,8 +45,14 @@ symbols:
     description: "Single step in a plan"
     kind: node
     params:
-      - name: action-name
-        description: "The name of the Java method to execute for this step (must be a valid Java method name)"
+      - name: action-step-message
+        description: "User-friendly and/or technical message explaining the step"
+        type: literal(string)
+        cardinality: required
+        ordered: true
+
+      - name: action-id
+        description: "The id of the action to execute for this step"
         type: identifier
         cardinality: required
         ordered: true
@@ -61,7 +67,7 @@ symbols:
         ordered: true
 
   ERROR:
-    description: "Represents a failed step - when an LLM failed to generate a valid expression for this step"
+    description: "Represents an error step - when an LLM failed to generate a valid expression for this step"
     kind: node
     params:
       - name: reason
@@ -70,18 +76,11 @@ symbols:
         cardinality: required
         ordered: true
 
-      - name: fallback-expression
-        description: "Optional fallback embedded DSL expression to use if primary generation failed"
-        type: node
-        allowed_symbols: [EMBED]
-        cardinality: optional
-        ordered: true
-    
     examples:
       - label: "Simple error with reason only"
         code: |
           (ERROR "LLM timeout after 30 seconds")
-      
+
       - label: "Error with fallback expression"
         code: |
           (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))

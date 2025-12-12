@@ -5,7 +5,7 @@ import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.junit.jupiter.api.Test;
 
-class ActionDefinitionFactoryTest {
+class ActionDefinitionRegistryTest {
 
 	@Test
 	void fromDiscoversAnnotatedMethodsAndBuildsDescriptions() {

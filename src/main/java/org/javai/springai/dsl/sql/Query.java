@@ -2,30 +2,29 @@ package org.javai.springai.dsl.sql;
 
 import org.javai.springai.sxl.SxlNode;
 
-public record Query(SxlNode queryNode) {
+public record Query(QueryStringFactory queryStringFactory) {
 
-	public Query {
-		if (queryNode.isLiteral()) {
-			throw new IllegalArgumentException("Cannot create a query from a literal");
-		}
-		if (!queryNode.symbol().equals("Q")) {
-			throw new IllegalArgumentException("Cannot create a query from a node that is not a query");
-		}
+	private interface QueryStringFactory {
+		String create(Query query, Dialect dialect);
 	}
 
-	enum Dialect {
+	public static Query of(SxlNode queryNode) {
+		return new Query((query, dialect) -> switch (dialect) {
+			case ANSI -> SqlNodeVisitor.generate(queryNode);
+			case POSTGRES -> PostgreSqlNodeVisitor.generate(queryNode);
+		});
+	}
+
+	public enum Dialect {
 		ANSI, POSTGRES
 	}
 
-	String sqlString() {
-		return SqlNodeVisitor.generate(queryNode);
+	public String sqlString() {
+		return sqlString(Dialect.ANSI);
 	}
 
-	String sqlString(Dialect dialect) {
-		return switch (dialect) {
-			case ANSI -> SqlNodeVisitor.generate(queryNode);
-			case POSTGRES -> PostgreSqlNodeVisitor.generate(queryNode);
-		};
+	public String sqlString(Dialect dialect) {
+		return queryStringFactory.create(this, dialect);
 	}
 
 }

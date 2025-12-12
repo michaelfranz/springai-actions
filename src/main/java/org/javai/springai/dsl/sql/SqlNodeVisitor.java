@@ -19,11 +19,17 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 	protected boolean needsSpace = false;
 
 	/**
-	 * Generate SQL from a node AST.
+	 * Generate ANSI SQL from a node AST.
 	 */
-	public static String generate(SxlNode node) {
+	public static String generate(SxlNode queryNode) {
+		if (queryNode.isLiteral()) {
+			throw new IllegalArgumentException("Cannot create a query from a literal");
+		}
+		if (!queryNode.symbol().equals("Q")) {
+			throw new IllegalArgumentException("Cannot create a query from a node that is not a query");
+		}
 		SqlNodeVisitor visitor = new SqlNodeVisitor();
-		return node.accept(visitor);
+		return queryNode.accept(visitor);
 	}
 
 	/**
@@ -76,9 +82,6 @@ public class SqlNodeVisitor implements SxlNodeVisitor<String> {
 			case "COUNT" -> visitCount(args);
 			case "DATE_TRUNC" -> visitDateTrunc(args);
 			case "EXTRACT" -> visitExtract(args);
-			// Standard SQL functions (SUM, AVG, MIN, MAX, UPPER, and any others added to grammar)
-			// These all follow the pattern: FUNCTION_NAME(expr1, expr2, ...)
-			case "SUM", "AVG", "MIN", "MAX", "UPPER" -> visitStandardFunction(symbol, args);
 			// ORDER BY keywords
 			case "ASC" -> visitAsc();
 			case "DESC" -> visitDesc();
