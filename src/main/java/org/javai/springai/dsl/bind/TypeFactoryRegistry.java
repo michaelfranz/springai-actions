@@ -10,6 +10,7 @@ public final class TypeFactoryRegistry {
 
 	private static final Map<String, TypeFactory<?>> factories = new ConcurrentHashMap<>();
 	private static final Map<String, Class<?>> types = new ConcurrentHashMap<>();
+	private static final Map<Class<?>, String> typeToDslId = new ConcurrentHashMap<>();
 
 	private TypeFactoryRegistry() {
 	}
@@ -22,6 +23,11 @@ public final class TypeFactoryRegistry {
 			throw new IllegalArgumentException("Duplicate dslId detected: " + normalizedId);
 		}
 		types.put(normalizedId, type);
+		String previousDslId = typeToDslId.putIfAbsent(type, normalizedId);
+		if (previousDslId != null && !previousDslId.equals(normalizedId)) {
+			typeToDslId.remove(type, normalizedId);
+			throw new IllegalArgumentException("Type already bound to different dslId: " + type + " -> " + previousDslId);
+		}
 	}
 
 	public static Optional<TypeFactory<?>> getFactory(String dslId) {
@@ -43,6 +49,11 @@ public final class TypeFactoryRegistry {
 		}
 		//noinspection unchecked
 		return Optional.of((TypeFactory<T>) typeFactory);
+	}
+
+	public static Optional<String> getDslIdForType(Class<?> type) {
+		Objects.requireNonNull(type, "type must not be null");
+		return Optional.ofNullable(typeToDslId.get(type));
 	}
 
 	public static void requireRegistered(String... expectedDslIds) {
@@ -72,6 +83,7 @@ public final class TypeFactoryRegistry {
 		}
 		factories.clear();
 		types.clear();
+		typeToDslId.clear();
 	}
 
 }

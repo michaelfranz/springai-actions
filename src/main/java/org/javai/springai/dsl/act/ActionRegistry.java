@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.dsl.bind.TypeFactoryRegistry;
 
 public final class ActionRegistry {
 
@@ -34,7 +35,9 @@ public final class ActionRegistry {
 							method,
 							actionParameterDefinitions
 					));
-			assert previous == null : "Duplicate action definition: " + id;
+			if (previous != null) {
+				throw new IllegalStateException("Duplicate action definition: " + id);
+			}
 
 			String description = createActionDescription(action, method.getName());
 			List<ActionParameterSpec> parameterSpecs = createActionParameterSpecs(bean, method);
@@ -53,15 +56,18 @@ public final class ActionRegistry {
 	private static ActionParameterSpec createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
 		return new ActionParameterSpec(
-				parameter.getClass().getName(),
+				parameter.getType().getName(),
 				createActionParameterDescription(annotation, parameter.getName())
+				,
+				TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null)
 		);
 	}
 
 	private static String createActionParameterDescription(ActionParam actionParam, String name) {
-		return !actionParam.description().isBlank()
-				? actionParam.description()
-				: "Parameter to " + nameBreakdown(name);
+		if (actionParam != null && !actionParam.description().isBlank()) {
+			return actionParam.description();
+		}
+		return "Parameter to " + nameBreakdown(name);
 	}
 
 
@@ -102,6 +108,10 @@ public final class ActionRegistry {
 	}
 
 	private List<ActionParameterSpec> createActionParameterSpecs(Object bean, Method method) {
-		return null;
+		List<ActionParameterSpec> specs = new ArrayList<>();
+		for (Parameter parameter : method.getParameters()) {
+			specs.add(createActionParameterDefinition(parameter));
+		}
+		return specs;
 	}
 }

@@ -1,12 +1,13 @@
 package org.javai.springai.dsl.act;
 
 /**
- * A spec that is communicated to the LLM, which describes the type of an action
- * parameter
- * @param typeName
- * @param description
+ * A spec communicated to the LLM describing an action parameter.
+ *
+ * @param typeName the Java type name of the parameter
+ * @param description human-friendly description
+ * @param dslId optional DSL id if the parameter is supplied via an embedded DSL
  */
-public record ActionParameterSpec(String typeName, String description) {
+public record ActionParameterSpec(String typeName, String description, String dslId) {
 	public String toSxl() {
 		return null;
 	}

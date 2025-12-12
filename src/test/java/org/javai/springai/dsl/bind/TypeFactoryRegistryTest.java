@@ -102,6 +102,22 @@ class TypeFactoryRegistryTest {
 				.hasMessageContaining("No factory registered");
 	}
 
+	@Test
+	void reverseLookupReturnsDslIdForType() {
+		TypeFactoryRegistry.register("sxl-test", String.class, new DummyStringFactory());
+
+		assertThat(TypeFactoryRegistry.getDslIdForType(String.class)).contains("sxl-test");
+	}
+
+	@Test
+	void reverseLookupDetectsTypeCollision() {
+		TypeFactoryRegistry.register("sxl-test", String.class, new DummyStringFactory());
+
+		assertThatThrownBy(() -> TypeFactoryRegistry.register("sxl-other", String.class, new DummyStringFactory()))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("Type already bound to different dslId");
+	}
+
 	private static final class DummyStringFactory implements TypeFactory<String> {
 		@Override
 		public Class<String> getType() {
