@@ -1444,6 +1444,8 @@ llm_specs:
     enforce_canonical_form: true
     preamble: true
     postamble: false
+    guidance: |
+      You are given an S-expression SQL DSL with root symbol Q. Use DSL symbols only (Q, F, W, EQ, NEQ, LT, GT, LTE, GTE, LIKE, IN, AND, OR, NOT, S for select, JO for join, O for order, L for limit, etc.). Always emit well-formed S-expressions and never add free-form text. Respect required ordering of clauses: FROM/filters before SELECT, ORDER before LIMIT/OFFSET. Use identifiers for tables/columns, double-quoted strings for literals. Keep output concise and canonical.
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -1452,6 +1454,8 @@ llm_specs:
     openai:
       style: strict
       max_examples: 2
+      guidance: |
+        Emit only canonical S-expressions for the SQL DSL. Root is (Q ...). Include FROM via (F <table> [alias]) before filters. Use (W (...)) for WHERE, combining predicates with AND/OR. Use comparison operators EQ, NEQ, LT, GT, LTE, GTE, LIKE, IN; wrap strings in double quotes. SELECT columns with (S (AS col alias)? ...). ORDER with (O (ASC col) (DESC col)...). LIMIT with (L <n> [offset]). Do not add prose or markdown. Keep whitespace minimal and symbols exact.
 
     anthropic:
       style: explanatory

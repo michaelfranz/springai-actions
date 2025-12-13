@@ -26,11 +26,13 @@ public final class ActionRegistry {
 
 			String id = createActionId(bean, method);
 			List<ActionParameterSpec> actionParameterDefinitions = createActionParameterDefinitions(bean, method);
+			String description = createActionDescription(action, method.getName());
 
 			var previous = actionDefinitions.put(
 					id,
 					new ActionDefinition(
 							id,
+							description,
 							bean,
 							method,
 							actionParameterDefinitions
@@ -39,7 +41,6 @@ public final class ActionRegistry {
 				throw new IllegalStateException("Duplicate action definition: " + id);
 			}
 
-			String description = createActionDescription(action, method.getName());
 			List<ActionParameterSpec> parameterSpecs = createActionParameterSpecs(bean, method);
 			actionSpecs.add(new ActionSpec(id, description, parameterSpecs));
 		}
@@ -55,11 +56,13 @@ public final class ActionRegistry {
 
 	private static ActionParameterSpec createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
+		String dslId = TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null);
 		return new ActionParameterSpec(
+				parameter.getName(),
 				parameter.getType().getName(),
-				createActionParameterDescription(annotation, parameter.getName())
-				,
-				TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null)
+				deriveShortTypeId(parameter.getType(), dslId),
+				createActionParameterDescription(annotation, parameter.getName()),
+				dslId
 		);
 	}
 
@@ -68,6 +71,14 @@ public final class ActionRegistry {
 			return actionParam.description();
 		}
 		return "Parameter to " + nameBreakdown(name);
+	}
+
+	private static String deriveShortTypeId(Class<?> type, String dslId) {
+		String simple = type.getSimpleName();
+		if (dslId != null && !dslId.isBlank()) {
+			return dslId + ":" + simple;
+		}
+		return simple;
 	}
 
 
@@ -101,6 +112,10 @@ public final class ActionRegistry {
 
 	public ActionDefinition getActionDefinition(String actionId) {
 		return actionDefinitions.get(actionId);
+	}
+
+	public List<ActionDefinition> getActionDefinitions() {
+		return Collections.unmodifiableList(new ArrayList<>(actionDefinitions.values()));
 	}
 
 	public List<ActionSpec> getActionSpecs() {

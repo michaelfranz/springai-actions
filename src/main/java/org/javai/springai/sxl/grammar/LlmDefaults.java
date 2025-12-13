@@ -13,7 +13,8 @@ public record LlmDefaults(
 	String formatting,  // block | compact | markdown
 	Boolean enforceCanonicalForm,
 	Boolean preamble,
-	Boolean postamble
+	Boolean postamble,
+	String guidance
 ) {
 	public <R> R accept(SxlGrammarVisitor<R> visitor) {
 		return visitor.visitLlmDefaults(this);

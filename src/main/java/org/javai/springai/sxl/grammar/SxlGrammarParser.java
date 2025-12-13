@@ -368,7 +368,8 @@ public class SxlGrammarParser {
 			(String) defaultsMap.get("formatting"),
 			(Boolean) defaultsMap.get("enforce_canonical_form"),
 			(Boolean) defaultsMap.get("preamble"),
-			(Boolean) defaultsMap.get("postamble")
+			(Boolean) defaultsMap.get("postamble"),
+			(String) defaultsMap.get("guidance")
 		);
 	}
 
@@ -384,7 +385,8 @@ public class SxlGrammarParser {
 			Map<String, Object> providerData = (Map<String, Object>) entry.getValue();
 			providerDefaults.put(provider, new LlmProviderDefaults(
 				(String) providerData.get("style"),
-				(Integer) providerData.get("max_examples")
+				(Integer) providerData.get("max_examples"),
+				(String) providerData.get("guidance")
 			));
 		}
 		return providerDefaults;
@@ -422,7 +424,8 @@ public class SxlGrammarParser {
 			(String) overridesMap.get("style"),
 			(Integer) overridesMap.get("max_examples"),
 			(Boolean) overridesMap.get("include_constraints"),
-			(String) overridesMap.get("formatting")
+			(String) overridesMap.get("formatting"),
+			(String) overridesMap.get("guidance")
 		);
 	}
 

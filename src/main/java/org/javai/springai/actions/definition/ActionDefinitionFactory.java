@@ -8,6 +8,11 @@ import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 
+/**
+ * @deprecated Legacy factory for action definitions. Prefer {@link org.javai.springai.dsl.act.ActionSpecFactory}
+ * and {@link org.javai.springai.dsl.act.ActionSpecJsonMapper} with {@link org.javai.springai.dsl.act.ActionRegistry}.
+ */
+@Deprecated
 public final class ActionDefinitionFactory {
 
 	private static final ObjectMapper mapper = new ObjectMapper();

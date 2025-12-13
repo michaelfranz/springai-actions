@@ -148,6 +148,8 @@ llm_specs:
     enforce_canonical_form: true
     preamble: true
     postamble: false
+    guidance: |
+      You are given a PLAN DSL with root symbol P (plan) and steps PS, and error nodes ERROR. Each plan has a description and zero or more steps. Each step has a human-friendly message, an action id, and either an EMBED of another DSL payload or an ERROR reason. Always emit well-formed S-expressions matching the grammar, respect ordering, and include DSL ids when embedding (e.g., (EMBED sxl-sql ...)). Do not invent symbols outside the grammar. Prefer concise, canonical forms.
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -156,6 +158,8 @@ llm_specs:
     openai:
       style: strict
       max_examples: 2
+      guidance: |
+        Use concise, canonical S-expressions for the PLAN DSL. Root must be (P <description> ...steps...). Each step is (PS <assistant-message> <action-id> <content>) where <content> is either (EMBED <dsl-id> <payload>) or (ERROR "reason"). Always include DSL ids on EMBED nodes (e.g., sxl-sql). Do not add extra text outside the S-expression. Keep descriptions short, avoid markdown, and favor minimal whitespace.
 
     anthropic:
       style: explanatory

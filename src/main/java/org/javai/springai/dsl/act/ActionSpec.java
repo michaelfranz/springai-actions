@@ -15,20 +15,23 @@ public record ActionSpec(
 		List<ActionParameterSpec> actionParameterSpecs
 ) {
 
-	String toSxl() {
-		StringBuffer sxlExpression = new StringBuffer()
+	public String toSxl() {
+		StringBuilder sxlExpression = new StringBuilder()
 				.append("(PS ")
 				.append(id)
 				.append(" ")
-				.append(description);
+				.append("\"").append(description).append("\"");
 		if (actionParameterSpecs.isEmpty()) {
 			return sxlExpression.append(")").toString();
 		}
 		sxlExpression.append(" (");
 		actionParameterSpecs.forEach(
-				aps -> sxlExpression.append(aps.toSxl())
+				aps -> sxlExpression.append(aps.toSxl()).append(" ")
 		);
-		sxlExpression.append(")");
+		if (sxlExpression.charAt(sxlExpression.length() - 1) == ' ') {
+			sxlExpression.setLength(sxlExpression.length() - 1);
+		}
+		sxlExpression.append("))");
 		return sxlExpression.toString();
 	}
 }

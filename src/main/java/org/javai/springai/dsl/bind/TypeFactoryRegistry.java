@@ -19,8 +19,13 @@ public final class TypeFactoryRegistry {
 		Objects.requireNonNull(type, "type must not be null");
 		Objects.requireNonNull(factory, "factory must not be null");
 		String normalizedId = normalize(dslId);
-		if (factories.putIfAbsent(normalizedId, factory) != null) {
-			throw new IllegalArgumentException("Duplicate dslId detected: " + normalizedId);
+		TypeFactory<?> existingFactory = factories.putIfAbsent(normalizedId, factory);
+		Class<?> existingType = types.get(normalizedId);
+		if (existingFactory != null) {
+			if (!Objects.equals(existingType, type)) {
+				throw new IllegalArgumentException("Duplicate dslId detected with different type: " + normalizedId);
+			}
+			return; // already registered with same id/type; no-op
 		}
 		types.put(normalizedId, type);
 		String previousDslId = typeToDslId.putIfAbsent(type, normalizedId);

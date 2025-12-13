@@ -7,7 +7,8 @@ public record LlmOverrides(
 	String style,
 	Integer maxExamples,
 	Boolean includeConstraints,
-	String formatting
+	String formatting,
+	String guidance
 ) {
 	public <R> R accept(SxlGrammarVisitor<R> visitor) {
 		return visitor.visitLlmOverrides(this);

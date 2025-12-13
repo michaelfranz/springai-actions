@@ -1,30 +1,10 @@
 package org.javai.springai.sxl.grammar;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.sxl.SxlParseException;
-import org.javai.springai.sxl.grammar.Cardinality;
-import org.javai.springai.sxl.grammar.EmbeddingConfig;
-import org.javai.springai.sxl.grammar.Example;
-import org.javai.springai.sxl.grammar.GlobalConstraint;
-import org.javai.springai.sxl.grammar.IdentifierRule;
-import org.javai.springai.sxl.grammar.LiteralDefinitions;
-import org.javai.springai.sxl.grammar.LiteralRule;
-import org.javai.springai.sxl.grammar.LlmDefaults;
-import org.javai.springai.sxl.grammar.LlmModelOverrides;
-import org.javai.springai.sxl.grammar.LlmOverrides;
-import org.javai.springai.sxl.grammar.LlmProfile;
-import org.javai.springai.sxl.grammar.LlmProviderDefaults;
-import org.javai.springai.sxl.grammar.LlmSpecs;
-import org.javai.springai.sxl.grammar.ParameterDefinition;
-import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarParser;
-import org.javai.springai.sxl.grammar.SymbolConstraint;
-import org.javai.springai.sxl.grammar.SymbolDefinition;
-import org.javai.springai.sxl.grammar.SymbolKind;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -803,6 +783,7 @@ class SxlGrammarParserTest {
 			assertThat(defaults.enforceCanonicalForm()).isTrue();
 			assertThat(defaults.preamble()).isTrue();
 			assertThat(defaults.postamble()).isFalse();
+			assertThat(defaults.guidance()).isNull();
 		}
 
 		@Test
@@ -831,6 +812,7 @@ class SxlGrammarParserTest {
 			LlmProviderDefaults openai = providerDefaults.get("openai");
 			assertThat(openai.style()).isEqualTo("strict");
 			assertThat(openai.maxExamples()).isEqualTo(2);
+			assertThat(openai.guidance()).isNull();
 
 			LlmProviderDefaults anthropic = providerDefaults.get("anthropic");
 			assertThat(anthropic.style()).isEqualTo("explanatory");
@@ -870,6 +852,7 @@ class SxlGrammarParserTest {
 			assertThat(overrides.maxExamples()).isEqualTo(2);
 			assertThat(overrides.includeConstraints()).isFalse();
 			assertThat(overrides.formatting()).isEqualTo("compact");
+			assertThat(overrides.guidance()).isNull();
 		}
 
 		@Test
@@ -1098,6 +1081,7 @@ class SxlGrammarParserTest {
 			assertThat(grammar.embedding()).isNotNull();
 			assertThat(grammar.constraints()).isNotEmpty();
 			assertThat(grammar.llmSpecs()).isNotNull();
+			assertThat(grammar.llmSpecs().defaults().guidance()).isNotBlank();
 		}
 
 		@Test
@@ -1119,6 +1103,7 @@ class SxlGrammarParserTest {
 			assertThat(grammar.embedding()).isNotNull();
 			assertThat(grammar.constraints()).isNotEmpty();
 			assertThat(grammar.llmSpecs()).isNotNull();
+			assertThat(grammar.llmSpecs().defaults().guidance()).isNotBlank();
 		}
 	}
 }

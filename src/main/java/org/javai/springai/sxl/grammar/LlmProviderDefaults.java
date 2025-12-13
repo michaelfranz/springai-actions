@@ -5,7 +5,8 @@ package org.javai.springai.sxl.grammar;
  */
 public record LlmProviderDefaults(
 	String style,
-	Integer maxExamples
+	Integer maxExamples,
+	String guidance
 ) {
 	public <R> R accept(SxlGrammarVisitor<R> visitor) {
 		return visitor.visitLlmProviderDefaults(this);
