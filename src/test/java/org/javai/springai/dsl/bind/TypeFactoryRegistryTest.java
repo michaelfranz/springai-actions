@@ -40,12 +40,12 @@ class TypeFactoryRegistryTest {
 	}
 
 	@Test
-	void rejectsDuplicateRegistration() {
+	void allowsIdempotentRegistrationSameType() {
 		TypeFactoryRegistry.register("sxl-test", String.class, new DummyStringFactory());
 
-		assertThatThrownBy(() -> TypeFactoryRegistry.register("SXL-TEST", String.class, new DummyStringFactory()))
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("Duplicate dslId");
+		TypeFactoryRegistry.register("SXL-TEST", String.class, new DummyStringFactory());
+
+		assertThat(TypeFactoryRegistry.getFactory("sxl-test", String.class)).isPresent();
 	}
 
 	@Test

@@ -302,8 +302,7 @@ class PlanDslTest {
 
 			assertThatThrownBy(() -> parseAndValidate(input))
 					.isInstanceOf(SxlParseException.class)
-					.hasMessageContaining("parameter 'action-name' expects an identifier")
-					.hasMessageContaining("action-name");
+					.hasMessageContaining("parameter 'action-id' expects an identifier");
 		}
 
 		@Test

@@ -45,19 +45,13 @@ symbols:
     description: "Single step in a plan"
     kind: node
     params:
-      - name: action-step-message
-        description: "User-friendly and/or technical message explaining the step"
-        type: literal(string)
-        cardinality: required
-        ordered: true
-
       - name: action-id
         description: "The id of the action to execute for this step"
         type: identifier
         cardinality: required
         ordered: true
         identifier_rules:
-          pattern: "^[a-zA-Z_$][a-zA-Z0-9_$]*$"
+          pattern: "^[a-z][a-zA-Z0-9_$]*$"
 
       - name: step-content
         description: "Either an embedded DSL expression or an error step describing why this step failed"
@@ -74,6 +68,13 @@ symbols:
         description: "User-friendly and/or technical message explaining why the step failed"
         type: literal(string)
         cardinality: required
+        ordered: true
+
+      - name: fallback
+        description: "Optional fallback expression to use when the step fails"
+        type: node
+        allowed_symbols: [EMBED]
+        cardinality: optional
         ordered: true
 
     examples:
@@ -119,6 +120,8 @@ reserved_symbols:
 # ============================================================
 embedding:
   enabled: true  # PLAN DSL support embeddings other DSLs
+  symbol: EMBED
+  auto_register_symbol: true
 
 
 # ============================================================

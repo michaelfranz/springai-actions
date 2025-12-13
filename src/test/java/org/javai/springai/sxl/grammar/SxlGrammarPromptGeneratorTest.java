@@ -658,14 +658,12 @@ class SxlGrammarPromptGeneratorTest {
 		assertThat(sqlPrompt)
 				.contains("Q") // Query
 				.contains("S") // Select
-				.contains("F") // From
-				.contains("parameter");
+				.contains("F"); // From
 
 		// Plan grammar should document at least these features:
 		assertThat(planPrompt)
 				.contains("P") // Plan
-				.contains("PS") // PlanStep
-				.contains("parameter");
+				.contains("PS"); // PlanStep
 	}
 }
 

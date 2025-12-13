@@ -25,7 +25,7 @@ class ActionRegistrySpecTest {
 		assertThat(specs).hasSize(1);
 
 		ActionSpec spec = specs.getFirst();
-		assertThat(spec.id()).endsWith(".runQuery");
+		assertThat(spec.id()).isEqualTo("runQuery");
 		assertThat(spec.description()).isEqualTo("Run a query");
 		assertThat(spec.actionParameterSpecs()).hasSize(2);
 
@@ -50,7 +50,7 @@ class ActionRegistrySpecTest {
 		var json = ActionSpecJsonMapper.toJsonArray(specs);
 		assertThat(json).hasSize(1);
 		var first = json.get(0);
-		assertThat(first.get("id").asText()).endsWith(".runQuery");
+		assertThat(first.get("id").asText()).isEqualTo("runQuery");
 		assertThat(first.get("description").asText()).isEqualTo("Run a query");
 		var params = first.get("parameters");
 		assertThat(params.size()).isEqualTo(2);
@@ -68,7 +68,7 @@ class ActionRegistrySpecTest {
 				new OtherActions());
 
 		assertThat(specs).hasSize(1);
-		assertThat(specs.getFirst().id()).endsWith("runQuery");
+		assertThat(specs.getFirst().id()).isEqualTo("runQuery");
 	}
 
 	private static class SampleActions {

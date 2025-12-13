@@ -107,7 +107,7 @@ public final class ActionRegistry {
 	}
 
 	private static String createActionId(Object bean, Method method) {
-		return bean.getClass().getName() + "." + method.getName();
+		return method.getName();
 	}
 
 	public ActionDefinition getActionDefinition(String actionId) {

@@ -11,7 +11,7 @@ import org.javai.springai.sxl.grammar.SxlGrammarParser;
 /**
  * Loads DSL guidance from SxlGrammar resources.
  */
-public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider {
+public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, DslGrammarSource {
 
 	private final Map<String, SxlGrammar> grammars;
 
@@ -62,5 +62,10 @@ public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider {
 		}
 		// default
 		return Optional.ofNullable(grammar.llmSpecs().defaults().guidance());
+	}
+
+	@Override
+	public Optional<SxlGrammar> grammarFor(String dslId) {
+		return Optional.ofNullable(grammars.get(dslId));
 	}
 }

@@ -42,7 +42,7 @@ class ActionPromptEmitterTest {
 		assertThat(node.isArray()).isTrue();
 		assertThat(node).hasSize(1);
 		JsonNode first = node.get(0);
-		assertThat(first.get("id").asText()).endsWith(".runQuery");
+		assertThat(first.get("id").asText()).isEqualTo("runQuery");
 		assertThat(first.get("parameters")).isNotNull();
 		assertThat(first.get("schema")).isNotNull();
 	}

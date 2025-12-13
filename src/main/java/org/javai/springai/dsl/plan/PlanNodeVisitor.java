@@ -68,18 +68,14 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 	}
 
 	private void visitPlanStep(List<SxlNode> args) {
-		if (args.size() < 3) {
-			throw new IllegalStateException("Plan step must have description, an action id, and a step content node");
+		if (args.size() < 2) {
+			throw new IllegalStateException("Plan step must have an action id and a step content node");
 		}
-		SxlNode descriptionNode = args.getFirst();
-		if (!descriptionNode.isLiteral()) {
-			throw new IllegalStateException("Plan step description must be a literal string");
-		}
-		SxlNode actionIdNode = args.get(1);
-		String actionStepMessage = descriptionNode.literalValue();
+		SxlNode actionIdNode = args.getFirst();
+		SxlNode contentNode = args.get(1);
 		String actionId = extractIdentifier(actionIdNode, "Plan step action id must be an identifier or literal string");
+		String actionStepMessage = "";
 
-		SxlNode contentNode = args.get(2);
 		if (contentNode.isLiteral()) {
 			throw new IllegalStateException("Plan step content must be a node");
 		}

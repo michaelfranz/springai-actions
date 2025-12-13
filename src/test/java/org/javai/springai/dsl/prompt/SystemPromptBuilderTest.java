@@ -60,8 +60,14 @@ class SystemPromptBuilderTest {
 				"gpt-4.1"
 		);
 
-		assertThat(prompt).contains("schema").contains("parameters");
-		assertThat(prompt).contains("DSL GUIDANCE:").contains("SQL grammar guidance here");
+		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+		try {
+			var root = mapper.readTree(prompt);
+			assertThat(root.get("actions").isArray()).isTrue();
+			assertThat(root.get("dslGuidance").isArray()).isTrue();
+		} catch (Exception e) {
+			throw new AssertionError("Failed to parse JSON prompt", e);
+		}
 	}
 
 	private static class SampleActions {

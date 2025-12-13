@@ -48,7 +48,7 @@ class PlanNodeVisitorTest {
 	void generatePlanWithEmbeddedSql() {
 		String planText = """
 				(P "Query plan"
-				  (PS "run query" fetchOrders (EMBED sxl-sql (Q (S 1))))
+				  (PS fetchOrders (EMBED sxl-sql (Q (S 1))))
 				)
 				""";
 		SxlNode planNode = parse(planText);
@@ -59,7 +59,7 @@ class PlanNodeVisitorTest {
 		PlanStep ps1 = plan.planSteps().getFirst();
 		assertThat(ps1).isInstanceOf(PlanStep.Action.class);
 		PlanStep.Action a1 = (PlanStep.Action)ps1;
-		assertThat(a1.assistantMessage()).isEqualTo("run query");
+		assertThat(a1.assistantMessage()).isEmpty();
 		assertThat(a1.actionId()).isEqualTo("fetchOrders");
 		assertThat(a1.actionArguments()).hasSize(1);
 		assertThat(a1.actionArguments()[0]).isInstanceOf(Query.class);
@@ -69,7 +69,7 @@ class PlanNodeVisitorTest {
 	void generatePlanWithErrorStep() {
 		String planText = """
 				(P "Plan with error"
-				  (PS "failed step" someAction (ERROR "LLM timeout"))
+				  (PS someAction (ERROR "LLM timeout"))
 				)
 				""";
 		SxlNode planNode = parse(planText);
@@ -93,7 +93,7 @@ class PlanNodeVisitorTest {
 	void rejectsNonLiteralActionId() {
 		String planText = """
 				(P "desc"
-				  (PS "msg" (Q (S 1)) (EMBED sxl-sql (Q (S 1))))
+				  (PS "notIdentifier" (EMBED sxl-sql (Q (S 1))))
 				)
 				""";
 		assertThatThrownBy(() -> parse(planText))
@@ -104,7 +104,7 @@ class PlanNodeVisitorTest {
 	void rejectsUnknownEmbeddedDsl() {
 		String planText = """
 				(P "desc"
-				  (PS "msg" actionId (EMBED sxl-unknown (Q (S 1))))
+				  (PS actionId (EMBED sxl-unknown (Q (S 1))))
 				)
 				""";
 		assertThatThrownBy(() -> parse(planText))
