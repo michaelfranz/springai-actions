@@ -9,6 +9,7 @@ import org.javai.springai.sxl.DefaultValidatorRegistry;
 import org.javai.springai.sxl.DslParsingStrategy;
 import org.javai.springai.sxl.ParsingStrategy;
 import org.javai.springai.sxl.SxlNode;
+import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlToken;
 import org.javai.springai.sxl.SxlTokenizer;
@@ -85,7 +86,7 @@ class PlanNodeVisitorTest {
 				(P (Q (S 1)))
 				""";
 		assertThatThrownBy(() -> parse(planText))
-				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+				.isInstanceOf(SxlParseException.class);
 	}
 
 	@Test
@@ -96,7 +97,7 @@ class PlanNodeVisitorTest {
 				)
 				""";
 		assertThatThrownBy(() -> parse(planText))
-				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+				.isInstanceOf(SxlParseException.class);
 	}
 
 	@Test
@@ -107,7 +108,7 @@ class PlanNodeVisitorTest {
 				)
 				""";
 		assertThatThrownBy(() -> parse(planText))
-				.isInstanceOf(org.javai.springai.sxl.SxlParseException.class);
+				.isInstanceOf(SxlParseException.class);
 	}
 
 	private SxlNode parse(String sxl) {

@@ -3,6 +3,7 @@ package org.javai.springai.dsl.plan;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import org.javai.springai.dsl.bind.EmbedResolverUtil;
 import org.javai.springai.dsl.bind.EmbeddedResolver;
 import org.javai.springai.dsl.bind.RegistryEmbeddedResolver;
 import org.javai.springai.sxl.SxlNode;
@@ -83,28 +84,13 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 			throw new IllegalStateException("Plan step content must be a node");
 		}
 		switch (contentNode.symbol()) {
-			case "EMBED" -> planSteps.add(new PlanStep.Action(actionStepMessage, actionId, resolveEmbedded(contentNode)));
+			case "EMBED" -> planSteps.add(new PlanStep.Action(actionStepMessage, actionId, EmbedResolverUtil.resolveEmbeddedAsArray(contentNode, embeddedResolver)));
 			case "ERROR" -> {
 				String reason = extractError(contentNode.args());
 				planSteps.add(new PlanStep.Error(reason));
 			}
 			default -> throw new IllegalStateException("Unexpected step content symbol: " + contentNode.symbol());
 		}
-	}
-
-	private Object[] resolveEmbedded(SxlNode embedNode) {
-		List<SxlNode> args = embedNode.args();
-		if (args.size() < 2) {
-			throw new IllegalStateException("Embed step must have a DSL id and a payload node");
-		}
-		SxlNode dslIdNode = args.getFirst();
-		SxlNode payloadNode = args.get(1);
-		if (payloadNode.isLiteral()) {
-			throw new IllegalStateException("Embed step payload must be a node");
-		}
-		String dslId = extractIdentifier(dslIdNode, "Embed step DSL id must be an identifier or literal string");
-		Object resolved = embeddedResolver.resolve(dslId, payloadNode, Object.class);
-		return new Object[] { resolved };
 	}
 
 	private String extractIdentifier(SxlNode node, String errorMessage) {
