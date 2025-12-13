@@ -1,8 +1,10 @@
 package org.javai.springai.dsl.prompt;
 
-import static java.util.Arrays.stream;
 import static org.assertj.core.api.Assertions.assertThat;
+
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -16,48 +18,48 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Reports footprint metrics (bytes and rough tokens) for full system prompts (actions + DSL guidance)
- * in both SXL and JSON modes across multiple scenarios.
- * Prints results to System.out for inspection.
+ * Emits example system prompts (SXL and JSON) for inspection, writing them under build/prompt-samples.
  */
-class SystemPromptFootprintTest {
+class SystemPromptCasesTest {
 
 	private DslGuidanceProvider guidanceProvider;
+	private Path outputDir;
 
 	@BeforeEach
-	void setup() {
+	void setup() throws Exception {
 		TypeFactoryBootstrap.registerBuiltIns();
-		guidanceProvider = new MapBackedDslGuidanceProvider(
-				Map.of(
-						"sxl-sql", "SQL grammar guidance here (concise)",
-						"sxl-plan", "Plan grammar guidance here (concise)"
-				)
+		guidanceProvider = new GrammarBackedDslGuidanceProvider(
+				List.of(
+						"sxl-meta-grammar-sql.yml",
+						"sxl-meta-grammar-plan.yml"
+				),
+				getClass().getClassLoader()
 		);
+		outputDir = Path.of("build", "prompt-samples");
+		Files.createDirectories(outputDir);
 	}
 
 	@Test
-	void reportPromptFootprints() {
+	void emitSamplePromptsForScenarios() throws Exception {
 		List<Scenario> scenarios = List.of(
 				new Scenario("simple-no-embed", this::simpleActions, ActionSpecFilter.ALL),
 				new Scenario("single-sql-embed", this::singleSqlActions, ActionSpecFilter.ALL),
-				new Scenario("filtered-single-action", this::multiActions, spec -> spec.id().endsWith("runQuery"))
+				new Scenario("multi-actions-filtered", this::multiActions, spec -> spec.id().endsWith("runQuery"))
 		);
 
 		for (Scenario scenario : scenarios) {
 			ActionRegistry registry = scenario.registrySupplier().get();
-			String sxlPrompt = SystemPromptBuilder.build(registry, scenario.filter(), guidanceProvider, SystemPromptBuilder.Mode.SXL, "openai", "gpt-4.1");
-			String jsonPrompt = SystemPromptBuilder.build(registry, scenario.filter(), guidanceProvider, SystemPromptBuilder.Mode.JSON, "openai", "gpt-4.1");
-
-			int sxlBytes = sxlPrompt.getBytes(StandardCharsets.UTF_8).length;
-			int jsonBytes = jsonPrompt.getBytes(StandardCharsets.UTF_8).length;
-			int sxlTokens = roughTokenCount(sxlPrompt);
-			int jsonTokens = roughTokenCount(jsonPrompt);
-
-			assertThat(sxlBytes).isPositive();
-			assertThat(jsonBytes).isPositive();
-			System.out.printf("scenario=%s sxlBytes=%d jsonBytes=%d sxlTokens=%d jsonTokens=%d%n",
-					scenario.name(), sxlBytes, jsonBytes, sxlTokens, jsonTokens);
+			writePrompt(scenario.name(), "sxl",
+					SystemPromptBuilder.build(registry, scenario.filter(), guidanceProvider, SystemPromptBuilder.Mode.SXL, "openai", "gpt-4.1"));
+			writePrompt(scenario.name(), "json",
+					SystemPromptBuilder.build(registry, scenario.filter(), guidanceProvider, SystemPromptBuilder.Mode.JSON, "openai", "gpt-4.1"));
 		}
+	}
+
+	private void writePrompt(String scenario, String mode, String content) throws Exception {
+		Path file = outputDir.resolve(scenario + "-" + mode + ".txt");
+		Files.writeString(file, content, StandardCharsets.UTF_8);
+		assertThat(Files.exists(file)).isTrue();
 	}
 
 	private ActionRegistry simpleActions() {
@@ -77,12 +79,6 @@ class SystemPromptFootprintTest {
 		registry.registerActions(new SingleSqlAction());
 		registry.registerActions(new OtherActions());
 		return registry;
-	}
-
-	private static int roughTokenCount(String text) {
-		return (int) stream(text.trim().split("\\s+"))
-				.filter(s -> !s.isEmpty())
-				.count();
 	}
 
 	private record Scenario(String name, Supplier<ActionRegistry> registrySupplier, ActionSpecFilter filter) {}

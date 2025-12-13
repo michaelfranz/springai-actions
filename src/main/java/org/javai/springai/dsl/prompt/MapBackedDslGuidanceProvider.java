@@ -15,7 +15,7 @@ public class MapBackedDslGuidanceProvider implements DslGuidanceProvider {
 	}
 
 	@Override
-	public Optional<String> guidanceFor(String dslId) {
+	public Optional<String> guidanceFor(String dslId, String providerId, String modelId) {
 		return Optional.ofNullable(guidance.get(dslId));
 	}
 }

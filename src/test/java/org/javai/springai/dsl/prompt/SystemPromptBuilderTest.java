@@ -36,7 +36,9 @@ class SystemPromptBuilderTest {
 				registry,
 				spec -> spec.id().endsWith("runQuery"),
 				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL
+				SystemPromptBuilder.Mode.SXL,
+				"openai",
+				"gpt-4.1"
 		);
 
 		assertThat(prompt).contains("ACTIONS:").contains("runQuery").contains("EMBED sxl-sql");
@@ -53,7 +55,9 @@ class SystemPromptBuilderTest {
 				registry,
 				ActionSpecFilter.ALL,
 				guidanceProvider,
-				SystemPromptBuilder.Mode.JSON
+				SystemPromptBuilder.Mode.JSON,
+				"openai",
+				"gpt-4.1"
 		);
 
 		assertThat(prompt).contains("schema").contains("parameters");

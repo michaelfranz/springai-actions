@@ -33,6 +33,18 @@ public final class SystemPromptBuilder {
 			ActionSpecFilter filter,
 			DslGuidanceProvider guidanceProvider,
 			Mode mode) {
+		return build(registry, filter, guidanceProvider, mode, null, null);
+	}
+
+	/**
+	 * Build a system prompt with provider/model-specific guidance if available.
+	 */
+	public static String build(ActionRegistry registry,
+			ActionSpecFilter filter,
+			DslGuidanceProvider guidanceProvider,
+			Mode mode,
+			String providerId,
+			String modelId) {
 		if (filter == null) {
 			filter = ActionSpecFilter.ALL;
 		}
@@ -45,7 +57,7 @@ public final class SystemPromptBuilder {
 				filter);
 
 		Set<String> dslIds = collectDslIds(registry, filter);
-		String dslSection = buildDslSection(dslIds, guidanceProvider);
+		String dslSection = buildDslSection(dslIds, guidanceProvider, providerId, modelId);
 
 		return "ACTIONS:\n" + actionsSection + "\n\nDSL GUIDANCE:\n" + dslSection;
 	}
@@ -65,9 +77,9 @@ public final class SystemPromptBuilder {
 		return ids;
 	}
 
-	private static String buildDslSection(Set<String> dslIds, DslGuidanceProvider provider) {
+	private static String buildDslSection(Set<String> dslIds, DslGuidanceProvider provider, String providerId, String modelId) {
 		return dslIds.stream()
-				.map(id -> provider.guidanceFor(id)
+				.map(id -> provider.guidanceFor(id, providerId, modelId)
 						.map(g -> "DSL " + id + ":\n" + g)
 						.orElse("DSL " + id + ": (no guidance available)"))
 				.collect(Collectors.joining("\n\n"));
