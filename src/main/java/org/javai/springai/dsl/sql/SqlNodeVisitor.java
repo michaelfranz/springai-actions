@@ -1,11 +1,10 @@
 package org.javai.springai.dsl.sql;
 
-import org.javai.springai.sxl.SxlNode;
-import org.javai.springai.sxl.SxlNodeVisitor;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.javai.springai.sxl.SxlNode;
+import org.javai.springai.sxl.SxlNodeVisitor;
 
 /**
  * Visitor that generates ANSI SQL from an SXL AST.

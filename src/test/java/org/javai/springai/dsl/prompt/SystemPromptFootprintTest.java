@@ -27,12 +27,9 @@ class SystemPromptFootprintTest {
 	@BeforeEach
 	void setup() {
 		TypeFactoryBootstrap.registerBuiltIns();
-		guidanceProvider = new MapBackedDslGuidanceProvider(
-				Map.of(
-						"sxl-sql", "SQL grammar guidance here (concise)",
-						"sxl-plan", "Plan grammar guidance here (concise)"
-				)
-		);
+		guidanceProvider = new GrammarBackedDslGuidanceProvider(
+				List.of("sxl-meta-grammar-sql.yml", "sxl-meta-grammar-plan.yml"),
+				getClass().getClassLoader());
 	}
 
 	@Test

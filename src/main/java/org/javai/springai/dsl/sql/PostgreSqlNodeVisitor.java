@@ -1,8 +1,7 @@
 package org.javai.springai.dsl.sql;
 
-import org.javai.springai.sxl.SxlNode;
-
 import java.util.List;
+import org.javai.springai.sxl.SxlNode;
 
 /**
  * PostgreSQL-specific SQL visitor.
