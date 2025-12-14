@@ -1435,7 +1435,7 @@ llm_specs:
   # ----------------------------------------------------------
   defaults:
     style: strict
-    max_examples: 3
+    max_examples: 8
     include_constraints: true
     include_symbol_summaries: true
     include_literal_rules: true
@@ -1443,9 +1443,59 @@ llm_specs:
     formatting: block
     enforce_canonical_form: true
     preamble: true
-    postamble: false
     guidance: |
-      You are given an S-expression SQL DSL with root symbol Q. Use DSL symbols only (Q, F, W, EQ, NEQ, LT, GT, LTE, GTE, LIKE, IN, AND, OR, NOT, S for select, JO for join, O for order, L for limit, etc.). Always emit well-formed S-expressions and never add free-form text. Respect required ordering of clauses: FROM/filters before SELECT, ORDER before LIMIT/OFFSET. Use identifiers for tables/columns, double-quoted strings for literals. Keep output concise and canonical.
+      *** CRITICAL CONSTRAINT ***
+      NEVER output English keywords select/from/where/order/group/having/limit/distinct as symbol names.
+      Use ONLY these symbols: Q F S W J G H O L D.
+      If you emit "select" or "from" as a symbol, the output is INVALID.
+      
+      MANDATORY CLAUSE ORDER IN (Q ...):
+      1. (F table_name alias) — MUST come first
+      2. (J table alias condition) or (J_LEFT/J_RIGHT/J_FULL ...) — optional JOINs after FROM
+      3. (S (AS expr alias) ...) — MUST come after FROM/JOINs
+      4. (W (operator ...)) — optional WHERE after S
+      5. (G expr expr ...) — optional GROUP BY
+      6. (H (operator ...)) — optional HAVING
+      7. (O (ASC expr)) — optional ORDER BY
+      8. (L 10) — optional LIMIT
+      
+      NO WILDCARDS, NO BARE COLUMNS, NO WRAPPER NODES:
+      - NO: (S *) or (S o.id o.amount) — wildcard and bare columns forbidden
+      - NO: (S c.*) or (S c.* all) — no wildcard with table prefix
+      - NO: (S (AS c.* all_columns)) — no wildcard anywhere
+      - NO: (W (condition (EQ ...))) — no wrapper nodes like "condition"
+      - NO: (Q (select ...)) or (Q (from ...)) — no English keywords as symbols
+      - NO: (Q (F orders o) (W ...) (S ...)) — clause order: F before S before W
+      
+      SYMBOL REFERENCE:
+      - Q: top-level query root
+      - F: (F table_name alias)
+      - S: (S (AS expr alias) (AS expr alias) ...)
+      - W: (W (EQ left right)) or (W (AND (EQ ...) (GT ...)))
+      - J/J_LEFT/J_RIGHT/J_FULL: (J table alias (operator ...))
+      - G: (G expr expr ...)
+      - H: (H (GT agg_expr value))
+      - O: (O (ASC expr) (DESC expr))
+      - L: (L 10)
+      - D: (D)
+      
+      Operators for WHERE/HAVING: EQ NE GT LT GE LE AND OR LIKE ILIKE BETWEEN IN NOT_IN IS_NULL IS_NOT_NULL
+      
+      VALID QUERIES:
+      (Q (F orders o) (S (AS o.id id) (AS o.amount total)))
+      (Q (F orders o) (S (AS o.id id)) (W (EQ o.status "shipped")))
+      (Q (F orders o) (J products p (EQ o.product_id p.id)) (S (AS o.id order_id) (AS p.name product)) (W (GT p.price 100)))
+      (Q (F orders o) (S (AS o.id id) (AS (COUNT o.id) count)) (G o.store_id))
+      
+      INVALID:
+      (Q (select ...) (from ...)) — keywords as symbols
+      (Q (F orders o) (S o.id)) — bare columns
+      (Q (F orders o) (S *)) or (S c.* all) — wildcard
+      (Q (F orders o) (W ...) (S ...)) — wrong order
+      (Q (F orders o) (S (AS o.id id)) (W (condition ...))) — wrapper nodes
+      
+      Use symbols Q F S W J G H O L D only. Never use English words. Order: F before S before W.
+    postamble: false
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -1453,9 +1503,35 @@ llm_specs:
   provider_defaults:
     openai:
       style: strict
-      max_examples: 2
+      max_examples: 4
       guidance: |
-        Emit only canonical S-expressions for the SQL DSL. Root is (Q ...). Include FROM via (F <table> [alias]) before filters. Use (W (...)) for WHERE, combining predicates with AND/OR. Use comparison operators EQ, NEQ, LT, GT, LTE, GTE, LIKE, IN; wrap strings in double quotes. SELECT columns with (S (AS col alias)? ...). ORDER with (O (ASC col) (DESC col)...). LIMIT with (L <n> [offset]). Do not add prose or markdown. Keep whitespace minimal and symbols exact.
+        *** CRITICAL CLAUSE ORDERING ***
+        ALWAYS: (Q (F ...) [J] (S ...) [W] [G] [H] [O] [L] [D])
+        FROM first, SELECT after FROM/JOINs, WHERE after SELECT. NEVER reorder.
+        
+        *** CRITICAL SYMBOLS ***
+        NEVER use English keywords as symbols: NO select/from/where/group/order/having/limit/distinct
+        Use ONLY: Q F S W J J_LEFT J_RIGHT J_FULL G H O L D
+        
+        *** CRITICAL FUNCTIONS *** 
+        FORBIDDEN: TO_CHAR, TO_DATE, TO_NUMBER, DATE_PART, CAST, YEAR(), MONTH(), DAY()
+        
+        USE INSTEAD:
+        - For year/month/day extraction: EXTRACT "YEAR" / EXTRACT "MONTH" / EXTRACT "DAY"
+        - Examples: (EXTRACT "YEAR" d.date), (EXTRACT "MONTH" d.date), (EXTRACT "DAY" d.date)
+        - For date truncation: DATE_TRUNC "month" d.date or DATE_TRUNC "year" d.date
+        - NOT: TO_CHAR, TO_DATE, TO_NUMBER, DATE_PART, CAST, YEAR(), MONTH()
+        
+        *** CRITICAL CONSTRAINTS ***
+        - (S *) or (S c.*) forbidden — NO wildcards
+        - (S o.id) forbidden — NO bare columns; use (S (AS o.id alias) ...)
+        - (W (condition ...)) forbidden — NO wrapper nodes
+        - (Q (select ...) ...) forbidden — NO keywords as symbols
+        
+        VALID: (Q (F dates d) (S (AS (EXTRACT "year" d.date) year) (AS (EXTRACT "month" d.date) month)) (O (ASC (EXTRACT "year" d.date))))
+        INVALID: (Q (F dates d) (S (AS (TO_CHAR d.date "Month") month_name)) ...)
+        
+        Omit unused clauses. No empty parentheses.
 
     anthropic:
       style: explanatory

@@ -142,7 +142,7 @@ llm_specs:
   # ----------------------------------------------------------
   defaults:
     style: strict
-    max_examples: 3
+    max_examples: 6
     include_constraints: true
     include_symbol_summaries: true
     include_literal_rules: true
@@ -152,7 +152,9 @@ llm_specs:
     preamble: true
     postamble: false
     guidance: |
-      You are given a PLAN DSL with root symbol P (plan) and steps PS, and error nodes ERROR. Each plan has a description and zero or more steps. Each step has a human-friendly message, an action id, and either an EMBED of another DSL payload or an ERROR reason. Always emit well-formed S-expressions matching the grammar, respect ordering, and include DSL ids when embedding (e.g., (EMBED sxl-sql ...)). Do not invent symbols outside the grammar. Prefer concise, canonical forms.
+      PLAN DSL root: (P ["description"] (PS action-id (EMBED <dsl-id> <payload>)| (ERROR "reason")) ...).
+      Each PS has exactly action-id and EMBED/ERROR as content; no extra wrapper nodes (e.g., do NOT add (query ...)).
+      Always include the DSL id in EMBED (e.g., (EMBED sxl-sql ...)). Emit concise, canonical S-expressions only.
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -162,7 +164,7 @@ llm_specs:
       style: strict
       max_examples: 2
       guidance: |
-        Use concise, canonical S-expressions for the PLAN DSL. Root must be (P <description> ...steps...). Each step is (PS <assistant-message> <action-id> <content>) where <content> is either (EMBED <dsl-id> <payload>) or (ERROR "reason"). Always include DSL ids on EMBED nodes (e.g., sxl-sql). Do not add extra text outside the S-expression. Keep descriptions short, avoid markdown, and favor minimal whitespace.
+        Use concise, canonical S-expressions for the PLAN DSL. Root: (P ["description"] steps...). Each step: (PS action-id (EMBED <dsl-id> <payload>) | (ERROR "reason")). No extra wrapper nodes. Always include the DSL id on EMBED (e.g., sxl-sql). Do not add prose outside the S-expression. Keep whitespace minimal.
 
     anthropic:
       style: explanatory

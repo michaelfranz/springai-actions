@@ -27,7 +27,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.annotation.Tool;
 
-public class DadJokeForTodayGeneratorTest implements ScenarioPlanSupplier {
+	public class DadJokeForTodayGeneratorTest implements ScenarioPlanSupplier {
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final Random RANDOM = new Random();

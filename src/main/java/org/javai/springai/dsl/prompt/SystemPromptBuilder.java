@@ -1,13 +1,13 @@
 package org.javai.springai.dsl.prompt;
 
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionPromptEmitter;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.act.ActionSpec;
@@ -103,8 +103,16 @@ public final class SystemPromptBuilder {
 			if (mode == Mode.JSON) {
 				guidance = "Use JSON structures (not S-expressions) adhering to the provided schemas. DSL id: " + id + ". Guidance: " + guidance;
 			} else if (mode == Mode.SXL && provider instanceof DslGrammarSource source) {
-				guidance = GrammarPromptSummarizer.summarize(source.grammarFor(id).orElse(null));
+				// In SXL mode, prepend the grammar summary to the provider guidance
+				String summary = GrammarPromptSummarizer.summarize(source.grammarFor(id).orElse(null));
+				// Combine: provider guidance (high-signal) + grammar summary (reference)
+				if (guidance != null && !guidance.isBlank() && !"(no guidance available)".equals(guidance)) {
+					guidance = guidance + "\n\n" + summary;
+				} else {
+					guidance = summary;
+				}
 			}
+			// Add compact, DSL-specific scaffolding to reduce hallucinations.
 			entries.add(new GuidanceEntry(id, guidance));
 		}
 		return entries;

@@ -22,6 +22,9 @@ public final class GrammarPromptSummarizer {
 					.append(" as (").append(symbol).append(" <dsl-id> <payload>) for any embedded DSL instance.\n");
 		}
 
+		// Explicit canonical-form reminder to prevent natural-language symbol names.
+		sb.append("Use exact symbol names as defined below; do NOT invent words like 'select' or 'from'.\n");
+
 		if (grammar.reservedSymbols() != null && !grammar.reservedSymbols().isEmpty()) {
 			sb.append("Reserved symbols: ").append(String.join(", ", grammar.reservedSymbols())).append("\n");
 		}
