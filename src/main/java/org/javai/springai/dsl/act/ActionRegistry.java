@@ -115,7 +115,7 @@ public final class ActionRegistry {
 	}
 
 	public List<ActionDefinition> getActionDefinitions() {
-		return Collections.unmodifiableList(new ArrayList<>(actionDefinitions.values()));
+		return List.copyOf(actionDefinitions.values());
 	}
 
 	public List<ActionSpec> getActionSpecs() {
