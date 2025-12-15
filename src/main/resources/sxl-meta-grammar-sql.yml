@@ -1453,11 +1453,12 @@ llm_specs:
       1. (F table_name alias) — MUST come first
       2. (J table alias condition) or (J_LEFT/J_RIGHT/J_FULL ...) — optional JOINs after FROM
       3. (S (AS expr alias) ...) — MUST come after FROM/JOINs
-      4. (W (operator ...)) — optional WHERE after S
-      5. (G expr expr ...) — optional GROUP BY
+      4. (W (operator ...)) — optional WHERE after S (BEFORE GROUP BY)
+      5. (G expr expr ...) — optional GROUP BY (AFTER WHERE if both present)
       6. (H (operator ...)) — optional HAVING
       7. (O (ASC expr)) — optional ORDER BY
       8. (L 10) — optional LIMIT
+      9. (D) — optional DISTINCT (use as first child of Q when needed)
       
       NO WILDCARDS, NO BARE COLUMNS, NO WRAPPER NODES:
       - NO: (S *) or (S o.id o.amount) — wildcard and bare columns forbidden
@@ -1472,7 +1473,7 @@ llm_specs:
       - F: (F table_name alias)
       - S: (S (AS expr alias) (AS expr alias) ...)
       - W: (W (EQ left right)) or (W (AND (EQ ...) (GT ...)))
-      - J/J_LEFT/J_RIGHT/J_FULL: (J table alias (operator ...))
+      - J/J_LEFT/J_RIGHT/J_FULL: (J join_table join_alias condition) — condition must be boolean operator
       - G: (G expr expr ...)
       - H: (H (GT agg_expr value))
       - O: (O (ASC expr) (DESC expr))
@@ -1486,13 +1487,16 @@ llm_specs:
       (Q (F orders o) (S (AS o.id id)) (W (EQ o.status "shipped")))
       (Q (F orders o) (J products p (EQ o.product_id p.id)) (S (AS o.id order_id) (AS p.name product)) (W (GT p.price 100)))
       (Q (F orders o) (S (AS o.id id) (AS (COUNT o.id) count)) (G o.store_id))
+      (Q (F products p) (J order_items oi (EQ p.id oi.product_id)) (S (AS p.name product_name)) (W (GT p.price 100)))
+      (Q (F orders o) (J products p (EQ o.product_id p.id)) (S (AS (SUM o.amount) total)) (W (GT o.amount 100)) (G o.store_id) (O (DESC (SUM o.amount))))
       
       INVALID:
       (Q (select ...) (from ...)) — keywords as symbols
       (Q (F orders o) (S o.id)) — bare columns
       (Q (F orders o) (S *)) or (S c.* all) — wildcard
-      (Q (F orders o) (W ...) (S ...)) — wrong order
-      (Q (F orders o) (S (AS o.id id)) (W (condition ...))) — wrapper nodes
+      (Q (F orders o) (W ...) (S ...)) — wrong clause order
+      (Q (F orders o) (S (AS o.id id)) (G o.store_id) (W (GT o.amount 100))) — WHERE before GROUP BY (wrong!)
+      (Q (F products p) (J p order_items oi (EQ p.id oi.product_id)) ...) — wrong! J needs join_table first, NOT from_table
       
       Use symbols Q F S W J G H O L D only. Never use English words. Order: F before S before W.
     postamble: false
@@ -1509,9 +1513,20 @@ llm_specs:
         ALWAYS: (Q (F ...) [J] (S ...) [W] [G] [H] [O] [L] [D])
         FROM first, SELECT after FROM/JOINs, WHERE after SELECT. NEVER reorder.
         
+        ESPECIALLY: WHERE (W) ALWAYS comes BEFORE GROUP BY (G).
+        WRONG: (Q (F ...) (S ...) (G ...) (W ...))
+        RIGHT: (Q (F ...) (S ...) (W ...) (G ...))
+        
         *** CRITICAL SYMBOLS ***
         NEVER use English keywords as symbols: NO select/from/where/group/order/having/limit/distinct
+        NEVER invent symbols like: literal, value, condition, string, number, field, table, alias
         Use ONLY: Q F S W J J_LEFT J_RIGHT J_FULL G H O L D
+        For operators: EQ NE GT LT GE LE AND OR LIKE ILIKE BETWEEN IN NOT_IN IS_NULL IS_NOT_NULL
+        For functions: ABS ADD AVG CEIL COALESCE CONCAT COUNT CURRENT_DATE CURRENT_TIMESTAMP DATE_ADD DATE_DIFF DATE_TRUNC DESC DIV EXTRACT FLOOR MUL NVL POWER ROUND SQRT SUB SUM SUBSTR TO_DATE TO_NUMBER UPPER LOWER TRIM LTRIM RTRIM LPAD RPAD LENGTH INSTR NULLIF REPLACE MOD
+        
+        *** STRING LITERALS ***
+        Use double quotes for string values: "active", "YYYY-MM-DD", "cancelled", NOT (literal "value")
+        Example: (EQ s.status "active") NOT (EQ s.status (literal "active"))
         
         *** CRITICAL FUNCTIONS *** 
         FORBIDDEN: TO_CHAR, TO_DATE, TO_NUMBER, DATE_PART, CAST, YEAR(), MONTH(), DAY()

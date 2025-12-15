@@ -35,11 +35,40 @@ import org.yaml.snakeyaml.Yaml;
  * Uses SystemPromptBuilder to generate the system prompt and validates LLM outputs
  * across the sql-samples.yml human prompts. Requires OPENAI_API_KEY; skips otherwise.
  * Expect initial failures until SystemPromptBuilder is aligned with the tuned prompt.
+ * 
+ * Error Collection Strategy:
+ * - Collects all parsing errors encountered during test execution
+ * - Terminates early if failure count reaches the ERROR_THRESHOLD (5 failures)
+ * - Threshold triggers indicate a more serious systematic problem requiring prompt refinement
+ * - Failed prompts are persisted to FAILURE_LOG for targeted iteration on subsequent runs
  */
 class SystemPromptBuilderTuningTest {
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final Path FAILURE_LOG = Path.of("build", "tmp", "system-prompt-builder-tuning-failures.txt");
+	
+	/**
+	 * Threshold for maximum number of parsing errors to collect before terminating the test.
+	 * When this many failures are encountered, it indicates a systematic problem with the
+	 * LLM prompt guidance rather than isolated edge cases, warranting early termination
+	 * and prompt refinement rather than wasting API quota on further tests.
+	 * 
+	 * Rationale for value of 5:
+	 * - 1-2 errors: Likely edge cases, test continues to collect more data
+	 * - 3-4 errors: Pattern emerging, still reasonable to continue investigation
+	 * - 5+ errors: Systematic failure indicating prompt needs significant revision
+	 */
+	private static final int ERROR_THRESHOLD = 5;
+	
+	/**
+	 * System property to control whether to use previously failed prompts only.
+	 * 
+	 * Set via: -Dtest.use_failure_log=false
+	 * 
+	 * When true (default): Runs only previously failed prompts (fast iteration on known issues)
+	 * When false: Runs fresh set of 50 prompts from sql-samples.yml (comprehensive testing)
+	 */
+	private static final boolean USE_FAILURE_LOG = !"false".equalsIgnoreCase(System.getProperty("test.use_failure_log", "true"));
 
 	@Test
 	void builderPromptProducesParsablePlans() {
@@ -69,7 +98,7 @@ class SystemPromptBuilderTuningTest {
 				.build();
 		OpenAiChatOptions options = OpenAiChatOptions.builder()
 				.model("gpt-4.1-mini")
-				.temperature(0.0)
+				.temperature(0.2)
 				.build();
 
 		ChatClient client = ChatClient.builder(chatModel)
@@ -77,16 +106,33 @@ class SystemPromptBuilderTuningTest {
 				.build();
 
 		List<String> humanPrompts = loadHumanPrompts(50);
-		humanPrompts = filterByPreviousFailures(humanPrompts);
+		
+		// Control whether to use failure log via system property
+		if (USE_FAILURE_LOG) {
+			List<String> filtered = filterByPreviousFailures(humanPrompts);
+			if (!filtered.isEmpty()) {
+				System.out.printf("Failure log found. Running %d previously failed prompt(s).%n", filtered.size());
+				humanPrompts = filtered;
+			} else {
+				System.out.println("No previous failures found. Running full suite of 50 prompts.");
+			}
+		} else {
+			System.out.println("Failure log filtering DISABLED (via -Dtest.use_failure_log=false)");
+			System.out.printf("Running fresh test with all %d prompts from sql-samples.yml%n", humanPrompts.size());
+		}
+		
 		assertThat(humanPrompts).isNotEmpty();
 
 		List<String> errors = new ArrayList<>();
 
-		for (String human : humanPrompts) {
+		for (int i = 0; i < humanPrompts.size(); i++) {
+			System.out.println("----");
+			String human = humanPrompts.get(i);
 			String userPrompt = """
 					User request: %s
 					Create the plan to satisfy this request.
 					""".formatted(human.replace("\n", " "));
+			System.out.printf("Case #%d: %s\n", i, userPrompt);
 
 			String response = client
 					.prompt()
@@ -95,8 +141,6 @@ class SystemPromptBuilderTuningTest {
 					.call()
 					.content();
 
-			System.out.println("----");
-			System.out.println(human);
 			System.out.println(response);
 
 			try {
@@ -111,15 +155,31 @@ class SystemPromptBuilderTuningTest {
 			}
 			catch (Exception ex) {
 				errors.add("Prompt: " + human + "\nResponse:\n" + response + "\nError: " + ex.getMessage());
-				if (errors.size() >= 3) {
+				System.err.printf("Error in case #%d: %s%n", i, ex.getMessage());
+				
+				// Check if we've hit the error threshold
+				if (errors.size() >= ERROR_THRESHOLD) {
+					System.err.printf("%nThreshold of %d errors reached. Terminating test early.%n", ERROR_THRESHOLD);
+					System.err.println("This indicates a systematic problem requiring prompt refinement.");
 					break;
 				}
 			}
 		}
+		
+		System.out.printf("%nTest completed. Total errors collected: %d/%d cases%n", errors.size(), humanPrompts.size());
 
 		if (!errors.isEmpty()) {
 			persistFailures(errors);
-			String message = "Encountered " + errors.size() + " parsing errors:\n\n" +
+			boolean thresholdReached = errors.size() >= ERROR_THRESHOLD;
+			String severityMessage = thresholdReached
+					? "SEVERITY: Threshold reached (" + ERROR_THRESHOLD + " failures) - systematic prompt problem detected"
+					: "SEVERITY: Minor issues - continue tuning";
+			String modeInfo = USE_FAILURE_LOG 
+					? "Test Mode: Failure log enabled (use -Dtest.use_failure_log=false to disable)"
+					: "Test Mode: Comprehensive testing (running full sql-samples.yml suite)";
+			String message = "Encountered " + errors.size() + " parsing errors:\n" +
+					severityMessage + "\n" +
+					modeInfo + "\n\n" +
 					String.join("\n\n----\n\n", errors);
 			throw new AssertionError(message);
 		}

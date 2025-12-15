@@ -154,7 +154,7 @@ llm_specs:
     guidance: |
       PLAN DSL root: (P ["description"] (PS action-id (EMBED <dsl-id> <payload>)| (ERROR "reason")) ...).
       Each PS has exactly action-id and EMBED/ERROR as content; no extra wrapper nodes (e.g., do NOT add (query ...)).
-      Always include the DSL id in EMBED (e.g., (EMBED sxl-sql ...)). Emit concise, canonical S-expressions only.
+      Always include the DSL id in EMBED (e.g., (EMBED sxl-sql ...)).
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -164,7 +164,7 @@ llm_specs:
       style: strict
       max_examples: 2
       guidance: |
-        Use concise, canonical S-expressions for the PLAN DSL. Root: (P ["description"] steps...). Each step: (PS action-id (EMBED <dsl-id> <payload>) | (ERROR "reason")). No extra wrapper nodes. Always include the DSL id on EMBED (e.g., sxl-sql). Do not add prose outside the S-expression. Keep whitespace minimal.
+        PLAN DSL: Root is (P ["description"] steps...). Each step: (PS action-id (EMBED <dsl-id> <payload>) | (ERROR "reason")). No extra wrapper nodes. Always include the DSL id on EMBED (e.g., sxl-sql).
 
     anthropic:
       style: explanatory
