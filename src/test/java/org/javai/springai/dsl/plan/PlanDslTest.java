@@ -34,8 +34,6 @@ import org.junit.jupiter.api.Test;
 @DisplayName("Plan DSL Tests")
 class PlanDslTest {
 
-	private SxlGrammar planGrammar;
-	private SxlGrammar sqlGrammar;
 	private DefaultValidatorRegistry registry;
 
 	@BeforeEach
@@ -43,12 +41,12 @@ class PlanDslTest {
 		SxlGrammarParser parser = new SxlGrammarParser();
 
 		// Load plan grammar from resources
-		planGrammar = loadGrammar("sxl-meta-grammar-plan.yml", parser);
+		SxlGrammar planGrammar = loadGrammar("sxl-meta-grammar-plan.yml", parser);
 
 		// Create simplified SQL grammar for embedding tests
 		// This avoids issues with parameter ordering in the full SQL grammar
 		// while still testing the embedding functionality comprehensively
-		sqlGrammar = createSimplifiedSqlGrammar();
+		SxlGrammar sqlGrammar = createSimplifiedSqlGrammar();
 
 		// Create registry with both grammars
 		registry = new DefaultValidatorRegistry();
@@ -219,7 +217,7 @@ class PlanDslTest {
 			List<SxlNode> nodes = parseAndValidate(input);
 
 			assertThat(nodes).hasSize(1);
-			SxlNode embed = nodes.get(0);
+			SxlNode embed = nodes.getFirst();
 			assertThat(embed.symbol()).isEqualTo("EMBED");
 			SxlNode plan = embed.args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
@@ -240,7 +238,7 @@ class PlanDslTest {
 			List<SxlNode> nodes = parseAndValidate(input);
 
 			assertThat(nodes).hasSize(1);
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 			assertThat(plan.args()).hasSize(2); // Description + one PS step
 		}
@@ -260,7 +258,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 			assertThat(plan.args()).hasSize(4); // Description + 3 PS steps
 		}
@@ -279,7 +277,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 			assertThat(plan.args()).hasSize(2); // Two PS steps, no description
 		}
@@ -335,8 +333,8 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
-			SxlNode step = plan.args().get(0);
+			SxlNode plan = nodes.getFirst().args().get(1);
+			SxlNode step = plan.args().getFirst();
 			assertThat(step.symbol()).isEqualTo("PS");
 			assertThat(step.args()).hasSize(2); // action-name + dsl-instance
 		}
@@ -375,11 +373,11 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
-			SxlNode step = plan.args().get(0);
+			SxlNode plan = nodes.getFirst().args().get(1);
+			SxlNode step = plan.args().getFirst();
 			SxlNode embed = step.args().get(1);
 			assertThat(embed.symbol()).isEqualTo("EMBED");
-			assertThat(embed.args().get(0).symbol()).isEqualTo("sxl-sql");
+			assertThat(embed.args().getFirst().symbol()).isEqualTo("sxl-sql");
 		}
 
 		@Test
@@ -414,7 +412,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(4); // Description + 3 steps
 		}
 
@@ -441,10 +439,10 @@ class PlanDslTest {
 			String input = """
 					(EMBED sxl-plan
 					  (P "Complex data retrieval"
-					    (PS getOrderDetails (EMBED sxl-sql 
-						  (Q 
+					    (PS getOrderDetails (EMBED sxl-sql
+						  (Q
 						    (F orders o)
-						    (S 
+						    (S
 						      (AS o.id order_id)
 						      (AS o.amount order_amount)
 						      (AS o.status status)
@@ -495,7 +493,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 		}
 	}
@@ -517,7 +515,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 			assertThat(plan.args()).hasSize(2); // Description + step
 		}
@@ -539,7 +537,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(6); // Description + 5 steps
 		}
 
@@ -554,7 +552,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 			assertThat(plan.args()).hasSize(1); // Only description, no steps
 		}
@@ -572,7 +570,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 		}
 
@@ -594,7 +592,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.symbol()).isEqualTo("P");
 		}
 
@@ -613,7 +611,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(3); // Three steps
 		}
 	}
@@ -637,7 +635,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(4); // Description + 3 steps
 
 			// Verify the error step is present
@@ -661,7 +659,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(3); // Description + 2 steps
 		}
 
@@ -680,7 +678,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(4); // Description + 3 steps
 		}
 
@@ -701,7 +699,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(6); // Description + 5 steps
 		}
 
@@ -753,7 +751,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(4); // Description + 3 error steps
 		}
 
@@ -774,7 +772,7 @@ class PlanDslTest {
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
-			SxlNode plan = nodes.get(0).args().get(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
 			// Description + 5 steps (alternating successful and error)
 			assertThat(plan.args()).hasSize(6);
 		}
