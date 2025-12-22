@@ -1,7 +1,7 @@
 package org.javai.springai.dsl.act;
 
 /**
- * A spec communicated to the LLM describing an action parameter.
+ * LLM-facing description of an action parameter.
  *
  * @param name the parameter name
  * @param typeName the Java type name of the parameter
@@ -9,7 +9,7 @@ package org.javai.springai.dsl.act;
  * @param description human-friendly description
  * @param dslId optional DSL id if the parameter is supplied via an embedded DSL
  */
-public record ActionParameterSpec(String name, String typeName, String typeId, String description, String dslId) {
+public record ActionParameterDescriptor(String name, String typeName, String typeId, String description, String dslId) {
 	public String toSxl() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("(").append(name).append(" ");
@@ -22,3 +22,4 @@ public record ActionParameterSpec(String name, String typeName, String typeId, S
 		return sb.toString();
 	}
 }
+

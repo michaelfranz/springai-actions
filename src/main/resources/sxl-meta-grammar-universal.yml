@@ -1,0 +1,95 @@
+meta_grammar_version: 1.2
+
+# ============================================================
+# DSL METADATA
+# ============================================================
+dsl:
+  id: sxl-universal
+  description: "Universal S-expression rules and guidance applicable to all SXL DSLs"
+  version: 1.0
+
+# NOTE: EMBED is a universal reserved symbol that is automatically available to all DSLs.
+# It is not defined here but is built into the SXL parser as a meta-feature for composing DSLs.
+
+# ============================================================
+# SYMBOL DEFINITIONS
+# ============================================================
+# No symbols defined for universal grammar.
+# EMBED is a reserved symbol automatically available to all DSLs.
+symbols: {}
+
+
+# ============================================================
+# LITERAL DEFINITIONS
+# ============================================================
+literals:
+  string:
+    regex: "^\".*\"$"                      # DSL strings must use double quotes
+  number:
+    regex: "^-?[0-9]+(\\.[0-9]+)?$"
+  boolean:
+    values: [true, false]
+  null:
+    values: [null]
+
+
+# ============================================================
+# IDENTIFIER RULES
+# ============================================================
+identifier:
+  description: "Default identifier rule for DSL names, table names, aliases"
+  pattern: "^[A-Za-z_][A-Za-z0-9_\\.\\-]*$"
+
+
+# ============================================================
+# LLM SPECIFICATION CONFIGURATION
+# ============================================================
+llm_specs:
+
+  # ----------------------------------------------------------
+  # DEFAULT CONFIGURATIONS for all providers/models
+  # ----------------------------------------------------------
+  defaults:
+    style: strict
+    formatting: block
+    enforce_canonical_form: true
+    preamble: true
+    postamble: false
+    guidance: |
+      UNIVERSAL SXL RULES:
+      - All expressions must be valid S-expressions: (symbol arg1 arg2 ...) where args can be literals, identifiers, or nested S-expressions.
+      - Emit concise, canonical S-expressions only.
+      - No extra whitespace or prose outside the S-expression structure.
+      - Always include the DSL id when using EMBED: (EMBED <dsl-id> <payload>).
+      - DSL ids are lowercase with hyphens (e.g., sxl-sql, sxl-plan).
+
+  # ----------------------------------------------------------
+  # PROVIDER-LEVEL DEFAULTS
+  # ----------------------------------------------------------
+  provider_defaults:
+    openai:
+      guidance: |
+        UNIVERSAL SXL RULES:
+        - Emit valid, concise, canonical S-expressions only: (symbol arg1 arg2 ...).
+        - No prose, no extra whitespace. Minimal formatting.
+        - Always include the DSL id in EMBED: (EMBED <dsl-id> ...).
+
+    anthropic:
+      guidance: |
+        UNIVERSAL SXL RULES:
+        - Use valid S-expressions: (symbol arg1 arg2 ...).
+        - Emit concise, canonical form.
+        - Always specify DSL id in EMBED expressions.
+
+    mistral:
+      guidance: |
+        UNIVERSAL SXL RULES:
+        - Emit compact, canonical S-expressions: (symbol arg1 ...).
+        - Include DSL id in EMBED expressions.
+
+    llama:
+      guidance: |
+        UNIVERSAL SXL RULES:
+        - Emit strict, canonical S-expressions: (symbol arg1 arg2 ...).
+        - No prose. Always include DSL id in EMBED.
+

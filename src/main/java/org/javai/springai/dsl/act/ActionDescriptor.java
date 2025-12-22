@@ -3,13 +3,9 @@ package org.javai.springai.dsl.act;
 import java.util.List;
 
 /**
- * Represents a view of an action from the perspective of the LLM model.
- * It's what we tell the LLM is available in terms of actions and their parameters.
- * @param id of the action - what the LLM uses to identify the action
- * @param description of the action so the LLM can work out if this action is suitable
- * @param actionParameterSpecs spec for each parameter of the action
+ * LLM-facing description of an action: id, description, and parameters.
  */
-public record ActionSpec(
+public record ActionDescriptor(
 		String id,
 		String description,
 		List<ActionParameterSpec> actionParameterSpecs
@@ -35,3 +31,4 @@ public record ActionSpec(
 		return sxlExpression.toString();
 	}
 }
+
