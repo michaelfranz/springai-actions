@@ -3,6 +3,7 @@ package org.javai.springai.dsl.act;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Builds LLM-facing {@link ActionDescriptor} instances from annotated beans using {@link ActionRegistry}.
@@ -27,7 +28,7 @@ public final class ActionDescriptorFactory {
 		}
 		return registry.getActionDescriptors().stream()
 				.filter(filter::include)
-				.collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+				.toList();
 	}
 }
 

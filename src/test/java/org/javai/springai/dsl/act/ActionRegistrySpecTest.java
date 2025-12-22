@@ -21,21 +21,21 @@ class ActionRegistrySpecTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 
-		List<ActionSpec> specs = registry.getActionSpecs();
-		assertThat(specs).hasSize(1);
+		List<ActionDescriptor> descriptors = registry.getActionDescriptors();
+		assertThat(descriptors).hasSize(1);
 
-		ActionSpec spec = specs.getFirst();
-		assertThat(spec.id()).isEqualTo("runQuery");
-		assertThat(spec.description()).isEqualTo("Run a query");
-		assertThat(spec.actionParameterSpecs()).hasSize(2);
+		ActionDescriptor descriptor = descriptors.getFirst();
+		assertThat(descriptor.id()).isEqualTo("runQuery");
+		assertThat(descriptor.description()).isEqualTo("Run a query");
+		assertThat(descriptor.actionParameterSpecs()).hasSize(2);
 
-		ActionParameterSpec p0 = spec.actionParameterSpecs().get(0);
+		ActionParameterDescriptor p0 = descriptor.actionParameterSpecs().get(0);
 		assertThat(p0.name()).isEqualTo("query");
 		assertThat(p0.typeName()).isEqualTo(Query.class.getName());
 		assertThat(p0.typeId()).isEqualTo("sxl-sql:Query");
 		assertThat(p0.dslId()).isEqualTo("sxl-sql");
 
-		ActionParameterSpec p1 = spec.actionParameterSpecs().get(1);
+		ActionParameterDescriptor p1 = descriptor.actionParameterSpecs().get(1);
 		assertThat(p1.name()).isEqualTo("note");
 		assertThat(p1.typeName()).isEqualTo(String.class.getName());
 		assertThat(p1.typeId()).isEqualTo("String");
@@ -45,9 +45,9 @@ class ActionRegistrySpecTest {
 
 	@Test
 	void jsonMapperIncludesDslIdAndFields() {
-		List<ActionSpec> specs = ActionSpecFactory.fromBeans(new SampleActions());
+		List<ActionDescriptor> descriptors = ActionDescriptorFactory.fromBeans(new SampleActions());
 
-		var json = ActionSpecJsonMapper.toJsonArray(specs);
+		var json = ActionDescriptorJsonMapper.toJsonArray(descriptors);
 		assertThat(json).hasSize(1);
 		var first = json.get(0);
 		assertThat(first.get("id").asText()).isEqualTo("runQuery");
@@ -62,13 +62,13 @@ class ActionRegistrySpecTest {
 
 	@Test
 	void filterStrategyCanExcludeSpecs() {
-		List<ActionSpec> specs = ActionSpecFactory.fromBeans(
+		List<ActionDescriptor> descriptors = ActionDescriptorFactory.fromBeans(
 				spec -> spec.id().endsWith("runQuery"),
 				new SampleActions(),
 				new OtherActions());
 
-		assertThat(specs).hasSize(1);
-		assertThat(specs.getFirst().id()).isEqualTo("runQuery");
+		assertThat(descriptors).hasSize(1);
+		assertThat(descriptors.getFirst().id()).isEqualTo("runQuery");
 	}
 
 	private static class SampleActions {

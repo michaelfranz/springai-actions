@@ -65,7 +65,7 @@ class ActionRegistryTest {
 
 		assertThat(params).hasSize(2);
 
-		ActionParameterDescriptor p0 = params.get(0);
+		ActionParameterDescriptor p0 = params.getFirst();
 		assertThat(p0.name()).isEqualTo("name");
 		assertThat(p0.typeName()).isEqualTo(String.class.getName());
 		assertThat(p0.typeId()).isEqualTo("String");

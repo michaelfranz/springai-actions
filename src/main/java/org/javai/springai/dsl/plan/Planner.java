@@ -4,9 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import org.javai.springai.dsl.act.ActionParameterSpec;
+import org.javai.springai.dsl.act.ActionDescriptor;
+import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.act.ActionSpec;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
@@ -75,7 +75,7 @@ public final class Planner {
 
 		logger.debug("Planner call options: model={}, temperature={}, topP={}", model, temperature, topP);
 
-		PromptPreview preview = buildPromptPreview(requestText, actionContext.specs());
+		PromptPreview preview = buildPromptPreview(requestText, actionContext.descriptors());
 		if (effective.capturePrompt() || capturePromptByDefault) {
 			fireHook(preview);
 		}
@@ -104,7 +104,7 @@ public final class Planner {
 	 * Build a prompt preview without calling the LLM.
 	 */
 	public PromptPreview preview(String requestText) {
-		return buildPromptPreview(requestText, collectActions().specs());
+		return buildPromptPreview(requestText, collectActions().descriptors());
 	}
 
 	private ActionContext collectActions() {
@@ -114,10 +114,10 @@ public final class Planner {
 				registry.registerActions(source);
 			}
 		}
-		return new ActionContext(registry.getActionSpecs(), registry);
+		return new ActionContext(registry.getActionDescriptors(), registry);
 	}
 
-	private PromptPreview buildPromptPreview(String requestText, List<ActionSpec> actionSpecs) {
+	private PromptPreview buildPromptPreview(String requestText, List<ActionDescriptor> actionDescriptors) {
 		List<String> systemMessages = new ArrayList<>();
 
 		if (!grammars.isEmpty()) {
@@ -128,8 +128,8 @@ public final class Planner {
 			}
 		}
 
-		if (!actionSpecs.isEmpty()) {
-			systemMessages.add(buildActionSchemaMessage(actionSpecs));
+		if (!actionDescriptors.isEmpty()) {
+			systemMessages.add(buildActionSchemaMessage(actionDescriptors));
 		}
 
 		systemMessages.addAll(promptContributions);
@@ -139,7 +139,7 @@ public final class Planner {
 				.map(g -> g.dsl() != null ? g.dsl().id() : null)
 				.filter(Objects::nonNull)
 				.toList();
-		List<String> actionNames = actionSpecs.stream().map(ActionSpec::id).toList();
+		List<String> actionNames = actionDescriptors.stream().map(ActionDescriptor::id).toList();
 
 		return new PromptPreview(systemMessages, userMessages, grammarIds, actionNames);
 	}
@@ -155,7 +155,7 @@ public final class Planner {
 		}
 	}
 
-	private String buildActionSchemaMessage(List<ActionSpec> actions) {
+	private String buildActionSchemaMessage(List<ActionDescriptor> actions) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("""
             === PLAN AND ACTION DEFINITIONS ===
@@ -187,14 +187,14 @@ public final class Planner {
             - Only actions, which are named in the following list, may be used in the plan.
             """);
 
-		for (ActionSpec spec : actions) {
-			sb.append("\n\nAction id: ").append(spec.id()).append("\n");
-			sb.append("Description: ").append(spec.description()).append("\n");
+		for (ActionDescriptor descriptor : actions) {
+			sb.append("\n\nAction id: ").append(descriptor.id()).append("\n");
+			sb.append("Description: ").append(descriptor.description()).append("\n");
 			sb.append("Parameters:\n");
-			if (spec.actionParameterSpecs().isEmpty()) {
+			if (descriptor.actionParameterSpecs().isEmpty()) {
 				sb.append("  (none)\n");
 			} else {
-				for (ActionParameterSpec param : spec.actionParameterSpecs()) {
+				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
 					sb.append("  - ").append(param.name())
 							.append(" (type: ").append(param.typeId()).append(")");
 					if (param.dslId() != null && !param.dslId().isBlank()) {
@@ -333,7 +333,7 @@ public final class Planner {
 		}
 	}
 
-	private record ActionContext(List<ActionSpec> specs, ActionRegistry registry) {
+	private record ActionContext(List<ActionDescriptor> descriptors, ActionRegistry registry) {
 	}
 }
 

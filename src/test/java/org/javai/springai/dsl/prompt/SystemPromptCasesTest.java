@@ -1,17 +1,15 @@
 package org.javai.springai.dsl.prompt;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.act.ActionSpecFilter;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,8 +40,8 @@ class SystemPromptCasesTest {
 	@Test
 	void emitSamplePromptsForScenarios() throws Exception {
 		List<Scenario> scenarios = List.of(
-				new Scenario("simple-no-embed", this::simpleActions, ActionSpecFilter.ALL),
-				new Scenario("single-sql-embed", this::singleSqlActions, ActionSpecFilter.ALL),
+				new Scenario("simple-no-embed", this::simpleActions, ActionDescriptorFilter.ALL),
+				new Scenario("single-sql-embed", this::singleSqlActions, ActionDescriptorFilter.ALL),
 				new Scenario("multi-actions-filtered", this::multiActions, spec -> spec.id().endsWith("runQuery"))
 		);
 
@@ -81,7 +79,7 @@ class SystemPromptCasesTest {
 		return registry;
 	}
 
-	private record Scenario(String name, Supplier<ActionRegistry> registrySupplier, ActionSpecFilter filter) {}
+	private record Scenario(String name, Supplier<ActionRegistry> registrySupplier, ActionDescriptorFilter filter) {}
 
 	// Sample action beans
 	private static class SimpleActions {

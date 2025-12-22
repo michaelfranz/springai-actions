@@ -3,6 +3,7 @@ package org.javai.springai.dsl.bind;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import org.javai.springai.sxl.SxlNode;
 import org.junit.jupiter.api.Test;
 
@@ -10,7 +11,7 @@ class EmbedResolverUtilTest {
 
 	@Test
 	void resolvesEmbedWithLiteralDslId() {
-		SxlNode embed = SxlNode.symbol("EMBED", java.util.List.of(
+		SxlNode embed = SxlNode.symbol("EMBED", List.of(
 				SxlNode.literal("sxl-test"),
 				SxlNode.symbol("Q")
 		));
@@ -22,7 +23,7 @@ class EmbedResolverUtilTest {
 
 	@Test
 	void resolvesEmbedWithSymbolDslId() {
-		SxlNode embed = SxlNode.symbol("EMBED", java.util.List.of(
+		SxlNode embed = SxlNode.symbol("EMBED", List.of(
 				SxlNode.symbol("sxl-test"),
 				SxlNode.symbol("Q")
 		));
@@ -43,7 +44,7 @@ class EmbedResolverUtilTest {
 
 	@Test
 	void rejectsLiteralPayload() {
-		SxlNode embed = SxlNode.symbol("EMBED", java.util.List.of(
+		SxlNode embed = SxlNode.symbol("EMBED", List.of(
 				SxlNode.literal("sxl-test"),
 				SxlNode.literal("payload")
 		));
@@ -55,7 +56,7 @@ class EmbedResolverUtilTest {
 
 	@Test
 	void rejectsMissingArgs() {
-		SxlNode embed = SxlNode.symbol("EMBED", java.util.List.of(SxlNode.literal("sxl-test")));
+		SxlNode embed = SxlNode.symbol("EMBED", List.of(SxlNode.literal("sxl-test")));
 
 		assertThatThrownBy(() -> EmbedResolverUtil.resolveEmbedded(embed, new DummyResolver(), Object.class))
 				.isInstanceOf(IllegalStateException.class)

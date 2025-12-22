@@ -8,7 +8,7 @@ import java.util.List;
 public record ActionDescriptor(
 		String id,
 		String description,
-		List<ActionParameterSpec> actionParameterSpecs
+		List<ActionParameterDescriptor> actionParameterSpecs
 ) {
 
 	public String toSxl() {

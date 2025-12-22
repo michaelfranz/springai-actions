@@ -11,7 +11,7 @@ public record ActionBinding(
 		String description,
 		Object bean,
 		Method method,
-		List<ActionParameterSpec> parameters
+		List<ActionParameterDescriptor> parameters
 ) {
 }
 

@@ -8,10 +8,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.javai.springai.dsl.act.ActionDescriptor;
+import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionPromptEmitter;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.act.ActionSpec;
-import org.javai.springai.dsl.act.ActionSpecFilter;
 import org.javai.springai.sxl.grammar.SxlGrammarJsonSchemaEmitter;
 
 /**
@@ -35,7 +35,7 @@ public final class SystemPromptBuilder {
 	 * @return full system prompt text
 	 */
 	public static String build(ActionRegistry registry,
-			ActionSpecFilter filter,
+			ActionDescriptorFilter filter,
 			DslGuidanceProvider guidanceProvider,
 			Mode mode) {
 		return build(registry, filter, guidanceProvider, mode, null, null);
@@ -45,13 +45,13 @@ public final class SystemPromptBuilder {
 	 * Build a system prompt with provider/model-specific guidance if available.
 	 */
 	public static String build(ActionRegistry registry,
-			ActionSpecFilter filter,
+			ActionDescriptorFilter filter,
 			DslGuidanceProvider guidanceProvider,
 			Mode mode,
 			String providerId,
 			String modelId) {
 		if (filter == null) {
-			filter = ActionSpecFilter.ALL;
+			filter = ActionDescriptorFilter.ALL;
 		}
 		if (guidanceProvider == null) {
 			guidanceProvider = DslGuidanceProvider.NONE;
@@ -75,13 +75,13 @@ public final class SystemPromptBuilder {
 		return "DSL GUIDANCE:\n" + dslSection + "\n\nACTIONS:\n" + actionsSection;
 	}
 
-	private static Set<String> collectDslIds(ActionRegistry registry, ActionSpecFilter filter, DslGuidanceProvider guidanceProvider) {
+	private static Set<String> collectDslIds(ActionRegistry registry, ActionDescriptorFilter filter, DslGuidanceProvider guidanceProvider) {
 		Set<String> ids = new LinkedHashSet<>();
-		List<ActionSpec> selected = registry.getActionSpecs().stream()
+		List<ActionDescriptor> selected = registry.getActionDescriptors().stream()
 				.filter(filter::include)
 				.toList();
-		for (ActionSpec spec : selected) {
-			spec.actionParameterSpecs().forEach(p -> {
+		for (ActionDescriptor descriptor : selected) {
+			descriptor.actionParameterSpecs().forEach(p -> {
 				if (p.dslId() != null && !p.dslId().isBlank()) {
 					ids.add(p.dslId());
 				}

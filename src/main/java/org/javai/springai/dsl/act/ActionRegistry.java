@@ -3,8 +3,7 @@ package org.javai.springai.dsl.act;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.api.Action;
@@ -13,11 +12,7 @@ import org.javai.springai.dsl.bind.TypeFactoryRegistry;
 
 public final class ActionRegistry {
 
-	// References to the actual bean methods which embody the actions' functionality
-	private final Map<String, ActionDefinition> actionDefinitions = new HashMap<>();
-
-	// Set of all action specs... these are what are communicated to the LLM
-	private final List<ActionSpec> actionSpecs = new ArrayList<>();
+	private final Map<String, ActionEntry> entries = new LinkedHashMap<>();
 
 	public void registerActions(Object bean) {
 		for (Method method : bean.getClass().getMethods()) {
@@ -25,39 +20,28 @@ public final class ActionRegistry {
 			if (action == null) continue;
 
 			String id = createActionId(bean, method);
-			List<ActionParameterSpec> actionParameterDefinitions = createActionParameterDefinitions(bean, method);
+			List<ActionParameterDescriptor> actionParameterDefinitions = createActionParameterDefinitions(bean, method);
 			String description = createActionDescription(action, method.getName());
 
-			var previous = actionDefinitions.put(
-					id,
-					new ActionDefinition(
-							id,
-							description,
-							bean,
-							method,
-							actionParameterDefinitions
-					));
-			if (previous != null) {
+			if (entries.containsKey(id)) {
 				throw new IllegalStateException("Duplicate action definition: " + id);
 			}
-
-			List<ActionParameterSpec> parameterSpecs = createActionParameterSpecs(bean, method);
-			actionSpecs.add(new ActionSpec(id, description, parameterSpecs));
+			entries.put(id, new ActionEntry(id, description, actionParameterDefinitions, bean, method));
 		}
 	}
 
-	private static List<ActionParameterSpec> createActionParameterDefinitions(Object bean, Method method) {
-		List<ActionParameterSpec> actionParameterDefinitions = new ArrayList<>();
+	private static List<ActionParameterDescriptor> createActionParameterDefinitions(Object bean, Method method) {
+		List<ActionParameterDescriptor> actionParameterDefinitions = new ArrayList<>();
 		for (Parameter parameter : method.getParameters()) {
 			actionParameterDefinitions.add(createActionParameterDefinition(parameter));
 		}
 		return actionParameterDefinitions;
 	}
 
-	private static ActionParameterSpec createActionParameterDefinition(Parameter parameter) {
+	private static ActionParameterDescriptor createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
 		String dslId = TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null);
-		return new ActionParameterSpec(
+		return new ActionParameterDescriptor(
 				parameter.getName(),
 				parameter.getType().getName(),
 				deriveShortTypeId(parameter.getType(), dslId),
@@ -110,23 +94,17 @@ public final class ActionRegistry {
 		return method.getName();
 	}
 
-	public ActionDefinition getActionDefinition(String actionId) {
-		return actionDefinitions.get(actionId);
+	public ActionBinding getActionBinding(String actionId) {
+		ActionEntry entry = entries.get(actionId);
+		return entry != null ? entry.binding() : null;
 	}
 
-	public List<ActionDefinition> getActionDefinitions() {
-		return List.copyOf(actionDefinitions.values());
+	public List<ActionBinding> getActionBindings() {
+		return entries.values().stream().map(ActionEntry::binding).toList();
 	}
 
-	public List<ActionSpec> getActionSpecs() {
-		return Collections.unmodifiableList(actionSpecs);
+	public List<ActionDescriptor> getActionDescriptors() {
+		return entries.values().stream().map(ActionEntry::descriptor).toList();
 	}
 
-	private List<ActionParameterSpec> createActionParameterSpecs(Object bean, Method method) {
-		List<ActionParameterSpec> specs = new ArrayList<>();
-		for (Parameter parameter : method.getParameters()) {
-			specs.add(createActionParameterDefinition(parameter));
-		}
-		return specs;
-	}
 }

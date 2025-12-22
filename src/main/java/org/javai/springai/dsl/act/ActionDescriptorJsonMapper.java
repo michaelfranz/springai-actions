@@ -20,7 +20,7 @@ public final class ActionDescriptorJsonMapper {
 		node.put("id", descriptor.id());
 		node.put("description", descriptor.description());
 		ArrayNode params = node.putArray("parameters");
-		for (ActionParameterSpec param : descriptor.actionParameterSpecs()) {
+		for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
 			ObjectNode p = params.addObject();
 			p.put("name", param.name());
 			p.put("type", param.typeName());

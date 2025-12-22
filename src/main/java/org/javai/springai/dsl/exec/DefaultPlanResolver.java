@@ -26,47 +26,43 @@ public class DefaultPlanResolver implements PlanResolver {
 		List<ResolvedStep> resolved = new ArrayList<>();
 
 		for (PlanStep step : plan.planSteps()) {
-			if (step instanceof PlanStep.Error errorStep) {
-				resolved.add(new ResolvedStep.ErrorStep(errorStep.assistantMessage()));
-				continue;
-			}
-			if (!(step instanceof PlanStep.Action actionStep)) {
-				errors.add(new PlanResolutionError(null, null, "Unknown plan step type: " + step.getClass().getName(), null));
-				continue;
-			}
+			switch (step) {
+				case PlanStep.Error(String assistantMessage) -> resolved.add(new ResolvedStep.ErrorStep(assistantMessage));
+				case PlanStep.Action actionStep -> {
+					String actionId = actionStep.actionId();
+					ActionBinding binding = registry.getActionBinding(actionId);
+					if (binding == null) {
+						errors.add(new PlanResolutionError(actionId, null, "Unknown action id", null));
+						continue;
+					}
 
-			String actionId = actionStep.actionId();
-			ActionBinding binding = registry.getActionBinding(actionId);
-			if (binding == null) {
-				errors.add(new PlanResolutionError(actionId, null, "Unknown action id", null));
-				continue;
-			}
+					List<ActionParameterDescriptor> params = binding.parameters();
+					Object[] args = actionStep.actionArguments();
+					if (args == null) {
+						args = new Object[0];
+					}
+					if (args.length != params.size()) {
+						errors.add(new PlanResolutionError(actionId, null,
+								"Argument count mismatch: expected " + params.size() + " got " + args.length, args));
+						continue;
+					}
 
-			List<ActionParameterDescriptor> params = binding.parameters();
-			Object[] args = actionStep.actionArguments();
-			if (args == null) {
-				args = new Object[0];
-			}
-			if (args.length != params.size()) {
-				errors.add(new PlanResolutionError(actionId, null,
-						"Argument count mismatch: expected " + params.size() + " got " + args.length, args));
-				continue;
-			}
-
-			List<ResolvedArgument> resolvedArgs = new ArrayList<>();
-			boolean stepFailed = false;
-			for (int i = 0; i < params.size(); i++) {
-				ActionParameterDescriptor param = params.get(i);
-				Object raw = args[i];
-				Object converted = convert(raw, param, errors, actionId);
-				if (converted == ConversionFailure.INSTANCE) {
-					stepFailed = true;
-					break;
+					List<ResolvedArgument> resolvedArgs = new ArrayList<>();
+					boolean stepFailed = false;
+					for (int i = 0; i < params.size(); i++) {
+						ActionParameterDescriptor param = params.get(i);
+						Object raw = args[i];
+						Object converted = convert(raw, param, errors, actionId);
+						if (converted == ConversionFailure.INSTANCE) {
+							stepFailed = true;
+							break;
+						}
+						resolvedArgs.add(new ResolvedArgument(param.name(), converted, resolveType(param.typeName())));
+					}
+					if (!stepFailed) {
+						resolved.add(new ResolvedStep.ActionStep(binding, resolvedArgs));
+					}
 				}
-				resolvedArgs.add(new ResolvedArgument(param.name(), converted, resolveType(param.typeName())));
-			}
-			if (!stepFailed) {
-				resolved.add(new ResolvedStep.ActionStep(binding, resolvedArgs));
 			}
 		}
 

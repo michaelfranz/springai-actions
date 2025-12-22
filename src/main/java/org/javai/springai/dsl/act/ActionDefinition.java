@@ -16,6 +16,6 @@ public record ActionDefinition(
 		String description,
 		Object bean,
 		Method method,
-		List<ActionParameterSpec> actionParameterDefinitions
+		List<ActionParameterDescriptor> actionParameterDefinitions
 ) {
 }

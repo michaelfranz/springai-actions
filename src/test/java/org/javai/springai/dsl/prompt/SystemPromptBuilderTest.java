@@ -5,7 +5,7 @@ import java.util.Map;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.act.ActionSpecFilter;
+import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +53,7 @@ class SystemPromptBuilderTest {
 
 		String prompt = SystemPromptBuilder.build(
 				registry,
-				ActionSpecFilter.ALL,
+				ActionDescriptorFilter.ALL,
 				guidanceProvider,
 				SystemPromptBuilder.Mode.JSON,
 				"openai",

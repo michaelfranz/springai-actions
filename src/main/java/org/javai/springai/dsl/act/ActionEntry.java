@@ -9,7 +9,7 @@ import java.util.List;
 public record ActionEntry(
 		String id,
 		String description,
-		List<ActionParameterSpec> parameters,
+		List<ActionParameterDescriptor> parameters,
 		Object bean,
 		Method method
 ) {

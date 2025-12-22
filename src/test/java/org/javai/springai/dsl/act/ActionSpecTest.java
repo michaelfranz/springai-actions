@@ -10,21 +10,21 @@ class ActionSpecTest {
 
 	@Test
 	void rendersSxlWithEmbeddedAndPlainParams() {
-		ActionParameterSpec embedded = new ActionParameterSpec(
+		ActionParameterDescriptor embedded = new ActionParameterDescriptor(
 				"query",
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				"SQL query payload",
 				"sxl-sql"
 		);
-		ActionParameterSpec plain = new ActionParameterSpec(
+		ActionParameterDescriptor plain = new ActionParameterDescriptor(
 				"note",
 				"java.lang.String",
 				"String",
 				"Additional note",
 				null
 		);
-		ActionSpec spec = new ActionSpec(
+		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
 				"Fetch orders via SQL",
 				List.of(embedded, plain)
@@ -41,27 +41,27 @@ class ActionSpecTest {
 
 	@Test
 	void rendersJsonWithDslIdWhenPresent() {
-		ActionParameterSpec withDsl = new ActionParameterSpec(
+		ActionParameterDescriptor withDsl = new ActionParameterDescriptor(
 				"query",
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				"SQL query payload",
 				"sxl-sql"
 		);
-		ActionParameterSpec withoutDsl = new ActionParameterSpec(
+		ActionParameterDescriptor withoutDsl = new ActionParameterDescriptor(
 				"note",
 				"java.lang.String",
 				"String",
 				"Additional note",
 				null
 		);
-		ActionSpec spec = new ActionSpec(
+		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
 				"Fetch orders via SQL",
 				List.of(withDsl, withoutDsl)
 		);
 
-		ArrayNode array = ActionSpecJsonMapper.toJsonArray(List.of(spec));
+		ArrayNode array = ActionDescriptorJsonMapper.toJsonArray(List.of(spec));
 		assertThat(array).hasSize(1);
 		ObjectNode json = (ObjectNode) array.get(0);
 

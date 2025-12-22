@@ -1,12 +1,9 @@
 package org.javai.springai.dsl.prompt;
 
-import java.io.InputStream;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarParser;
+import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
 
 /**
  * Loads DSL guidance from SxlGrammar resources.
@@ -23,8 +20,7 @@ import org.javai.springai.sxl.grammar.SxlGrammarParser;
  */
 public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, DslGrammarSource {
 
-	private final Map<String, SxlGrammar> grammars;
-	private static final String UNIVERSAL_GRAMMAR_RESOURCE = "sxl-meta-grammar-universal.yml";
+	private final SxlGrammarRegistry registry;
 
 	/**
 	 * Load grammars from resource paths; the DSL id is taken from each grammar's dsl.id.
@@ -37,49 +33,15 @@ public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, Ds
 	 * @param loader ClassLoader to load resources from
 	 */
 	public GrammarBackedDslGuidanceProvider(List<String> grammarResourcePaths, ClassLoader loader) {
-		SxlGrammarParser parser = new SxlGrammarParser();
-		this.grammars = new LinkedHashMap<>();
-		
-		// PHASE 2: Auto-load universal grammar FIRST
-		loadGrammar(parser, UNIVERSAL_GRAMMAR_RESOURCE, loader);
-		
-		// Then load user-specified grammars
-		for (String path : grammarResourcePaths) {
-			loadGrammar(parser, path, loader);
-		}
-	}
-
-	/**
-	 * Helper method to load a single grammar and add it to the registry.
-	 * 
-	 * @param parser the grammar parser
-	 * @param path the resource path to load
-	 * @param loader the ClassLoader
-	 * @throws IllegalStateException if loading or parsing fails
-	 * @throws IllegalStateException if a duplicate DSL id is detected
-	 */
-	private void loadGrammar(SxlGrammarParser parser, String path, ClassLoader loader) {
-			try (InputStream is = loader.getResourceAsStream(path)) {
-				if (is == null) {
-					throw new IllegalArgumentException("Resource not found: " + path);
-				}
-				SxlGrammar grammar = parser.parse(is);
-				String dslId = grammar.dsl().id();
-			
-			// Skip if already loaded (e.g., universal grammar auto-loaded, then user explicitly loads it)
-			if (grammars.containsKey(dslId)) {
-				return;
-			}
-			
-			grammars.put(dslId, grammar);
-			} catch (Exception e) {
-				throw new IllegalStateException("Failed to load grammar from: " + path, e);
-		}
+		this.registry = SxlGrammarRegistry.create();
+		// Auto-load universal grammar first, then user-specified grammars
+		this.registry.registerUniversal(loader);
+		this.registry.registerResources(grammarResourcePaths, loader);
 	}
 
 	@Override
 	public Optional<String> guidanceFor(String dslId, String providerId, String modelId) {
-		SxlGrammar grammar = grammars.get(dslId);
+		SxlGrammar grammar = registry.grammarFor(dslId).orElse(null);
 		if (grammar == null || grammar.llmSpecs() == null || grammar.llmSpecs().defaults() == null) {
 			return Optional.empty();
 		}
@@ -106,6 +68,6 @@ public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, Ds
 
 	@Override
 	public Optional<SxlGrammar> grammarFor(String dslId) {
-		return Optional.ofNullable(grammars.get(dslId));
+		return registry.grammarFor(dslId);
 	}
 }

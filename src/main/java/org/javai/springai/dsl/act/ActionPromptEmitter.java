@@ -3,7 +3,9 @@ package org.javai.springai.dsl.act;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
@@ -23,57 +25,59 @@ public final class ActionPromptEmitter {
 	}
 
 	public static String emit(ActionRegistry registry, Mode mode) {
-		return emit(registry, mode, ActionSpecFilter.ALL);
+		return emit(registry, mode, ActionDescriptorFilter.ALL);
 	}
 
-	public static String emit(ActionRegistry registry, Mode mode, ActionSpecFilter filter) {
+	public static String emit(ActionRegistry registry, Mode mode, ActionDescriptorFilter filter) {
 		if (filter == null) {
-			filter = ActionSpecFilter.ALL;
+			filter = ActionDescriptorFilter.ALL;
 		}
-		List<ActionSpec> selectedSpecs = registry.getActionSpecs().stream()
+		List<ActionDescriptor> selectedDescriptors = registry.getActionDescriptors().stream()
 				.filter(filter::include)
 				.collect(Collectors.toList());
-		Set<String> selectedIds = selectedSpecs.stream().map(ActionSpec::id).collect(Collectors.toSet());
-		List<ActionDefinition> selectedDefs = registry.getActionDefinitions().stream()
-				.filter(def -> selectedIds.contains(def.id()))
+		Set<String> selectedIds = selectedDescriptors.stream().map(ActionDescriptor::id).collect(Collectors.toSet());
+		List<ActionBinding> selectedBindings = registry.getActionBindings().stream()
+				.filter(binding -> selectedIds.contains(binding.id()))
 				.collect(Collectors.toList());
+		Map<String, ActionDescriptor> descriptorById = selectedDescriptors.stream()
+				.collect(Collectors.toMap(ActionDescriptor::id, d -> d));
 
 		return switch (mode) {
-			case SXL -> emitSxl(selectedSpecs);
-			case JSON -> emitJson(selectedDefs);
+			case SXL -> emitSxl(selectedDescriptors);
+			case JSON -> emitJson(selectedBindings, descriptorById);
 		};
 	}
 
-	private static String emitSxl(List<ActionSpec> specs) {
+	private static String emitSxl(List<ActionDescriptor> specs) {
 		return specs.stream()
-				.map(ActionSpec::toSxl)
+				.map(ActionDescriptor::toSxl)
 				.collect(Collectors.joining("\n"));
 	}
 
-	private static String emitJson(List<ActionDefinition> defs) {
+	private static String emitJson(List<ActionBinding> bindings, Map<String, ActionDescriptor> descriptors) {
 		ArrayNode array = mapper.createArrayNode();
-		for (ActionDefinition def : defs) {
+		for (ActionBinding binding : bindings) {
 			ObjectNode node = mapper.createObjectNode();
-			node.put("id", def.id());
-			node.put("description", def.description());
-			// Parameters via ActionSpecJsonMapper (ensures typeId/dslId included)
-			ActionSpec spec = findSpec(def);
-			ArrayNode params = ActionSpecJsonMapper.toJson(spec).withArray("parameters");
-			node.set("parameters", params);
+			node.put("id", binding.id());
+			node.put("description", binding.description());
+			ActionDescriptor descriptor = descriptors.get(binding.id());
+			if (descriptor != null) {
+				ArrayNode params = ActionDescriptorJsonMapper.toJson(descriptor).withArray("parameters");
+				node.set("parameters", params);
+			}
 			// Add Spring AI-style schema for the method input
-			String schemaJson = JsonSchemaGenerator.generateForMethodInput(def.method());
+			Method method = binding.method();
+			if (method == null) {
+				throw new IllegalStateException("Action binding missing method for action id: " + binding.id());
+			}
+			String schemaJson = JsonSchemaGenerator.generateForMethodInput(method);
 			try {
 				node.set("schema", mapper.readTree(schemaJson));
 			} catch (Exception e) {
-				throw new IllegalStateException("Failed to parse schema for action: " + def.id(), e);
+				throw new IllegalStateException("Failed to parse schema for action: " + binding.id(), e);
 			}
 			array.add(node);
 		}
 		return array.toPrettyString();
-	}
-
-	private static ActionSpec findSpec(ActionDefinition def) {
-		// Rebuild a spec from the definition's parameter specs to ensure alignment
-		return new ActionSpec(def.id(), def.description(), def.actionParameterDefinitions());
 	}
 }
