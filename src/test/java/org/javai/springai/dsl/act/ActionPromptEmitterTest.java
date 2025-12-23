@@ -3,6 +3,7 @@ package org.javai.springai.dsl.act;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
@@ -47,6 +48,16 @@ class ActionPromptEmitterTest {
 		assertThat(first.get("schema")).isNotNull();
 	}
 
+	@Test
+	void emitsSxlPromptWithCollectionExample() {
+		ActionRegistry registry = new ActionRegistry();
+		registry.registerActions(new ListActions());
+
+		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.SXL, spec -> spec.id().equals("processBundleIds"));
+
+		assertThat(prompt).contains("(PA bundleIds \"<bundleIds item1>\" \"<bundleIds item2>\")");
+	}
+
 	private static class SampleActions {
 		@Action(description = "Run a query")
 		public void runQuery(Query query, @ActionParam(description = "note to include") String note) {
@@ -56,6 +67,12 @@ class ActionPromptEmitterTest {
 	private static class OtherActions {
 		@Action(description = "Other action")
 		public void otherAction(String input) {
+		}
+	}
+
+	private static class ListActions {
+		@Action(description = "Process bundle ids")
+		public void processBundleIds(List<String> bundleIds) {
 		}
 	}
 }

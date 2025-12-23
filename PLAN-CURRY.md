@@ -42,11 +42,14 @@ Stop emitting empty/guessed values for required params. Instead, treat each plan
 4) **Plan model** ✅  
    - Add symmetric step types: `ActionStep`, `PendingActionStep`, `ErrorStep`.  
    - Visitors and resolvers understand pending and block execution with surfaced reasons.
-5) **Resolver/runtime**  
+5) **Resolver/runtime** ✅  
    - On `PENDING`, do not execute; surface assistant message synthesized from `pending` messages.  
    - Provide a helper to build user-facing follow-up prompts.
 6) **Conversation state**  
    - Persist partial plan + pendings; on user follow-up, merge new values and re-run planner (re-invocation path for previously pending plans once user supplies info).  
+   - Maintain compact rolling context: original instruction (or summary), already-provided params, current pendings, latest user reply. Avoid replaying full history.
+   - On retry, append a system-prompt addendum: note this is a retry, list pendings with user-friendly labels, include the latest user reply verbatim, and remind “use the new reply only if it truly satisfies pending items; otherwise emit PENDING; do not guess.”
+   - Follow-up asks should be user-friendly (e.g., “I need the bundleId to export the control chart”), not internal action identifiers.
    - If user cancels, clear pendings/plan.
 7) **Prompting & guardrails**  
    - In system messages, instruct: “For missing/unclear required params, emit PENDING; do not emit the executable action for that step.”  

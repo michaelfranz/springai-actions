@@ -70,9 +70,9 @@ symbols:
         cardinality: required
         ordered: true
       - name: value
-        description: "Parameter value"
+        description: "Parameter value(s); repeat the literal value to represent list/array parameters"
         type: literal(string)
-        cardinality: required
+        cardinality: oneOrMore
         ordered: true
 
   PENDING:
@@ -156,6 +156,15 @@ symbols:
               )
             )
           )
+      - label: "Step with list/array parameter"
+        code: |
+          (EMBED sxl-plan
+            (P
+              (PS someActionNeedingManyIds
+                (PA bundleIds "A12345" "A3145" "B4323")
+              )
+            )
+          )
 
   # Error step example at plan level
   ERROR-examples:
@@ -235,7 +244,7 @@ llm_specs:
     postamble: false
     guidance: |
       PLAN DSL root: (P ["description"] (PS action-id <step-items>)...).
-      step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use the PA symbol: (PA name "value"). Pending items use (PENDING name "what is needed") when a required/invalid/unclear value is missing; do not emit empty strings. Embeds use (EMBED <dsl-id> <payload>).
+      step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use the PA symbol: (PA name "value"). For list/array parameters, repeat literal values inside the same PA: (PA bundleIds "A12345" "A3145" "B4323"). Pending items use (PENDING name "what is needed") when a required/invalid/unclear value is missing; do not emit empty strings. Embeds use (EMBED <dsl-id> <payload>).
       Errors are separate steps at plan level: (ERROR "..."). Do NOT put ERROR inside PS. Do NOT invent wrapper nodes. Always include the DSL id in EMBED.
       If required params are missing/invalid/unclear, emit inline PENDING entries instead of guessing or leaving empty values. Example: (P "Export control chart" (PS exportControlChartToExcel (PENDING bundleId "Provide bundle id") (PA domainEntity "displacement") (PA measurementConcept "values"))).
 
@@ -248,7 +257,7 @@ llm_specs:
       max_examples: 2
       guidance: |
         PLAN DSL: Root is (P ["description"] steps...). Each step: (PS action-id <step-items>).
-        step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use (PA name "value"); embeds use (EMBED <dsl-id> <payload>); missing/invalid/unclear required params use (PENDING name "what is needed")—never emit empty strings.
+        step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use (PA name "value"); for list/array parameters repeat literal values in the same PA: (PA bundleIds "A12345" "A3145" "B4323"); embeds use (EMBED <dsl-id> <payload>); missing/invalid/unclear required params use (PENDING name "what is needed")—never emit empty strings.
         Errors are separate steps: (ERROR "..."). Return exactly one sxl-plan rooted at (P …); only PS or ERROR steps; action-id must come from the catalog; if params are missing, prefer inline PENDING over inventing values; no other symbols.
 
     anthropic:

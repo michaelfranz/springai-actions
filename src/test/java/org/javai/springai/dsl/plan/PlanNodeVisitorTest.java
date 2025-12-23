@@ -17,6 +17,7 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.assertj.core.api.InstanceOfAssertFactories;
 
 class PlanNodeVisitorTest {
 
@@ -150,6 +151,26 @@ class PlanNodeVisitorTest {
 				"displacement",
 				"A12345"
 		);
+	}
+
+	@Test
+	void generatePlanWithListParameterValues() {
+		String planText = """
+				(P "Plan with list param"
+				  (PS someAction
+				    (PA bundleIds "A12345" "A3145" "B4323")
+				  )
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep.ActionStep step = (PlanStep.ActionStep) plan.planSteps().getFirst();
+		assertThat(step.actionArguments()).hasSize(1);
+		assertThat(step.actionArguments()[0]).isInstanceOf(List.class);
+		assertThat(step.actionArguments()[0])
+				.asInstanceOf(InstanceOfAssertFactories.list(String.class))
+				.containsExactly("A12345", "A3145", "B4323");
 	}
 
 	@Test

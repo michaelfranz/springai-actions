@@ -17,6 +17,7 @@ import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -170,6 +171,26 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		for (PlanStep.PendingParam param : pendingParams) {
 			assertThat(param.name()).isIn("bundleId", "domainEntity");
 		}
+	}
+
+	@Disabled("Conversation-state follow-up not yet wired; serves as a placeholder scenario for step 6")
+	@Test
+	void requireMoreInformationFollowUpProvidesMissingBundleId() {
+		// Turn 1: missing bundle id -> expect pending
+		PlanExecutionResult firstTurn = planner.planWithDetails("export a control chart to excel for displacement values");
+		Plan firstPlan = firstTurn.plan();
+		assertThat(firstPlan).isNotNull();
+		assertThat(firstPlan.planSteps()).hasSize(1);
+		assertThat(firstPlan.planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
+
+		// Turn 2: user supplies only the missing info; desired behavior is that
+		// the system merges context and produces an executable step (documented scenario)
+		PlanExecutionResult secondTurn = planner.planWithDetails("the bundle id is A12345");
+		Plan secondPlan = secondTurn.plan();
+		assertThat(secondPlan).isNotNull();
+		// Ideal outcome after context merge: actionable step, no pending
+		// (This test remains disabled until conversation-state merge is implemented.)
+		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 	}
 
 	@Override

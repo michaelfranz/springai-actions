@@ -344,6 +344,27 @@ class PlanDslTest {
 		}
 
 		@Test
+		@DisplayName("Should allow list/array PARAM with multiple literal values")
+		void shouldAllowParamWithMultipleLiteralValues() {
+			String input = """
+					(EMBED sxl-plan
+					  (P
+					    (PS someAction
+					      (PA bundleIds "A12345" "A3145" "B4323")
+					    )
+					  )
+					)
+					""";
+
+			List<SxlNode> nodes = parseAndValidate(input);
+
+			SxlNode plan = nodes.getFirst().args().get(1);
+			SxlNode step = plan.args().getFirst();
+			SxlNode param = step.args().get(1);
+			assertThat(param.args()).hasSize(4); // name + three literal values
+		}
+
+		@Test
 		@DisplayName("Should allow mixed PARAMs and EMBED payloads")
 		void shouldAllowMixedParamsAndEmbed() {
 			String input = """

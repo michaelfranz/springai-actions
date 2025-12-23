@@ -92,16 +92,24 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 				throw new IllegalStateException("ERROR cannot appear inside PS; it must be a plan-level step");
 			}
 			if ("PA".equals(item.symbol())) {
-				if (item.args().size() != 2) {
-					throw new IllegalStateException("PA must have exactly a name and a literal value");
+				if (item.args().size() < 2) {
+					throw new IllegalStateException("PA must have a name and at least one literal value");
 				}
 				// Validate the parameter name even though we only capture positional argument values
 				extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
-				SxlNode valueNode = item.args().get(1);
-				if (!valueNode.isLiteral()) {
-					throw new IllegalStateException("PA value must be a literal");
+				List<SxlNode> valueNodes = item.args().subList(1, item.args().size());
+				if (valueNodes.stream().anyMatch(v -> !v.isLiteral())) {
+					throw new IllegalStateException("PA values must be literals");
 				}
-				resolvedArgs.add(valueNode.literalValue());
+				if (valueNodes.size() == 1) {
+					resolvedArgs.add(valueNodes.getFirst().literalValue());
+				}
+				else {
+					List<String> values = valueNodes.stream()
+							.map(SxlNode::literalValue)
+							.toList();
+					resolvedArgs.add(values);
+				}
 				continue;
 			}
 			if ("PENDING".equals(item.symbol())) {

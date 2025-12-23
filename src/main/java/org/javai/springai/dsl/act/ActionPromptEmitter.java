@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
@@ -65,7 +66,7 @@ public final class ActionPromptEmitter {
 	private static String defaultExample(ActionDescriptor d) {
 		// Provide a canonical plan-shaped exemplar using PS + PA params (no EMBED unless the action DSL id is specified).
 		String params = d.actionParameterSpecs().stream()
-				.map(p -> "(PA " + p.name() + " \"<" + p.name() + ">\")")
+				.map(ActionPromptEmitter::renderParameterExample)
 				.collect(Collectors.joining(" "));
 		return "(P \"Example for " + d.id() + "\" (PS " + d.id()
 				+ (params.isEmpty() ? "" : " " + params) + "))";
@@ -83,6 +84,29 @@ public final class ActionPromptEmitter {
 		String params = pending + (otherParams.isEmpty() ? "" : " " + otherParams);
 		return "(P \"Example pending for " + d.id() + "\" (PS " + d.id()
 				+ (params.isEmpty() ? "" : " " + params) + "))";
+	}
+
+	private static String renderParameterExample(ActionParameterDescriptor p) {
+		if (isCollectionOrArray(p.typeName())) {
+			return "(PA " + p.name() + " \"<" + p.name() + " item1>\" \"<" + p.name() + " item2>\")";
+		}
+		return "(PA " + p.name() + " \"<" + p.name() + ">\")";
+	}
+
+	private static boolean isCollectionOrArray(String typeName) {
+		if (typeName == null || typeName.isBlank()) {
+			return false;
+		}
+		if (typeName.startsWith("[")) {
+			return true;
+		}
+		try {
+			Class<?> clazz = Class.forName(typeName);
+			return Collection.class.isAssignableFrom(clazz);
+		}
+		catch (ClassNotFoundException ex) {
+			return typeName.contains("List") || typeName.contains("Collection");
+		}
 	}
 
 	private static String emitJson(List<ActionBinding> bindings, Map<String, ActionDescriptor> descriptors) {

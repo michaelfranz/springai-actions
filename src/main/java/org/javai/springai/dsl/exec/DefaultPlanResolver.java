@@ -1,6 +1,9 @@
 package org.javai.springai.dsl.exec;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import org.javai.springai.dsl.act.ActionBinding;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
@@ -100,7 +103,44 @@ public class DefaultPlanResolver implements PlanResolver {
 		if (targetType.isInstance(raw)) {
 			return raw;
 		}
-		// Simple conversions
+
+		if (targetType.isArray()) {
+			return convertArray(raw, targetType.componentType(), errors, actionId, param.name());
+		}
+
+		if (Collection.class.isAssignableFrom(targetType)) {
+			List<?> asList = toList(raw);
+			if (asList == null) {
+				errors.add(new PlanResolutionError(actionId, param.name(),
+						"Expected a collection-compatible value for parameter " + param.name(), raw));
+				return ConversionFailure.INSTANCE;
+			}
+			return asList;
+		}
+
+		return convertScalar(raw, targetType, errors, actionId, param.name());
+	}
+
+	private Object convertArray(Object raw, Class<?> componentType, List<PlanResolutionError> errors, String actionId, String paramName) {
+		Object[] elements = toObjectArray(raw);
+		if (elements == null) {
+			errors.add(new PlanResolutionError(actionId, paramName,
+					"Expected an array or collection value for parameter " + paramName, raw));
+			return ConversionFailure.INSTANCE;
+		}
+
+		Object array = Array.newInstance(componentType, elements.length);
+		for (int i = 0; i < elements.length; i++) {
+			Object converted = convertScalar(elements[i], componentType, errors, actionId, paramName);
+			if (converted == ConversionFailure.INSTANCE) {
+				return ConversionFailure.INSTANCE;
+			}
+			Array.set(array, i, converted);
+		}
+		return array;
+	}
+
+	private Object convertScalar(Object raw, Class<?> targetType, List<PlanResolutionError> errors, String actionId, String paramName) {
 		try {
 			if (targetType == String.class) {
 				return raw.toString();
@@ -122,7 +162,7 @@ public class DefaultPlanResolver implements PlanResolver {
 			}
 		}
 		catch (Exception ex) {
-			errors.add(new PlanResolutionError(actionId, param.name(),
+			errors.add(new PlanResolutionError(actionId, paramName,
 					"Failed to convert value to " + targetType.getSimpleName() + ": " + ex.getMessage(), raw));
 			return ConversionFailure.INSTANCE;
 		}
@@ -133,6 +173,40 @@ public class DefaultPlanResolver implements PlanResolver {
 
 		// Fallback: no conversion performed
 		return raw;
+	}
+
+	private Object[] toObjectArray(Object raw) {
+		if (raw == null) {
+			return new Object[0];
+		}
+		if (raw instanceof Object[] objectArray) {
+			return objectArray;
+		}
+		if (raw instanceof List<?> list) {
+			return list.toArray();
+		}
+		if (raw.getClass().isArray()) {
+			int length = Array.getLength(raw);
+			Object[] copy = new Object[length];
+			for (int i = 0; i < length; i++) {
+				copy[i] = Array.get(raw, i);
+			}
+			return copy;
+		}
+		return new Object[] { raw };
+	}
+
+	private List<?> toList(Object raw) {
+		if (raw instanceof List<?> list) {
+			return list;
+		}
+		if (raw instanceof Object[] array) {
+			return Arrays.asList(array);
+		}
+		if (raw != null && raw.getClass().isArray()) {
+			return Arrays.asList(toObjectArray(raw));
+		}
+		return null;
 	}
 
 	private Class<?> resolveType(String typeName) {
