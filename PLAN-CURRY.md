@@ -64,3 +64,10 @@ Stop emitting empty/guessed values for required params. Instead, treat each plan
 - Inline vs. top-level pendings: choose one to simplify parsing (recommended: inline per step).  
 - How to represent multiple missing params for a single step: multiple `PENDING` entries vs. one with a list. (Recommended: multiple entries, one per param, keyed by `stepId`.)
 
+## Current State (WIP)
+- Steps 1–5 implemented (guardrails, Plan DSL PENDING, validator, symmetric plan model, resolver blocks pending, executor added).
+- Step 6 partially implemented:
+  - Conversation scaffolding (`ConversationState`, `PendingParamSnapshot`, `ConversationPromptBuilder`) with unit tests.
+  - Mocked conversation flow (`StatsApplicationConversationUnitTest`) shows two-turn pending → resolved action.
+  - Integration follow-up test in `StatsApplicationScenarioTest` remains **disabled** until live conversation-aware re-plan wiring is added (goal: turn 2 with user-provided bundleId yields an `ActionStep`).
+
