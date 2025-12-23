@@ -13,20 +13,20 @@ import org.javai.springai.actions.execution.ActionResult;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
 import org.javai.springai.actions.execution.ExecutableAction;
 import org.javai.springai.actions.execution.ExecutablePlan;
-import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.execution.PlanExecutionException;
+import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.prompt.DslGrammarSource;
-import org.javai.springai.dsl.prompt.DslGuidanceProvider;
-import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.ResolvedArgument;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
+import org.javai.springai.dsl.prompt.DslGrammarSource;
+import org.javai.springai.dsl.prompt.DslGuidanceProvider;
+import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
@@ -116,7 +116,7 @@ public final class Planner {
 
 		if (effective.dryRun() || chatClient == null) {
 			logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
-			return new PlanExecutionResult(new Plan("", List.of()), preview, true, actionContext.registry());
+			return new PlanExecutionResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
 		}
 
 		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
@@ -128,14 +128,10 @@ public final class Planner {
 		String userMessage = preview.renderedUser();
 		request.user(Objects.requireNonNull(userMessage));
 
-		// temp
-		String systemPrompt = preview.renderedSystem();
-		System.out.println(systemPrompt);
-
 		String response = request.call().content();
 		Plan plan = parsePlan(response);
 		fireHook(preview);
-		return new PlanExecutionResult(plan, preview, false, actionContext.registry());
+		return new PlanExecutionResult(response, plan, preview, false, actionContext.registry());
 	}
 
 	/**
@@ -202,7 +198,7 @@ public final class Planner {
 
 	private Plan parsePlan(String response) {
 		if (response == null || response.isBlank()) {
-			throw new IllegalStateException("LLM returned empty plan response");
+			throw new IllegalStateException("LLM returned empty plan llmResponse");
 		}
 		SxlTokenizer tokenizer = new SxlTokenizer(response);
 		var tokens = tokenizer.tokenize();

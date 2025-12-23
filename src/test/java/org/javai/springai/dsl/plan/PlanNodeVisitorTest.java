@@ -57,8 +57,8 @@ class PlanNodeVisitorTest {
 		assertThat(plan.assistantMessage()).isEqualTo("Query plan");
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep ps1 = plan.planSteps().getFirst();
-		assertThat(ps1).isInstanceOf(PlanStep.Action.class);
-		PlanStep.Action a1 = (PlanStep.Action)ps1;
+		assertThat(ps1).isInstanceOf(PlanStep.ActionStep.class);
+		PlanStep.ActionStep a1 = (PlanStep.ActionStep) ps1;
 		assertThat(a1.assistantMessage()).isEmpty();
 		assertThat(a1.actionId()).isEqualTo("fetchOrders");
 		assertThat(a1.actionArguments()).hasSize(1);
@@ -75,8 +75,8 @@ class PlanNodeVisitorTest {
 		SxlNode planNode = parse(planText);
 		Plan plan = PlanNodeVisitor.generate(planNode);
 		assertThat(plan.planSteps()).hasSize(1);
-		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.Error.class);
-		PlanStep.Error error = (PlanStep.Error) plan.planSteps().getFirst();
+		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) plan.planSteps().getFirst();
 		assertThat(error.assistantMessage()).isEqualTo("LLM timeout");
 	}
 
@@ -91,11 +91,11 @@ class PlanNodeVisitorTest {
 		SxlNode planNode = parse(planText);
 		Plan plan = PlanNodeVisitor.generate(planNode);
 		assertThat(plan.planSteps()).hasSize(2);
-		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.Error.class);
-		PlanStep.Error error0 = (PlanStep.Error) plan.planSteps().getFirst();
+		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error0 = (PlanStep.ErrorStep) plan.planSteps().getFirst();
 		assertThat(error0.assistantMessage()).isEqualTo("LLM timeout");
-		assertThat(plan.planSteps().get(1)).isInstanceOf(PlanStep.Error.class);
-		PlanStep.Error error1 = (PlanStep.Error) plan.planSteps().get(1);
+		assertThat(plan.planSteps().get(1)).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error1 = (PlanStep.ErrorStep) plan.planSteps().get(1);
 		assertThat(error1.assistantMessage()).isEqualTo("Out of tokens");
 	}
 
@@ -144,7 +144,7 @@ class PlanNodeVisitorTest {
 		SxlNode planNode = parse(planText);
 		Plan plan = PlanNodeVisitor.generate(planNode);
 		assertThat(plan.planSteps()).hasSize(1);
-		PlanStep.Action step = (PlanStep.Action) plan.planSteps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) plan.planSteps().getFirst();
 		assertThat(step.actionArguments()).containsExactly(
 				"elasticity bundle",
 				"displacement",
@@ -165,9 +165,29 @@ class PlanNodeVisitorTest {
 		SxlNode planNode = parse(planText);
 		Plan plan = PlanNodeVisitor.generate(planNode);
 		assertThat(plan.planSteps()).hasSize(1);
-		PlanStep.Action step = (PlanStep.Action) plan.planSteps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) plan.planSteps().getFirst();
 		assertThat(step.actionArguments()).hasSize(2);
 		assertThat(step.actionArguments()[1]).isEqualTo("A12345");
+	}
+
+	@Test
+	void generatePlanWithPendingParameters() {
+		String planText = """
+				(P "Export requires missing info"
+				  (PS exportControlChartToExcel
+				    (PENDING bundleId "Provide bundle id to export control chart")
+				    (PENDING measurementConcept "Measurement concept is invalid: ???")
+				    (PA domainEntity "displacement")
+				  )
+				)
+				""";
+
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+
+		assertThat(plan.planSteps()).hasSize(1);
+		Object pendingStep = plan.planSteps().getFirst();
+		assertThat(pendingStep.getClass().getSimpleName()).isEqualTo("PendingActionStep");
 	}
 
 	private SxlNode parse(String sxl) {

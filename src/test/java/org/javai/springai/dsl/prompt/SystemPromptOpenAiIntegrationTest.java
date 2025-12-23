@@ -91,9 +91,9 @@ class SystemPromptOpenAiIntegrationTest {
 
 		assertThat(plan.planSteps()).hasSizeGreaterThanOrEqualTo(1);
 		PlanStep first = plan.planSteps().getFirst();
-		assertThat(first).isInstanceOf(PlanStep.Action.class);
+		assertThat(first).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanStep.Action action = (PlanStep.Action) first;
+		PlanStep.ActionStep action = (PlanStep.ActionStep) first;
 		assertThat(action.actionId()).isEqualTo("runQuery");
 		assertThat(action.actionArguments()).hasSize(1);
 		assertThat(action.actionArguments()[0]).isInstanceOf(Query.class);

@@ -56,7 +56,8 @@ public final class ActionPromptEmitter {
 					if (example == null || example.isBlank()) {
 						example = defaultExample(descriptor);
 					}
-					return base + "\nExample: " + example.trim();
+					String pendingExample = defaultPendingExample(descriptor);
+					return base + "\nExample: " + example.trim() + "\nPending Example: " + pendingExample.trim();
 				})
 				.collect(Collectors.joining("\n\n"));
 	}
@@ -67,6 +68,20 @@ public final class ActionPromptEmitter {
 				.map(p -> "(PA " + p.name() + " \"<" + p.name() + ">\")")
 				.collect(Collectors.joining(" "));
 		return "(P \"Example for " + d.id() + "\" (PS " + d.id()
+				+ (params.isEmpty() ? "" : " " + params) + "))";
+	}
+
+	private static String defaultPendingExample(ActionDescriptor d) {
+		String firstParam = d.actionParameterSpecs().isEmpty()
+				? "value"
+				: d.actionParameterSpecs().getFirst().name();
+		String otherParams = d.actionParameterSpecs().stream()
+				.skip(1)
+				.map(p -> "(PA " + p.name() + " \"<" + p.name() + ">\")")
+				.collect(Collectors.joining(" "));
+		String pending = "(PENDING " + firstParam + " \"Provide " + firstParam + "\")";
+		String params = pending + (otherParams.isEmpty() ? "" : " " + otherParams);
+		return "(P \"Example pending for " + d.id() + "\" (PS " + d.id()
 				+ (params.isEmpty() ? "" : " " + params) + "))";
 	}
 

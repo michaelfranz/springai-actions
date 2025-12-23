@@ -149,8 +149,8 @@ class SystemPromptBuilderTuningTest {
 				Plan plan = parsePlan(response);
 				assertThat(plan.planSteps()).hasSizeGreaterThanOrEqualTo(1);
 				PlanStep step = plan.planSteps().getFirst();
-				assertThat(step).isInstanceOf(PlanStep.Action.class);
-				PlanStep.Action action = (PlanStep.Action) step;
+				assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
+				PlanStep.ActionStep action = (PlanStep.ActionStep) step;
 				assertThat(action.actionId()).isEqualTo("runQuery");
 				assertThat(action.actionArguments()).hasSize(1);
 				assertThat(action.actionArguments()[0]).isInstanceOf(Query.class);

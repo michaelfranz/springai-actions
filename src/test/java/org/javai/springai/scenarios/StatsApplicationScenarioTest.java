@@ -72,10 +72,6 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				.withChatClient(chatClient)
 				.addGrammar(universalGrammar)
 				.addGrammar(planGrammar)
-/*				.addPromptContribution(
-						"""
-								You are an application assistant that converts natural language instructions into
-								an action plan.""") */
 				.addActions(new StatsActions())
 				.build();
 	}
@@ -89,8 +85,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
 		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.Action.class);
-		PlanStep.Action action = (PlanStep.Action) step;
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
+		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
 		assertThat(action.actionId()).isEqualTo("displayControlChart");
 
 		PlanResolver planResolver = new DefaultPlanResolver();
@@ -108,8 +104,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
 		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.Action.class);
-		PlanStep.Action action = (PlanStep.Action) step;
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
+		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
 		assertThat(action.actionId()).isEqualTo("exportControlChartToExcel");
 
 		PlanResolver planResolver = new DefaultPlanResolver();
@@ -119,7 +115,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void evaluateSpcReadinessTest() {
-		PlanExecutionResult planResult = planner.planWithDetails("evaluate spc readiness for bundle A12345");
+		PlanExecutionResult planResult = planner.planWithDetails("evaluate spc readiness for displacement values in bundle A12345");
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -127,8 +123,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
 		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.Action.class);
-		PlanStep.Action action = (PlanStep.Action) step;
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
+		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
 		assertThat(action.actionId()).isEqualTo("evaluateSpcReadiness");
 
 		PlanResolver planResolver = new DefaultPlanResolver();
@@ -147,8 +143,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
 		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.Error.class);
-		PlanStep.Error error = (PlanStep.Error) step;
+		assertThat(step).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) step;
 		assertThat(error.assistantMessage()).isNotNull().isNotBlank();
 
 		PlanResolver planResolver = new DefaultPlanResolver();
@@ -167,13 +163,13 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
 		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.Error.class);
-		PlanStep.Error error = (PlanStep.Error) step;
-		assertThat(error.assistantMessage()).isNotNull().isNotBlank();
-
-		PlanResolver planResolver = new DefaultPlanResolver();
-		PlanResolutionResult resolve = planResolver.resolve(plan, planResult.actionRegistry());
-		assertThat(resolve.isSuccess()).isTrue();
+		assertThat(step).isInstanceOf(PlanStep.PendingActionStep.class);
+		PlanStep.PendingActionStep pending = (PlanStep.PendingActionStep) step;
+		PlanStep.PendingParam[] pendingParams = pending.pendingParams();
+		assertThat(pendingParams.length).isGreaterThan(0);
+		for (PlanStep.PendingParam param : pendingParams) {
+			assertThat(param.name()).isIn("bundleId", "domainEntity");
+		}
 	}
 
 	@Override
@@ -219,7 +215,6 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				Use the user's input to derive the parameters necessary for the application to evaluate SPC readiness.
 				 Don't try to compute SPC readiness. Just provide the parameters.""")
 		public void evaluateSpcReadiness(
-				@ActionParam(description = "Entity or component being measured e.g. bushing, screw, piston") String domainEntity,
 				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
 				@ActionParam(description = "Bundle ID") String bundleId) {
 		}

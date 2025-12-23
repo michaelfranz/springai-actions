@@ -1,6 +1,7 @@
 package org.javai.springai.dsl.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.InputStream;
 import java.util.List;
@@ -638,7 +639,7 @@ class PlanDslTest {
 		void shouldHandlePlanWithMinimalDescriptionString() {
 			String input = """
 					(EMBED sxl-plan
-					  (P ""
+					  (P "Minimal description"
 					    (PS step (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
 					  )
 					)
@@ -848,6 +849,55 @@ class PlanDslTest {
 			SxlNode plan = nodes.getFirst().args().get(1);
 			// Description + 5 steps (alternating successful and error)
 			assertThat(plan.args()).hasSize(6);
+		}
+
+		@Test
+		@DisplayName("Should accept inline pending parameter for missing required value")
+		void shouldAcceptPendingForMissingRequiredValue() {
+			String input = """
+					(EMBED sxl-plan
+					  (P "Export control chart needs bundle id"
+					    (PS exportControlChartToExcel
+					      (PENDING bundleId "Provide bundle id to export control chart")
+					      (PA domainEntity "displacement")
+					      (PA measurementConcept "values")
+					    )
+					  )
+					)
+					""";
+
+			assertThatCode(() -> parseAndValidate(input)).doesNotThrowAnyException();
+
+			List<SxlNode> nodes = parseAndValidate(input);
+			SxlNode plan = nodes.getFirst().args().get(1);
+			SxlNode step = plan.args().get(1);
+			assertThat(step.args())
+					.anyMatch(arg -> !arg.isLiteral() && "PENDING".equals(arg.symbol()));
+		}
+
+		@Test
+		@DisplayName("Should accept inline pending parameters for missing and invalid values")
+		void shouldAcceptMultiplePendingParameters() {
+			String input = """
+					(EMBED sxl-plan
+					  (P "Resolve multiple pending parameters"
+					    (PS displayControlChart
+					      (PENDING bundleId "Bundle id is required")
+					      (PENDING measurementConcept "Measurement concept is invalid: ???")
+					      (PA domainEntity "bushing")
+					    )
+					  )
+					)
+					""";
+
+			assertThatCode(() -> parseAndValidate(input)).doesNotThrowAnyException();
+
+			List<SxlNode> nodes = parseAndValidate(input);
+			SxlNode plan = nodes.getFirst().args().get(1);
+			SxlNode step = plan.args().get(1);
+			assertThat(step.args())
+					.filteredOn(arg -> !arg.isLiteral() && "PENDING".equals(arg.symbol()))
+					.hasSize(2);
 		}
 	}
 

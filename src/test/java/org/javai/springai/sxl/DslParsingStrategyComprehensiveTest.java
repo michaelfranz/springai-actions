@@ -162,6 +162,21 @@ class DslParsingStrategyComprehensiveTest {
 				.hasMessageContaining("requires at least one occurrence");
 		}
 
+	@Test
+	@DisplayName("Should reject empty string for required literal parameter")
+	void shouldRejectEmptyStringForRequiredLiteralParameter() {
+		SxlTokenizer tokenizer = new SxlTokenizer("(TEXT \"\")");
+		List<SxlToken> tokens = tokenizer.tokenize();
+
+		SxlGrammar grammar = createGrammarWithRequiredNonEmptyString();
+		DslParsingStrategy strategy = new DslParsingStrategy(grammar);
+
+		assertThatThrownBy(() -> strategy.parse(tokens))
+			.isInstanceOf(SxlParseException.class)
+			.hasMessageContaining("expects literal type")
+			.hasMessageContaining("literal(string)");
+	}
+
 		@Test
 		@DisplayName("Should validate literal types")
 		void shouldValidateLiteralTypes() {
@@ -850,6 +865,32 @@ class DslParsingStrategyComprehensiveTest {
 			new DslMetadata("test-dsl", "Test DSL", "1.0"),
 			Map.of("OUTER", symbol),
 			new LiteralDefinitions(null, null, null, null),
+			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
+			List.of(),
+			null,
+			List.of(),
+			null
+		);
+	}
+
+	private SxlGrammar createGrammarWithRequiredNonEmptyString() {
+		ParameterDefinition valueParam = new ParameterDefinition(
+			"value", "Value", "literal(string)", List.of(), Cardinality.required, true, null);
+
+		SymbolDefinition textSymbol = new SymbolDefinition(
+			"Text symbol", SymbolKind.node,
+			List.of(valueParam),
+			List.of(), List.of());
+
+		return new SxlGrammar(
+			"1.2",
+			new DslMetadata("string-dsl", "String DSL", "1.0"),
+			Map.of("TEXT", textSymbol),
+			new LiteralDefinitions(
+				new LiteralRule("^.+$", null), // enforce non-empty string literal
+				null,
+				null,
+				null),
 			new IdentifierRule("Identifier", "^[a-z_][a-z0-9_]*$"),
 			List.of(),
 			null,

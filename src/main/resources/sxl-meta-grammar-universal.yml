@@ -62,6 +62,7 @@ llm_specs:
       - No extra whitespace or prose outside the S-expression structure.
       - Always include the DSL id when using EMBED: (EMBED <dsl-id> <payload>).
       - DSL ids are lowercase with hyphens (e.g., sxl-sql, sxl-plan).
+      - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -73,6 +74,7 @@ llm_specs:
         - Emit valid, concise, canonical S-expressions only: (symbol arg1 arg2 ...).
         - No prose, no extra whitespace. Minimal formatting.
         - Always include the DSL id in EMBED: (EMBED <dsl-id> ...).
+        - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 
     anthropic:
       guidance: |
@@ -80,16 +82,19 @@ llm_specs:
         - Use valid S-expressions: (symbol arg1 arg2 ...).
         - Emit concise, canonical form.
         - Always specify DSL id in EMBED expressions.
+        - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 
     mistral:
       guidance: |
         UNIVERSAL SXL RULES:
         - Emit compact, canonical S-expressions: (symbol arg1 ...).
         - Include DSL id in EMBED expressions.
+        - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 
     llama:
       guidance: |
         UNIVERSAL SXL RULES:
         - Emit strict, canonical S-expressions: (symbol arg1 arg2 ...).
         - No prose. Always include DSL id in EMBED.
+        - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 

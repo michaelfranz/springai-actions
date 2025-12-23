@@ -668,12 +668,13 @@ public class DslParsingStrategy implements ParsingStrategy {
 				case "string" -> {
 					if (grammar.literals() != null && grammar.literals().string() != null) {
 						Pattern pattern = Pattern.compile(grammar.literals().string().regex());
-						// Try matching both with and without quotes (tokenizer strips quotes)
-						if (pattern.matcher(literalValue).matches() ||
-								pattern.matcher("\"" + literalValue + "\"").matches() ||
-								pattern.matcher("'" + literalValue + "'").matches()) {
-							return true;
+						// First check the raw literal; only try quoted variants when there is content
+						boolean matches = pattern.matcher(literalValue).matches();
+						if (!matches && !literalValue.isEmpty()) {
+							matches = pattern.matcher("\"" + literalValue + "\"").matches()
+									|| pattern.matcher("'" + literalValue + "'").matches();
 						}
+						return matches;
 					}
 					// Default: accept any value (tokenizer already validated it as a string)
 					return true;

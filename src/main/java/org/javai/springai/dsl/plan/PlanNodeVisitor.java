@@ -79,6 +79,7 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 		List<SxlNode> stepItems = args.size() > 1 ? args.subList(1, args.size()) : List.of();
 
 		List<Object> resolvedArgs = new ArrayList<>();
+		List<PlanStep.PendingParam> pendingParams = new ArrayList<>();
 		for (SxlNode item : stepItems) {
 			if (item.isLiteral()) {
 				throw new IllegalStateException("Plan step items must be nodes (parameters or EMBED)");
@@ -94,7 +95,8 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 				if (item.args().size() != 2) {
 					throw new IllegalStateException("PA must have exactly a name and a literal value");
 				}
-				String paramName = extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
+				// Validate the parameter name even though we only capture positional argument values
+				extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
 				SxlNode valueNode = item.args().get(1);
 				if (!valueNode.isLiteral()) {
 					throw new IllegalStateException("PA value must be a literal");
@@ -102,11 +104,30 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 				resolvedArgs.add(valueNode.literalValue());
 				continue;
 			}
+			if ("PENDING".equals(item.symbol())) {
+				if (item.args().size() != 2) {
+					throw new IllegalStateException("PENDING must have exactly a name and a message");
+				}
+				String paramName = extractIdentifier(item.args().getFirst(), "PENDING name must be an identifier");
+				SxlNode messageNode = item.args().get(1);
+				if (!messageNode.isLiteral()) {
+					throw new IllegalStateException("PENDING message must be a literal");
+				}
+				pendingParams.add(new PlanStep.PendingParam(paramName, messageNode.literalValue()));
+				continue;
+			}
 
 			throw new IllegalStateException("Unexpected plan step item symbol: " + item.symbol());
 		}
 
-		planSteps.add(new PlanStep.Action(actionStepMessage, actionId, resolvedArgs.toArray()));
+		if (!pendingParams.isEmpty()) {
+			planSteps.add(new PlanStep.PendingActionStep(actionStepMessage, actionId,
+					pendingParams.toArray(new PlanStep.PendingParam[0]),
+					resolvedArgs.toArray()));
+		}
+		else {
+			planSteps.add(new PlanStep.ActionStep(actionStepMessage, actionId, resolvedArgs.toArray()));
+		}
 	}
 
 	private String extractIdentifier(SxlNode node, String errorMessage) {
@@ -131,7 +152,7 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 	}
 
 	private void visitError(List<SxlNode> args) {
-		planSteps.add(new PlanStep.Error(extractError(args)));
+		planSteps.add(new PlanStep.ErrorStep(extractError(args)));
 	}
 
 }

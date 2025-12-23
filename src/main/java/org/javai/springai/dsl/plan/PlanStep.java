@@ -2,11 +2,18 @@ package org.javai.springai.dsl.plan;
 
 public sealed interface PlanStep {
 
-	record Action(String assistantMessage, String actionId, Object[] actionArguments)
+	record ActionStep(String assistantMessage, String actionId, Object[] actionArguments)
 			implements PlanStep {
 	}
 
-	record Error(String assistantMessage) implements PlanStep {
+	record PendingActionStep(String assistantMessage, String actionId, PendingParam[] pendingParams, Object[] providedArguments)
+			implements PlanStep {
+	}
+
+	record ErrorStep(String assistantMessage) implements PlanStep {
+	}
+
+	record PendingParam(String name, String message) {
 	}
 
 }

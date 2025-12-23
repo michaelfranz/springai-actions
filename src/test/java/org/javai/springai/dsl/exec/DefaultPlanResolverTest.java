@@ -26,7 +26,7 @@ class DefaultPlanResolverTest {
 	void resolvesHappyPath() {
 		Plan plan = new Plan(
 				"",
-				List.of(new PlanStep.Action("", "greet", new Object[] { "Bob", 3 }))
+				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", 3 }))
 		);
 
 		PlanResolutionResult result = resolver.resolve(plan, registry);
@@ -46,7 +46,7 @@ class DefaultPlanResolverTest {
 	void propagatesPlanErrorStep() {
 		Plan plan = new Plan(
 				"",
-				List.of(new PlanStep.Error("missing info"))
+				List.of(new PlanStep.ErrorStep("missing info"))
 		);
 
 		PlanResolutionResult result = resolver.resolve(plan, registry);
@@ -62,7 +62,7 @@ class DefaultPlanResolverTest {
 	void failsOnUnknownAction() {
 		Plan plan = new Plan(
 				"",
-				List.of(new PlanStep.Action("", "unknownAction", new Object[] {}))
+				List.of(new PlanStep.ActionStep("", "unknownAction", new Object[] {}))
 		);
 
 		PlanResolutionResult result = resolver.resolve(plan, registry);
@@ -76,7 +76,7 @@ class DefaultPlanResolverTest {
 	void failsOnArityMismatch() {
 		Plan plan = new Plan(
 				"",
-				List.of(new PlanStep.Action("", "greet", new Object[] { "Bob" }))
+				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob" }))
 		);
 
 		PlanResolutionResult result = resolver.resolve(plan, registry);
@@ -90,7 +90,7 @@ class DefaultPlanResolverTest {
 	void failsOnTypeConversionError() {
 		Plan plan = new Plan(
 				"",
-				List.of(new PlanStep.Action("", "greet", new Object[] { "Bob", "not-a-number" }))
+				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", "not-a-number" }))
 		);
 
 		PlanResolutionResult result = resolver.resolve(plan, registry);

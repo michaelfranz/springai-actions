@@ -27,8 +27,24 @@ public class DefaultPlanResolver implements PlanResolver {
 
 		for (PlanStep step : plan.planSteps()) {
 			switch (step) {
-				case PlanStep.Error(String assistantMessage) -> resolved.add(new ResolvedStep.ErrorStep(assistantMessage));
-				case PlanStep.Action actionStep -> {
+				case PlanStep.ErrorStep(String assistantMessage) -> resolved.add(new ResolvedStep.ErrorStep(assistantMessage));
+				case PlanStep.PendingActionStep pendingStep -> {
+					String actionId = pendingStep.actionId();
+					PlanStep.PendingParam[] pendingParams = pendingStep.pendingParams();
+					if (pendingParams != null && pendingParams.length > 0) {
+						for (PlanStep.PendingParam pendingParam : pendingParams) {
+							errors.add(new PlanResolutionError(
+									actionId,
+									pendingParam.name(),
+									"Pending parameter: " + pendingParam.message(),
+									null));
+						}
+					} else {
+						errors.add(new PlanResolutionError(actionId, null,
+								"Pending step cannot be resolved until required parameters are provided", null));
+					}
+				}
+				case PlanStep.ActionStep actionStep -> {
 					String actionId = actionStep.actionId();
 					ActionBinding binding = registry.getActionBinding(actionId);
 					if (binding == null) {

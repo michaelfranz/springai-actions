@@ -100,7 +100,7 @@ public class LlmBasedSystemPromptVariationStrategy implements SystemPromptVariat
 	}
 	
 	/**
-	 * Extract the rewritten system prompt from the LLM's response.
+	 * Extract the rewritten system prompt from the LLM's llmResponse.
 	 * This is a simplified extraction; in production, you might want more sophisticated parsing.
 	 */
 	private String extractPromptFromPlan(ExecutablePlan plan) {

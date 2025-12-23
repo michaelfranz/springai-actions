@@ -6,6 +6,7 @@ package org.javai.springai.dsl.plan;
 import org.javai.springai.dsl.act.ActionRegistry;
 
 public record PlanExecutionResult(
+		String llmResponse,
 		Plan plan,
 		PromptPreview promptPreview,
 		boolean dryRun,
