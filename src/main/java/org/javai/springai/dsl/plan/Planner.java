@@ -1,17 +1,36 @@
 package org.javai.springai.dsl.plan;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
+import org.javai.springai.actions.api.ActionContext;
+import org.javai.springai.actions.execution.ActionResult;
+import org.javai.springai.actions.execution.DefaultPlanExecutor;
+import org.javai.springai.actions.execution.ExecutableAction;
+import org.javai.springai.actions.execution.ExecutablePlan;
+import org.javai.springai.actions.execution.PlanExecutor;
+import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.dsl.act.ActionDescriptor;
-import org.javai.springai.dsl.act.ActionParameterDescriptor;
+import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
+import org.javai.springai.dsl.prompt.DslGrammarSource;
+import org.javai.springai.dsl.prompt.DslGuidanceProvider;
+import org.javai.springai.dsl.prompt.SystemPromptBuilder;
+import org.javai.springai.dsl.exec.DefaultPlanResolver;
+import org.javai.springai.dsl.exec.PlanResolutionResult;
+import org.javai.springai.dsl.exec.PlanResolver;
+import org.javai.springai.dsl.exec.ResolvedArgument;
+import org.javai.springai.dsl.exec.ResolvedPlan;
+import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
 import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarPromptGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -22,27 +41,18 @@ import org.springframework.ai.chat.client.ChatClient;
 public final class Planner {
 
 	private static final Logger logger = LoggerFactory.getLogger(Planner.class);
-	private static final double DEFAULT_TEMPERATURE = 0.0; // A planner should lean strongly towards determinism
-	private static final double DEFAULT_TOP_P = 1.0;
-
 	private final ChatClient chatClient;
-	private final String model;
-	private final double temperature;
-	private final double topP;
 	private final List<SxlGrammar> grammars;
 	private final List<String> promptContributions;
-	private final List<Object> actionSources;
+	private final CollectedActions collectedActions;
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
 
 	private Planner(Builder builder) {
 		this.chatClient = builder.chatClient;
-		this.model = builder.model;
-		this.temperature = builder.temperature;
-		this.topP = builder.topP;
 		this.grammars = List.copyOf(builder.grammars);
 		this.promptContributions = List.copyOf(builder.promptContributions);
-		this.actionSources = List.copyOf(builder.actionSources);
+		this.collectedActions = collectActions(builder.actionSources);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
 	}
@@ -59,6 +69,32 @@ public final class Planner {
 	}
 
 	/**
+	 * Convenience: plan, resolve and execute in one step using defaults.
+	 */
+	public PlanRunResult planResolveAndExecute(String requestText) throws PlanExecutionException {
+		return planResolveAndExecute(requestText, new DefaultPlanResolver(), new DefaultPlanExecutor());
+	}
+
+	/**
+	 * Convenience: plan, resolve and execute in one step with custom resolver/executor.
+	 */
+	public PlanRunResult planResolveAndExecute(String requestText, PlanResolver resolver, PlanExecutor executor)
+			throws PlanExecutionException {
+		Objects.requireNonNull(resolver, "resolver must not be null");
+		Objects.requireNonNull(executor, "executor must not be null");
+
+		PlanExecutionResult planning = planWithDetails(requestText);
+		PlanResolutionResult resolution = resolver.resolve(planning.plan(), planning.actionRegistry());
+		if (!resolution.isSuccess()) {
+			return PlanRunResult.failure(planning, resolution);
+		}
+
+		ExecutablePlan executablePlan = toExecutablePlan(resolution.resolvedPlan());
+		ActionContext context = executor.execute(executablePlan);
+		return PlanRunResult.success(planning, resolution, context);
+	}
+
+	/**
 	 * Generate a plan and capture prompt details with default options.
 	 */
 	public PlanExecutionResult planWithDetails(String requestText) {
@@ -71,9 +107,7 @@ public final class Planner {
 	public PlanExecutionResult planWithDetails(String requestText, PlannerOptions options) {
 		Objects.requireNonNull(requestText, "requestText must not be null");
 		PlannerOptions effective = options != null ? options : PlannerOptions.defaults();
-		ActionContext actionContext = collectActions();
-
-		logger.debug("Planner call options: model={}, temperature={}, topP={}", model, temperature, topP);
+		CollectedActions actionContext = collectActions();
 
 		PromptPreview preview = buildPromptPreview(requestText, actionContext.descriptors());
 		if (effective.capturePrompt() || capturePromptByDefault) {
@@ -82,7 +116,7 @@ public final class Planner {
 
 		if (effective.dryRun() || chatClient == null) {
 			logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
-			return new PlanExecutionResult(new Plan("", List.of()), preview, true);
+			return new PlanExecutionResult(new Plan("", List.of()), preview, true, actionContext.registry());
 		}
 
 		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
@@ -91,13 +125,17 @@ public final class Planner {
 				request.system(systemMessage);
 			}
 		}
-		String userMessage = preview.renderedUser() != null ? preview.renderedUser() : "";
+		String userMessage = preview.renderedUser();
 		request.user(Objects.requireNonNull(userMessage));
+
+		// temp
+		String systemPrompt = preview.renderedSystem();
+		System.out.println(systemPrompt);
 
 		String response = request.call().content();
 		Plan plan = parsePlan(response);
 		fireHook(preview);
-		return new PlanExecutionResult(plan, preview, false);
+		return new PlanExecutionResult(plan, preview, false, actionContext.registry());
 	}
 
 	/**
@@ -107,30 +145,37 @@ public final class Planner {
 		return buildPromptPreview(requestText, collectActions().descriptors());
 	}
 
-	private ActionContext collectActions() {
+	public ActionRegistry actionRegistry() {
+		return collectedActions.registry();
+	}
+
+	private CollectedActions collectActions() {
+		return collectedActions;
+	}
+
+	private CollectedActions collectActions(List<Object> sources) {
 		ActionRegistry registry = new ActionRegistry();
-		for (Object source : actionSources) {
-			if (source != null) {
-				registry.registerActions(source);
+		if (sources != null) {
+			for (Object source : sources) {
+				if (source != null) {
+					registry.registerActions(source);
+				}
 			}
 		}
-		return new ActionContext(registry.getActionDescriptors(), registry);
+		return new CollectedActions(registry.getActionDescriptors(), registry);
 	}
 
 	private PromptPreview buildPromptPreview(String requestText, List<ActionDescriptor> actionDescriptors) {
 		List<String> systemMessages = new ArrayList<>();
 
-		if (!grammars.isEmpty()) {
-			SxlGrammarPromptGenerator generator = new SxlGrammarPromptGenerator();
-			for (SxlGrammar grammar : grammars) {
-				String dslId = grammar.dsl() != null ? grammar.dsl().id() : "(unknown-dsl)";
-				systemMessages.add("DSL " + dslId + ":\n" + generator.generate(grammar));
-			}
-		}
-
-		if (!actionDescriptors.isEmpty()) {
-			systemMessages.add(buildActionSchemaMessage(actionDescriptors));
-		}
+		DslGuidanceProvider guidanceProvider = new InlineGrammarGuidanceProvider(this.grammars);
+		String systemPrompt = SystemPromptBuilder.build(
+				collectedActions.registry(),
+				ActionDescriptorFilter.ALL,
+				guidanceProvider,
+				SystemPromptBuilder.Mode.SXL
+		);
+		systemMessages.add(systemPrompt);
 
 		systemMessages.addAll(promptContributions);
 
@@ -155,83 +200,6 @@ public final class Planner {
 		}
 	}
 
-	private String buildActionSchemaMessage(List<ActionDescriptor> actions) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("""
-            === PLAN AND ACTION DEFINITIONS ===
-
-            Actions represent side-effectful operations that the application will perform later.
-
-            Your task is to generate a FINAL PLAN consisting ONLY of PlanStep entries.
-            Each PlanStep has the following exact structure:
-
-            {
-              "action": "<actionName>",
-              "arguments": { ... }
-            }
-
-            The final output MUST be a single JSON object with exactly one property named "steps".
-            The "steps" property MUST contain an array of PlanStep objects.
-            Only use actions to create the plan. Tool calls are never part of the plan.
-            Do NOT include any commentary, explanation, natural language, or additional fields.
-            Do NOT prefix the plan with text.
-            Do NOT append text after the plan.
-
-            Here are the available actions and their required argument schemas.
-            When constructing the plan:
-            - Use each action's name EXACTLY as specified.
-            - Follow the argument schema EXACTLY.
-            - Provide values for all required fields.
-            - Use information tools (function calls) to gather any missing data BEFORE you produce the final JSON plan.
-            - Tool calls never appear inside the plan itself; invoke them first, wait for their responses, and only then emit the Plan JSON.
-            - Only actions, which are named in the following list, may be used in the plan.
-            """);
-
-		for (ActionDescriptor descriptor : actions) {
-			sb.append("\n\nAction id: ").append(descriptor.id()).append("\n");
-			sb.append("Description: ").append(descriptor.description()).append("\n");
-			sb.append("Parameters:\n");
-			if (descriptor.actionParameterSpecs().isEmpty()) {
-				sb.append("  (none)\n");
-			} else {
-				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
-					sb.append("  - ").append(param.name())
-							.append(" (type: ").append(param.typeId()).append(")");
-					if (param.dslId() != null && !param.dslId().isBlank()) {
-						sb.append(" [dsl: ").append(param.dslId()).append("]");
-					}
-					if (param.description() != null && !param.description().isBlank()) {
-						sb.append(" - ").append(param.description());
-					}
-					sb.append("\n");
-				}
-			}
-		}
-
-		sb.append("""
-
-            === PLAN FORMAT EXAMPLE ===
-            {
-              "steps": [
-                {
-                  "action": "sendEmail",
-                  "arguments": {
-                    "to": "someone@example.com",
-                    "subject": "Hello",
-                    "body": "This is the email body."
-                  }
-                }
-              ]
-            }
-
-            Remember:
-            - The final output MUST be EXACTLY the JSON object with the "steps" array.
-            - Do NOT include backticks or code fences.
-            """);
-
-		return sb.toString();
-	}
-
 	private Plan parsePlan(String response) {
 		if (response == null || response.isBlank()) {
 			throw new IllegalStateException("LLM returned empty plan response");
@@ -254,11 +222,35 @@ public final class Planner {
 		return Plan.of(planNode);
 	}
 
+	private ExecutablePlan toExecutablePlan(ResolvedPlan resolvedPlan) {
+		List<ExecutableAction> actions = new ArrayList<>();
+		for (ResolvedStep step : resolvedPlan.steps()) {
+			if (step instanceof ResolvedStep.ActionStep actionStep) {
+				actions.add(toExecutableAction(actionStep));
+			}
+		}
+		return new ExecutablePlan(actions);
+	}
+
+	private ExecutableAction toExecutableAction(ResolvedStep.ActionStep actionStep) {
+		return ctx -> {
+			try {
+				Object[] args = actionStep.arguments().stream().map(ResolvedArgument::value).toArray();
+				Object result = actionStep.binding().method().invoke(actionStep.binding().bean(), args);
+				return new ActionResult.Success(result);
+			}
+			catch (InvocationTargetException ex) {
+				Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+				return new ActionResult.Failure(new String[] { cause.getMessage() });
+			}
+			catch (Exception ex) {
+				return new ActionResult.Failure(new String[] { ex.getMessage() });
+			}
+		};
+	}
+
 	public static final class Builder {
 		private ChatClient chatClient;
-		private String model;
-		private double temperature = DEFAULT_TEMPERATURE;
-		private double topP = DEFAULT_TOP_P;
 		private final List<SxlGrammar> grammars = new ArrayList<>();
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
@@ -270,21 +262,6 @@ public final class Planner {
 
 		public Builder withChatClient(ChatClient chatClient) {
 			this.chatClient = chatClient;
-			return this;
-		}
-
-		public Builder withModel(String model) {
-			this.model = model;
-			return this;
-		}
-
-		public Builder withTemperature(double temperature) {
-			this.temperature = temperature;
-			return this;
-		}
-
-		public Builder withTopP(double topP) {
-			this.topP = topP;
 			return this;
 		}
 
@@ -333,7 +310,81 @@ public final class Planner {
 		}
 	}
 
-	private record ActionContext(List<ActionDescriptor> descriptors, ActionRegistry registry) {
+	private record CollectedActions(List<ActionDescriptor> descriptors, ActionRegistry registry) {
+	}
+
+	/**
+	 * Lightweight provider that serves guidance and grammar access from in-memory grammars.
+	 */
+	private static final class InlineGrammarGuidanceProvider implements DslGuidanceProvider, DslGrammarSource {
+
+		private final Map<String, SxlGrammar> grammarsById;
+
+		InlineGrammarGuidanceProvider(List<SxlGrammar> grammars) {
+			this.grammarsById = new LinkedHashMap<>();
+			if (grammars != null) {
+				for (SxlGrammar grammar : grammars) {
+					if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
+						this.grammarsById.putIfAbsent(grammar.dsl().id(), grammar);
+					}
+				}
+			}
+		}
+
+		@Override
+		public Optional<String> guidanceFor(String dslId, String providerId, String modelId) {
+			SxlGrammar grammar = grammarsById.get(dslId);
+			if (grammar == null || grammar.llmSpecs() == null) {
+				return Optional.empty();
+			}
+
+			// model-specific override wins if present
+			if (providerId != null && modelId != null && grammar.llmSpecs().models() != null) {
+				var providerModels = grammar.llmSpecs().models().get(providerId);
+				if (providerModels != null) {
+					var modelOverrides = providerModels.get(modelId);
+					if (modelOverrides != null && modelOverrides.overrides() != null) {
+						String guidance = clean(modelOverrides.overrides().guidance());
+						if (guidance != null) {
+							return Optional.of(guidance);
+						}
+					}
+				}
+			}
+
+			// provider-level default next
+			if (providerId != null && grammar.llmSpecs().providerDefaults() != null) {
+				var providerDefaults = grammar.llmSpecs().providerDefaults().get(providerId);
+				if (providerDefaults != null) {
+					String guidance = clean(providerDefaults.guidance());
+					if (guidance != null) {
+						return Optional.of(guidance);
+					}
+				}
+			}
+
+			// fall back to defaults
+			if (grammar.llmSpecs().defaults() != null) {
+				String guidance = clean(grammar.llmSpecs().defaults().guidance());
+				if (guidance != null) {
+					return Optional.of(guidance);
+				}
+			}
+
+			return Optional.empty();
+		}
+
+		@Override
+		public Optional<SxlGrammar> grammarFor(String dslId) {
+			return Optional.ofNullable(grammarsById.get(dslId));
+		}
+
+		private static String clean(String guidance) {
+			if (guidance == null || guidance.isBlank()) {
+				return null;
+			}
+			return guidance.trim();
+		}
 	}
 }
 

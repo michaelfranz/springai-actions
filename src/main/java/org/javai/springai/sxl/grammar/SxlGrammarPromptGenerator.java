@@ -1,8 +1,6 @@
 package org.javai.springai.sxl.grammar;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -14,8 +12,6 @@ import java.util.stream.Collectors;
  */
 public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 
-	private static final String TEMPLATE_RESOURCE = "sxl-dsl-prompt-template.txt";
-
 	/**
 	 * Generate system prompt content for the given grammar.
 	 * 
@@ -23,52 +19,54 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 	 * @return a string containing the DSL-specific rules and structure
 	 */
 	public String generate(SxlGrammar grammar) {
-		String template = loadTemplate();
-		
 		// Get DSL metadata
 		DslMetadata dsl = grammar.dsl();
 		String dslId = dsl != null ? dsl.id() : "";
-		String dslVersion = dsl != null ? dsl.version() : "";
 		String dslDescription = dsl != null ? dsl.description() : "";
-		
-		// Format each section
-		String symbolDefinitions = formatSymbolDefinitions(grammar);
-		String literalDefinitions = formatLiteralDefinitions(grammar);
-		String identifierRules = formatIdentifierRules(grammar);
-		String reservedSymbols = formatReservedSymbols(grammar);
-		String embeddingConfig = formatEmbeddingConfig(grammar);
-		String globalConstraints = formatGlobalConstraints(grammar);
-		
-		// Replace placeholders in template
-		return template
-				.replace("{DSL_ID}", dslId)
-				.replace("{DSL_VERSION}", dslVersion)
-				.replace("{DSL_DESCRIPTION}", dslDescription)
-				.replace("{SYMBOL_DEFINITIONS}", symbolDefinitions)
-				.replace("{LITERAL_DEFINITIONS}", literalDefinitions)
-				.replace("{IDENTIFIER_RULES}", identifierRules)
-				.replace("{RESERVED_SYMBOLS}", reservedSymbols)
-				.replace("{EMBEDDING_CONFIG}", embeddingConfig)
-				.replace("{GLOBAL_CONSTRAINTS}", globalConstraints);
-	}
 
-	private String loadTemplate() {
-		try (InputStream stream = getClass().getClassLoader()
-				.getResourceAsStream(TEMPLATE_RESOURCE)) {
-			if (stream == null) {
-				throw new IllegalStateException(
-						"Template resource not found: " + TEMPLATE_RESOURCE);
-			}
-			return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-		} catch (IOException e) {
-			throw new IllegalStateException(
-					"Failed to load template: " + TEMPLATE_RESOURCE, e);
+		StringBuilder sb = new StringBuilder();
+		sb.append("=== DSL: ").append(dslId).append(" ===\n\n");
+		if (dslDescription != null && !dslDescription.isBlank()) {
+			sb.append("Description: ").append(dslDescription).append("\n");
 		}
+		sb.append("\n");
+
+		boolean appendedAnySection = false;
+
+		appendedAnySection |= appendSection(sb, "SYMBOL DEFINITIONS", formatSymbolDefinitions(grammar));
+		appendedAnySection |= appendSection(sb, "LITERAL DEFINITIONS", formatLiteralDefinitions(grammar));
+		appendedAnySection |= appendSection(sb, "IDENTIFIER RULES", formatIdentifierRules(grammar));
+		appendedAnySection |= appendSection(sb, "RESERVED SYMBOLS", formatReservedSymbols(grammar));
+		appendedAnySection |= appendSection(sb, "EMBEDDING CONFIGURATION", formatEmbeddingConfig(grammar));
+		appendedAnySection |= appendSection(sb, "GLOBAL CONSTRAINTS", formatGlobalConstraints(grammar));
+
+		if (appendedAnySection) {
+			sb.append("=== END DSL: ").append(dslId).append(" ===");
+		}
+		else {
+			// Even if no sections are present, still terminate cleanly.
+			sb.append("=== END DSL: ").append(dslId).append(" ===");
+		}
+
+		return sb.toString();
 	}
 
-	private String formatSymbolDefinitions(SxlGrammar grammar) {
+	private boolean appendSection(StringBuilder sb, String title, Optional<String> content) {
+		if (content.isEmpty()) {
+			return false;
+		}
+		String body = content.get().trim();
+		if (body.isEmpty()) {
+			return false;
+		}
+		sb.append("=== ").append(title).append(" ===\n\n");
+		sb.append(body).append("\n\n");
+		return true;
+	}
+
+	private Optional<String> formatSymbolDefinitions(SxlGrammar grammar) {
 		if (grammar.symbols() == null || grammar.symbols().isEmpty()) {
-			return "No symbols defined.";
+			return Optional.empty();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -128,12 +126,12 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 					sb.append("\n");
 				});
 		
-		return sb.toString().trim();
+		return Optional.of(sb.toString().trim());
 	}
 
-	private String formatLiteralDefinitions(SxlGrammar grammar) {
+	private Optional<String> formatLiteralDefinitions(SxlGrammar grammar) {
 		if (grammar.literals() == null) {
-			return "No literal definitions.";
+			return Optional.empty();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -192,12 +190,12 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 		}
 		
 		String result = sb.toString().trim();
-		return result.isEmpty() ? "No literal definitions." : result;
+		return result.isEmpty() ? Optional.empty() : Optional.of(result);
 	}
 
-	private String formatIdentifierRules(SxlGrammar grammar) {
+	private Optional<String> formatIdentifierRules(SxlGrammar grammar) {
 		if (grammar.identifier() == null) {
-			return "No identifier rules defined.";
+			return Optional.empty();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -208,20 +206,21 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 			sb.append("Pattern: ").append(grammar.identifier().pattern());
 		}
 		
-		return sb.toString().trim();
+		String result = sb.toString().trim();
+		return result.isEmpty() ? Optional.empty() : Optional.of(result);
 	}
 
-	private String formatReservedSymbols(SxlGrammar grammar) {
+	private Optional<String> formatReservedSymbols(SxlGrammar grammar) {
 		if (grammar.reservedSymbols() == null || grammar.reservedSymbols().isEmpty()) {
-			return "No reserved symbols.";
+			return Optional.empty();
 		}
 		
-		return String.join(", ", grammar.reservedSymbols());
+		return Optional.of(String.join(", ", grammar.reservedSymbols()));
 	}
 
-	private String formatEmbeddingConfig(SxlGrammar grammar) {
+	private Optional<String> formatEmbeddingConfig(SxlGrammar grammar) {
 		if (grammar.embedding() == null) {
-			return "Embedding not configured.";
+			return Optional.empty();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -230,12 +229,13 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 			sb.append("\nSymbol: ").append(grammar.embedding().symbol());
 		}
 		
-		return sb.toString();
+		String result = sb.toString().trim();
+		return result.isEmpty() ? Optional.empty() : Optional.of(result);
 	}
 
-	private String formatGlobalConstraints(SxlGrammar grammar) {
+	private Optional<String> formatGlobalConstraints(SxlGrammar grammar) {
 		if (grammar.constraints() == null || grammar.constraints().isEmpty()) {
-			return "No global constraints.";
+			return Optional.empty();
 		}
 		
 		StringBuilder sb = new StringBuilder();
@@ -253,7 +253,7 @@ public class SxlGrammarPromptGenerator implements SxlGrammarVisitor<String> {
 			sb.append("\n");
 		}
 		
-		return sb.toString().trim();
+		return Optional.of(sb.toString().trim());
 	}
 
 	@Override

@@ -3,12 +3,14 @@ package org.javai.springai.dsl.act;
 import java.util.List;
 
 /**
- * LLM-facing description of an action: id, description, and parameters.
+ * LLM-facing description of an action: id, description, parameters, and an optional exemplar
+ * showing canonical SXL usage (e.g., full (P ... (PS action-id (EMBED ...))) shape).
  */
 public record ActionDescriptor(
 		String id,
 		String description,
-		List<ActionParameterDescriptor> actionParameterSpecs
+		List<ActionParameterDescriptor> actionParameterSpecs,
+		String example
 ) {
 
 	public String toSxl() {

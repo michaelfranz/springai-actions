@@ -68,25 +68,45 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 	}
 
 	private void visitPlanStep(List<SxlNode> args) {
-		if (args.size() < 2) {
-			throw new IllegalStateException("Plan step must have an action id and a step content node");
+		if (args.isEmpty()) {
+			throw new IllegalStateException("Plan step must have an action id");
 		}
 		SxlNode actionIdNode = args.getFirst();
-		SxlNode contentNode = args.get(1);
 		String actionId = extractIdentifier(actionIdNode, "Plan step action id must be an identifier or literal string");
 		String actionStepMessage = "";
 
-		if (contentNode.isLiteral()) {
-			throw new IllegalStateException("Plan step content must be a node");
-		}
-		switch (contentNode.symbol()) {
-			case "EMBED" -> planSteps.add(new PlanStep.Action(actionStepMessage, actionId, EmbedResolverUtil.resolveEmbeddedAsArray(contentNode, embeddedResolver)));
-			case "ERROR" -> {
-				String reason = extractError(contentNode.args());
-				planSteps.add(new PlanStep.Error(reason));
+		// Step items: zero or more. ERROR is not allowed inside PS.
+		List<SxlNode> stepItems = args.size() > 1 ? args.subList(1, args.size()) : List.of();
+
+		List<Object> resolvedArgs = new ArrayList<>();
+		for (SxlNode item : stepItems) {
+			if (item.isLiteral()) {
+				throw new IllegalStateException("Plan step items must be nodes (parameters or EMBED)");
 			}
-			default -> throw new IllegalStateException("Unexpected step content symbol: " + contentNode.symbol());
+			if ("EMBED".equals(item.symbol())) {
+				resolvedArgs.addAll(List.of(EmbedResolverUtil.resolveEmbeddedAsArray(item, embeddedResolver)));
+				continue;
+			}
+			if ("ERROR".equals(item.symbol())) {
+				throw new IllegalStateException("ERROR cannot appear inside PS; it must be a plan-level step");
+			}
+			if ("PA".equals(item.symbol())) {
+				if (item.args().size() != 2) {
+					throw new IllegalStateException("PA must have exactly a name and a literal value");
+				}
+				String paramName = extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
+				SxlNode valueNode = item.args().get(1);
+				if (!valueNode.isLiteral()) {
+					throw new IllegalStateException("PA value must be a literal");
+				}
+				resolvedArgs.add(valueNode.literalValue());
+				continue;
+			}
+
+			throw new IllegalStateException("Unexpected plan step item symbol: " + item.symbol());
 		}
+
+		planSteps.add(new PlanStep.Action(actionStepMessage, actionId, resolvedArgs.toArray()));
 	}
 
 	private String extractIdentifier(SxlNode node, String errorMessage) {

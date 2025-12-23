@@ -21,6 +21,7 @@ import org.javai.springai.actions.tuning.LlmTuningConfig;
 import org.javai.springai.actions.tuning.PlanSupplier;
 import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -30,6 +31,7 @@ import org.springframework.ai.tool.annotation.Tool;
 	public class DadJokeForTodayGeneratorTest implements ScenarioPlanSupplier {
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
+	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 	private static final Random RANDOM = new Random();
 	private static final List<String> NAMES = List.of("Mike", "Dave", "Martin", "Elke", "Helena");
 	private static final ContextKey<String> EMAIL_TEXT_KEY = ContextKey.of("emailText", String.class);
@@ -145,9 +147,9 @@ import org.springframework.ai.tool.annotation.Tool;
 	}
 
 	private void ensureApiKeyPresent() {
-		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
-		}
+		Assumptions.assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable LLM integration tests");
+		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
+				"Missing OPENAI_API_KEY environment variable. Please export OPENAI_API_KEY before running the tests.");
 	}
 
 }

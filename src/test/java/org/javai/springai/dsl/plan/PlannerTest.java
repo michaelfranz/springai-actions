@@ -33,10 +33,37 @@ class PlannerTest {
 		assertThat(preview.systemMessages())
 				.anySatisfy(msg -> assertThat(msg).contains("DSL sxl-plan"));
 		assertThat(preview.systemMessages())
-				.anySatisfy(msg -> assertThat(msg).contains("Action id: demoAction"));
+				.anySatisfy(msg -> assertThat(msg).contains("demoAction"));
 		assertThat(preview.userMessages()).contains("do something");
 		assertThat(preview.grammarIds()).contains("sxl-plan");
 		assertThat(preview.actionNames()).contains("demoAction");
+	}
+
+	@Test
+	void systemPromptMatchesExpectedStructure() {
+		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
+				.addPromptContribution("system-extra")
+				.addActions(new DemoActions())
+				.enablePromptCapture()
+				.build();
+
+		PromptPreview preview = planner.preview("do something");
+		assertThat(preview.systemMessages()).hasSize(2);
+
+		String system = normalize(preview.systemMessages().get(0));
+
+		// Should combine DSL guidance + grammar summary + action catalog.
+		assertThat(system).contains("DSL GUIDANCE");
+		assertThat(system).contains("DSL sxl-plan");
+		assertThat(system).contains("PLAN DSL root"); // guidance from llm_specs
+		assertThat(system).contains("P") // grammar summary includes symbol names
+				.contains("PS");
+		assertThat(system).contains("ACTIONS");
+		assertThat(system).contains("demoAction");
+
+		assertThat(normalize(preview.systemMessages().get(1)))
+				.isEqualTo("system-extra");
 	}
 
 	@Test
@@ -61,6 +88,10 @@ class PlannerTest {
 		public void demoAction(String input) {
 			// no-op
 		}
+	}
+
+	private static String normalize(String text) {
+		return text == null ? "" : text.replaceAll("\\s+", " ").trim();
 	}
 }
 

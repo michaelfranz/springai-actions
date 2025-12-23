@@ -26,7 +26,7 @@ public final class ActionRegistry {
 			if (entries.containsKey(id)) {
 				throw new IllegalStateException("Duplicate action definition: " + id);
 			}
-			entries.put(id, new ActionEntry(id, description, actionParameterDefinitions, bean, method));
+			entries.put(id, new ActionEntry(id, description, actionParameterDefinitions, null, bean, method));
 		}
 	}
 

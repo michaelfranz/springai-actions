@@ -1,7 +1,7 @@
 package org.javai.springai.dsl.prompt;
 
-import java.util.List;
 import java.util.Optional;
+import java.util.List;
 import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
 
@@ -42,32 +42,56 @@ public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, Ds
 	@Override
 	public Optional<String> guidanceFor(String dslId, String providerId, String modelId) {
 		SxlGrammar grammar = registry.grammarFor(dslId).orElse(null);
-		if (grammar == null || grammar.llmSpecs() == null || grammar.llmSpecs().defaults() == null) {
+		if (grammar == null || grammar.llmSpecs() == null) {
 			return Optional.empty();
 		}
-		// model-specific override
-		if (providerId != null && modelId != null) {
+
+		// model-specific override wins if present
+		if (providerId != null && modelId != null && grammar.llmSpecs().models() != null) {
 			var providerModels = grammar.llmSpecs().models().get(providerId);
 			if (providerModels != null) {
 				var modelOverrides = providerModels.get(modelId);
-				if (modelOverrides != null && modelOverrides.overrides() != null && modelOverrides.overrides().guidance() != null) {
-					return Optional.of(modelOverrides.overrides().guidance());
+				if (modelOverrides != null && modelOverrides.overrides() != null) {
+					String guidance = clean(modelOverrides.overrides().guidance());
+					if (guidance != null) {
+						return Optional.of(guidance);
+					}
 				}
 			}
 		}
-		// provider-level
-		if (providerId != null) {
+
+		// provider-level default next
+		if (providerId != null && grammar.llmSpecs().providerDefaults() != null) {
 			var providerDefaults = grammar.llmSpecs().providerDefaults().get(providerId);
-			if (providerDefaults != null && providerDefaults.guidance() != null) {
-				return Optional.of(providerDefaults.guidance());
+			if (providerDefaults != null) {
+				String guidance = clean(providerDefaults.guidance());
+				if (guidance != null) {
+					return Optional.of(guidance);
+				}
 			}
 		}
-		// default
-		return Optional.ofNullable(grammar.llmSpecs().defaults().guidance());
+
+		// fall back to defaults
+		if (grammar.llmSpecs().defaults() != null) {
+			String guidance = clean(grammar.llmSpecs().defaults().guidance());
+			if (guidance != null) {
+				return Optional.of(guidance);
+			}
+		}
+
+		return Optional.empty();
 	}
 
 	@Override
 	public Optional<SxlGrammar> grammarFor(String dslId) {
 		return registry.grammarFor(dslId);
 	}
+
+	private static String clean(String guidance) {
+		if (guidance == null || guidance.isBlank()) {
+			return null;
+		}
+		return guidance.trim();
+	}
 }
+

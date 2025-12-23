@@ -19,6 +19,7 @@ import org.javai.springai.actions.tuning.LlmTuningConfig;
 import org.javai.springai.actions.tuning.PlanSupplier;
 import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -33,6 +34,7 @@ class StarSchemaQueryTest implements ScenarioPlanSupplier {
 			warehouse that uses a classical star-schema design.""";
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
+	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	private static final ContextKey<String> DISPLAY_FEEDBACK = ContextKey.of("displayFeedback", String.class);
 
@@ -251,9 +253,9 @@ class StarSchemaQueryTest implements ScenarioPlanSupplier {
 	}
 
 	private void ensureApiKeyPresent() {
-		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-			throw new IllegalStateException("Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
-		}
+		Assumptions.assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable LLM integration tests");
+		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
+				"Missing OPENAI_API_KEY environment variable. Please export OPENAI_API_KEY before running the tests.");
 	}
 }
 

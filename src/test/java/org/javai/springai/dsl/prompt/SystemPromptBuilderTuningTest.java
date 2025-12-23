@@ -44,6 +44,7 @@ import org.yaml.snakeyaml.Yaml;
  */
 class SystemPromptBuilderTuningTest {
 
+	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final Path FAILURE_LOG = Path.of("build", "tmp", "system-prompt-builder-tuning-failures.txt");
 	
@@ -72,6 +73,7 @@ class SystemPromptBuilderTuningTest {
 
 	@Test
 	void builderPromptProducesParsablePlans() {
+		assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable this tuning test");
 		assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
 				"OPENAI_API_KEY must be set for this tuning test");
 

@@ -53,7 +53,7 @@ class ActionSerializationFootprintTest {
 	private static List<ActionDescriptor> simpleSpec() {
 		ActionParameterDescriptor p = new ActionParameterDescriptor(
 				"note", "java.lang.String", "String", "Note content", null);
-		return List.of(new ActionDescriptor("addNote", "Add a note", List.of(p)));
+		return List.of(new ActionDescriptor("addNote", "Add a note", List.of(p), null));
 	}
 
 	private static List<ActionDescriptor> singleEmbedSpec(boolean complexSql) {
@@ -74,7 +74,8 @@ class ActionSerializationFootprintTest {
 		return List.of(new ActionDescriptor(
 				complexSql ? "fetchOrdersComplex" : "fetchOrders",
 				"Fetch orders via SQL",
-				complexSql ? List.of(embedded, complexSqlParam()) : List.of(embedded, plain)
+				complexSql ? List.of(embedded, complexSqlParam()) : List.of(embedded, plain),
+				null
 		));
 	}
 
@@ -96,7 +97,7 @@ class ActionSerializationFootprintTest {
 				"subPlan", "org.javai.springai.dsl.plan.Plan", "sxl-plan:Plan", "Nested plan", "sxl-plan");
 		ActionParameterDescriptor note = new ActionParameterDescriptor(
 				"note", "java.lang.String", "String", "Extra note", null);
-		return List.of(new ActionDescriptor("multiEmbedAction", "Do multiple things", List.of(sql, plan, note)));
+		return List.of(new ActionDescriptor("multiEmbedAction", "Do multiple things", List.of(sql, plan, note), null));
 	}
 
 	private static List<ActionDescriptor> manyParamsSpec() {
@@ -113,7 +114,7 @@ class ActionSerializationFootprintTest {
 						new ActionParameterDescriptor("payload", "org.javai.springai.dsl.sql.Query", "sxl-sql:Query", "SQL payload", "sxl-sql")
 				)
 				.toList();
-		return List.of(new ActionDescriptor("manyParams", "Action with many params", params));
+		return List.of(new ActionDescriptor("manyParams", "Action with many params", params, null));
 	}
 
 	private static int roughTokenCount(String text) {

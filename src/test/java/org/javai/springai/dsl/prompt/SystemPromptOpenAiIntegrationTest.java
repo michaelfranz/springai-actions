@@ -31,13 +31,14 @@ import org.springframework.ai.openai.api.OpenAiApi;
  */
 class SystemPromptOpenAiIntegrationTest {
 
+	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	// private static final boolean RUN_OPENAI_TESTS = Boolean.parseBoolean(System.getenv("RUN_OPENAI_TESTS"))
 	// 		|| Boolean.getBoolean("RUN_OPENAI_TESTS");
 
 	@Test
 	void openAiProducesExecutablePlanForRegisteredActions() {
-		// assumeTrue(RUN_OPENAI_TESTS, "Set RUN_OPENAI_TESTS=true to enable this integration test");
+		assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable this integration test");
 		assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
 				"OPENAI_API_KEY must be set for this integration test");
 

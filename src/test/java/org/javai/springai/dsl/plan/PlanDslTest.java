@@ -284,6 +284,84 @@ class PlanDslTest {
 	}
 
 	@Nested
+	@DisplayName("Plan Step Parameter Shape (TDD for new PARAM semantics)")
+	class PlanStepParameterShapeTests {
+
+		@Test
+		@DisplayName("Should allow zero parameters on a step")
+		void shouldAllowZeroParams() {
+			String input = """
+					(EMBED sxl-plan
+					  (P
+					    (PS displayControlChart)
+					  )
+					)
+					""";
+
+			List<SxlNode> nodes = parseAndValidate(input);
+
+			assertThat(nodes).hasSize(1);
+			SxlNode plan = nodes.getFirst().args().get(1);
+			assertThat(plan.symbol()).isEqualTo("P");
+			assertThat(plan.args()).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should allow a single identifier/value PARAM")
+		void shouldAllowSingleParam() {
+			String input = """
+					(EMBED sxl-plan
+					  (P
+					    (PS displayControlChart
+					      (PA bundleId "A12345")
+					    )
+					  )
+					)
+					""";
+
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should allow multiple identifier/value PARAMs")
+		void shouldAllowMultipleParams() {
+			String input = """
+					(EMBED sxl-plan
+					  (P
+					    (PS displayControlChart
+					      (PA domainEntity "elasticity bundle")
+					      (PA measurementConcept "displacement")
+					      (PA bundleId "A12345")
+					    )
+					  )
+					)
+					""";
+
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("Should allow mixed PARAMs and EMBED payloads")
+		void shouldAllowMixedParamsAndEmbed() {
+			String input = """
+					(EMBED sxl-plan
+					  (P
+					    (PS displayControlChart
+					      (EMBED sxl-sql (Q (F fact_sales f) (S (AS f.disp displacement))))
+					      (PA bundleId "A12345")
+					    )
+					  )
+					)
+					""";
+
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
+		}
+	}
+
+	@Nested
 	@DisplayName("Plan Step (PS) Tests")
 	class PlanStepTests {
 
@@ -305,7 +383,7 @@ class PlanDslTest {
 
 		@Test
 		@DisplayName("Should require dsl-instance parameter")
-		void shouldRequireDslInstanceParameter() {
+		void shouldAllowNoStepItems() {
 			String input = """
 					(EMBED sxl-plan
 					  (P
@@ -314,10 +392,8 @@ class PlanDslTest {
 					)
 					""";
 
-			assertThatThrownBy(() -> parseAndValidate(input))
-					.isInstanceOf(SxlParseException.class)
-					.hasMessageContaining("requires parameter")
-					.hasMessageContaining("step-content");
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
 		}
 
 		@Test
@@ -627,7 +703,7 @@ class PlanDslTest {
 					(EMBED sxl-plan
 					  (P "Plan with error step"
 					    (PS getOrders (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-					    (PS getCustomersError (ERROR "Failed to generate customer query: LLM timeout after 30 seconds"))
+					    (ERROR "Failed to generate customer query: LLM timeout after 30 seconds")
 					    (PS joinData (EMBED sxl-sql (Q (F orders o) (S (AS o.id order_id)))))
 					  )
 					)
@@ -638,11 +714,8 @@ class PlanDslTest {
 			SxlNode plan = nodes.getFirst().args().get(1);
 			assertThat(plan.args()).hasSize(4); // Description + 3 steps
 
-			// Verify the error step is present
 			SxlNode errorStep = plan.args().get(2);
-			assertThat(errorStep.symbol()).isEqualTo("PS");
-			// The dsl-instance should be an ERROR node
-			assertThat(errorStep.args().get(1).symbol()).isEqualTo("ERROR");
+			assertThat(errorStep.symbol()).isEqualTo("ERROR");
 		}
 
 		@Test
@@ -652,7 +725,7 @@ class PlanDslTest {
 					(EMBED sxl-plan
 					  (P "Plan with error recovery"
 					    (PS primaryQuery (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-					    (PS fallbackQuery (ERROR "LLM failed to parse nested query" (EMBED sxl-sql (Q (F orders o) (S (AS o.status status))))))
+					    (ERROR "LLM failed to parse nested query" (EMBED sxl-sql (Q (F orders o) (S (AS o.status status)))))
 					  )
 					)
 					""";
@@ -670,7 +743,7 @@ class PlanDslTest {
 					(EMBED sxl-plan
 					  (P "Plan with recoverable error"
 					    (PS tryFirstApproach (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-					    (PS tryAlternative (ERROR "First approach failed"))
+					    (ERROR "First approach failed")
 					    (PS fallbackStep (EMBED sxl-sql (Q (F customers c) (S (AS c.id id)))))
 					  )
 					)
@@ -689,9 +762,9 @@ class PlanDslTest {
 					(EMBED sxl-plan
 					  (P "Complex plan with multiple potential failures"
 					    (PS step1 (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-					    (PS step2Error (ERROR "Unable to generate step 2 query"))
+					    (ERROR "Unable to generate step 2 query")
 					    (PS step3 (EMBED sxl-sql (Q (F customers c) (S (AS c.name name)))))
-					    (PS step4Error (ERROR "Step 4 LLM generation timed out"))
+					    (ERROR "Step 4 LLM generation timed out")
 					    (PS step5 (EMBED sxl-sql (Q (F products p) (S (AS p.sku sku)))))
 					  )
 					)
@@ -709,7 +782,7 @@ class PlanDslTest {
 			String input = """
 					(EMBED sxl-plan
 					  (P "Plan with fully specified error step"
-					    (PS complexQuery (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id))))))
+					    (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
 					  )
 					)
 					""";
@@ -726,7 +799,7 @@ class PlanDslTest {
 			String input = """
 					(EMBED sxl-plan
 					  (P
-					    (PS failedStep (ERROR))
+					    (ERROR)
 					  )
 					)
 					""";
@@ -742,9 +815,9 @@ class PlanDslTest {
 			String input = """
 					(EMBED sxl-plan
 					  (P "All steps failed"
-					    (PS step1 (ERROR "Unable to parse query 1"))
-					    (PS step2 (ERROR "Unable to parse query 2"))
-					    (PS step3 (ERROR "Unable to parse query 3"))
+					    (ERROR "Unable to parse query 1")
+					    (ERROR "Unable to parse query 2")
+					    (ERROR "Unable to parse query 3")
 					  )
 					)
 					""";
@@ -762,9 +835,9 @@ class PlanDslTest {
 					(EMBED sxl-plan
 					  (P "Mixed success and failure scenario"
 					    (PS getOrders (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-					    (PS getOrdersError (ERROR "Alternative query generation failed"))
+					    (ERROR "Alternative query generation failed")
 					    (PS getCustomers (EMBED sxl-sql (Q (F customers c) (S (AS c.id id)))))
-					    (PS joinError (ERROR "Join query failed to generate"))
+					    (ERROR "Join query failed to generate")
 					    (PS getFinalResults (EMBED sxl-sql (Q (F orders o) (S (AS o.status status)))))
 					  )
 					)
@@ -830,7 +903,7 @@ class PlanDslTest {
 
 		@Test
 		@DisplayName("Should provide meaningful error for missing dsl-instance")
-		void shouldProvideMeaningfulErrorForMissingDslInstance() {
+		void shouldAllowPlanStepWithNoStepItems() {
 			String input = """
 					(EMBED sxl-plan
 					  (P
@@ -839,9 +912,8 @@ class PlanDslTest {
 					)
 					""";
 
-			assertThatThrownBy(() -> parseAndValidate(input))
-					.isInstanceOf(SxlParseException.class)
-					.hasMessageContaining("step-content");
+			List<SxlNode> nodes = parseAndValidate(input);
+			assertThat(nodes).hasSize(1);
 		}
 	}
 }

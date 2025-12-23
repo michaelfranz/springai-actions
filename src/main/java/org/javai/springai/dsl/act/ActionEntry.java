@@ -10,11 +10,12 @@ public record ActionEntry(
 		String id,
 		String description,
 		List<ActionParameterDescriptor> parameters,
+		String example,
 		Object bean,
 		Method method
 ) {
 	public ActionDescriptor descriptor() {
-		return new ActionDescriptor(id, description, parameters);
+		return new ActionDescriptor(id, description, parameters, example);
 	}
 
 	public ActionBinding binding() {

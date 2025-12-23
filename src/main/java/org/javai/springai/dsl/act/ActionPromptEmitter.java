@@ -50,8 +50,24 @@ public final class ActionPromptEmitter {
 
 	private static String emitSxl(List<ActionDescriptor> specs) {
 		return specs.stream()
-				.map(ActionDescriptor::toSxl)
-				.collect(Collectors.joining("\n"));
+				.map(descriptor -> {
+					String base = descriptor.toSxl();
+					String example = descriptor.example();
+					if (example == null || example.isBlank()) {
+						example = defaultExample(descriptor);
+					}
+					return base + "\nExample: " + example.trim();
+				})
+				.collect(Collectors.joining("\n\n"));
+	}
+
+	private static String defaultExample(ActionDescriptor d) {
+		// Provide a canonical plan-shaped exemplar using PS + PA params (no EMBED unless the action DSL id is specified).
+		String params = d.actionParameterSpecs().stream()
+				.map(p -> "(PA " + p.name() + " \"<" + p.name() + ">\")")
+				.collect(Collectors.joining(" "));
+		return "(P \"Example for " + d.id() + "\" (PS " + d.id()
+				+ (params.isEmpty() ? "" : " " + params) + "))";
 	}
 
 	private static String emitJson(List<ActionBinding> bindings, Map<String, ActionDescriptor> descriptors) {

@@ -28,7 +28,7 @@ symbols:
       - name: steps
         description: "List of steps in the plan (one or more)"
         type: node
-        allowed_symbols: [PS, ES]
+        allowed_symbols: [PS, ERROR]
         cardinality: zeroOrMore
         ordered: true
       
@@ -53,10 +53,25 @@ symbols:
         identifier_rules:
           pattern: "^[a-z][a-zA-Z0-9_$]*$"
 
-      - name: step-content
-        description: "Either an embedded DSL expression or an error step describing why this step failed"
+      - name: step-items
+        description: "Zero or more parameters/embeds"
         type: node
-        allowed_symbols: [EMBED, ERROR]
+        allowed_symbols: [PA, EMBED]
+        cardinality: zeroOrMore
+        ordered: true
+
+  PA:
+    description: "Plan parameter"
+    kind: node
+    params:
+      - name: name
+        description: "Parameter name"
+        type: identifier
+        cardinality: required
+        ordered: true
+      - name: value
+        description: "Parameter value"
+        type: literal(string)
         cardinality: required
         ordered: true
 
@@ -85,6 +100,58 @@ symbols:
       - label: "Error with fallback expression"
         code: |
           (ERROR "Failed to generate complex join" (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
+
+  # Examples illustrating allowed PS shapes (parameters, embeds)
+  PS-examples:
+    examples:
+      - label: "Step with no parameters"
+        code: |
+          (EMBED sxl-plan
+            (P
+              (PS displayControlChart)
+            )
+          )
+      - label: "Step with one parameter"
+        code: |
+          (EMBED sxl-plan
+            (P
+              (PS displayControlChart
+                (PA bundleId "A12345")
+              )
+            )
+          )
+      - label: "Step with multiple parameters"
+        code: |
+          (EMBED sxl-plan
+            (P
+              (PS displayControlChart
+                (PA domainEntity "elasticity bundle")
+                (PA measurementConcept "displacement")
+                (PA bundleId "A12345")
+              )
+            )
+          )
+      - label: "Step with mixed parameters and EMBED"
+        code: |
+          (EMBED sxl-plan
+            (P
+              (PS displayControlChart
+                (EMBED sxl-sql (Q (F fact_sales f) (S (AS f.disp displacement))))
+                (PA bundleId "A12345")
+              )
+            )
+          )
+
+  # Error step example at plan level
+  ERROR-examples:
+    examples:
+      - label: "Plan-level error step"
+        code: |
+          (EMBED sxl-plan
+            (P "Plan with error"
+              (ERROR "Missing bundleId")
+            )
+          )
 
 # ============================================================
 # LITERAL DEFINITIONS
@@ -152,9 +219,9 @@ llm_specs:
     preamble: true
     postamble: false
     guidance: |
-      PLAN DSL root: (P ["description"] (PS action-id (EMBED <dsl-id> <payload>)| (ERROR "reason")) ...).
-      Each PS has exactly action-id and EMBED/ERROR as content; no extra wrapper nodes (e.g., do NOT add (query ...)).
-      Always include the DSL id in EMBED (e.g., (EMBED sxl-sql ...)).
+      PLAN DSL root: (P ["description"] (PS action-id <step-items>)...).
+      step-items: zero or more parameter/EMBED nodes. Parameters use the PA symbol: (PA name "value"). Embeds use (EMBED <dsl-id> <payload>).
+      Errors are separate steps at plan level: (ERROR "..."). Do NOT put ERROR inside PS. Do NOT invent wrapper nodes. Always include the DSL id in EMBED.
 
   # ----------------------------------------------------------
   # PROVIDER-LEVEL DEFAULTS
@@ -164,7 +231,9 @@ llm_specs:
       style: strict
       max_examples: 2
       guidance: |
-        PLAN DSL: Root is (P ["description"] steps...). Each step: (PS action-id (EMBED <dsl-id> <payload>) | (ERROR "reason")). No extra wrapper nodes. Always include the DSL id on EMBED (e.g., sxl-sql).
+        PLAN DSL: Root is (P ["description"] steps...). Each step: (PS action-id <step-items>).
+        step-items: zero or more parameter/EMBED nodes. Parameters use (PA name "value"); embeds use (EMBED <dsl-id> <payload>).
+        Errors are separate steps: (ERROR "..."). Return exactly one sxl-plan rooted at (P …); only PS or ERROR steps; action-id must come from the catalog; if params are missing, emit an ERROR step; no other symbols.
 
     anthropic:
       style: explanatory

@@ -24,6 +24,7 @@ import org.javai.springai.actions.tuning.PlanSupplier;
 import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -36,6 +37,7 @@ class CustomerOrderCancellationScenarioTest implements ScenarioPlanSupplier {
 	private static final String CUSTOMER_SERVICE_PERSONA = "You are a customer service agent.";
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
+	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	private static final ContextKey<Order> UPDATED_ORDER_KEY = ContextKey.of("updatedOrder", Order.class);
 	private static final ContextKey<String> CANCELLATION_EMAIL_KEY = ContextKey.of("cancellationEmail", String.class);
@@ -146,10 +148,9 @@ class CustomerOrderCancellationScenarioTest implements ScenarioPlanSupplier {
 	}
 
 	private void ensureApiKeyPresent() {
-		if (OPENAI_API_KEY == null || OPENAI_API_KEY.isBlank()) {
-			throw new IllegalStateException(
-					"Missing OPENAI_API_KEY environment variable. Please export OPENA_API_KEY before running the tests.");
-		}
+		Assumptions.assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable LLM integration tests");
+		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
+				"Missing OPENAI_API_KEY environment variable. Please export OPENAI_API_KEY before running the tests.");
 	}
 
 	@Tool(description = "Return an email-friendly customer name for the given customer id")

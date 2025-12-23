@@ -2,6 +2,7 @@ package org.javai.springai.sxl.grammar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,63 +16,16 @@ import org.junit.jupiter.api.Test;
 @DisplayName("SxlGrammarPromptGenerator Tests")
 class SxlGrammarPromptGeneratorTest {
 
-	private static final String SQL_DSL_VERSION = "2.0";
 	private static final String SQL_DSL_DESCRIPTION = "S-expression language for expressing SQL SELECT queries";
 	private static final String SQL_DSL_ID = "sxl-sql";
 
-	private static final String PLAN_DSL_VERSION = "2.0";
 	private static final String PLAN_DSL_DESCRIPTION = "S-expression language for expressing execution plans with steps";
 	private static final String PLAN_DSL_ID = "sxl-plan";
-
-	private static final String DSL_PROMPT_TEMPLATE = """
-			=== DSL: %s ===
-			
-			Version: %s
-			Description: %s
-			
-			---
-			
-			=== SYMBOL DEFINITIONS ===
-			
-			%s
-			
-			---
-			
-			=== LITERAL DEFINITIONS ===
-			
-			%s
-			
-			---
-			
-			=== IDENTIFIER RULES ===
-			
-			%s
-			
-			---
-			
-			=== RESERVED SYMBOLS ===
-			
-			%s
-			
-			---
-			
-			=== EMBEDDING CONFIGURATION ===
-			
-			%s
-			
-			---
-			
-			=== GLOBAL CONSTRAINTS ===
-			
-			%s
-			
-			---
-			
-			=== END DSL: %s ===""";
 
 	private SxlGrammarParser parser;
 	private SxlGrammar sqlGrammar;
 	private SxlGrammar planGrammar;
+	private SxlGrammar universalGrammar;
 	private SxlGrammarPromptGenerator generator;
 
 	@BeforeEach
@@ -90,6 +44,12 @@ class SxlGrammarPromptGeneratorTest {
 				.getResourceAsStream("sxl-meta-grammar-plan.yml");
 		assertThat(planStream).isNotNull();
 		planGrammar = parser.parse(planStream);
+
+		// Load Universal grammar from resources
+		InputStream universalStream = getClass().getClassLoader()
+				.getResourceAsStream("sxl-meta-grammar-universal.yml");
+		assertThat(universalStream).isNotNull();
+		universalGrammar = parser.parse(universalStream);
 	}
 
 	@Test
@@ -338,255 +298,65 @@ class SxlGrammarPromptGeneratorTest {
 
 		assertThat(prompt).isNotBlank();
 		assertThat(prompt).contains("empty-symbols-dsl");
+		assertThat(prompt).doesNotContain("=== SYMBOL DEFINITIONS ===");
+		assertThat(prompt).doesNotContain("No symbols defined.");
 		// Should still generate valid prompt structure
 	}
 
 	@Test
 	void planDslPrompt() {
-		String symbolDefinitions = formatSymbolDefinitions(planGrammar);
-		String literalDefinitions = formatLiteralDefinitions(planGrammar);
-		String identifierRules = formatIdentifierRules(planGrammar);
-		String reservedSymbols = formatReservedSymbols(planGrammar);
-		String embeddingConfig = formatEmbeddingConfig(planGrammar);
-		String globalConstraints = formatGlobalConstraints(planGrammar);
-
-		String expectedPrompt =
-				DSL_PROMPT_TEMPLATE
-						.formatted(
-								PLAN_DSL_ID,
-								PLAN_DSL_VERSION,
-								PLAN_DSL_DESCRIPTION,
-								symbolDefinitions,
-								literalDefinitions,
-								identifierRules,
-								reservedSymbols,
-								embeddingConfig,
-								globalConstraints,
-								PLAN_DSL_ID
-						);
-
 		String prompt = generator.generate(planGrammar);
 
-		assertThat(prompt).isEqualTo(expectedPrompt);
+		assertThat(prompt)
+				.contains(PLAN_DSL_ID)
+				.contains(PLAN_DSL_DESCRIPTION)
+				.contains("=== SYMBOL DEFINITIONS ===")
+				.contains("=== LITERAL DEFINITIONS ===")
+				.contains("=== IDENTIFIER RULES ===")
+				.contains("=== RESERVED SYMBOLS ===")
+				.contains("=== EMBEDDING CONFIGURATION ===")
+				.contains("=== GLOBAL CONSTRAINTS ===");
+
+		// Do not include version lines.
+		assertThat(prompt).doesNotContain("Version:");
+		// Do not include unused separators.
+		assertThat(prompt).doesNotContain("---");
+
+		// No boilerplate placeholders should appear.
+		assertThat(prompt)
+				.doesNotContain("No symbols defined.")
+				.doesNotContain("No literal definitions.")
+				.doesNotContain("No reserved symbols.")
+				.doesNotContain("Embedding not configured.")
+				.doesNotContain("No global constraints.");
 	}
 
 	@Test
 	void sqlDslPrompt() {
-		String symbolDefinitions = formatSymbolDefinitions(sqlGrammar);
-		String literalDefinitions = formatLiteralDefinitions(sqlGrammar);
-		String identifierRules = formatIdentifierRules(sqlGrammar);
-		String reservedSymbols = formatReservedSymbols(sqlGrammar);
-		String embeddingConfig = formatEmbeddingConfig(sqlGrammar);
-		String globalConstraints = formatGlobalConstraints(sqlGrammar);
-
-		String expectedPrompt =
-				DSL_PROMPT_TEMPLATE
-						.formatted(
-								SQL_DSL_ID,
-								SQL_DSL_VERSION,
-								SQL_DSL_DESCRIPTION,
-								symbolDefinitions,
-								literalDefinitions,
-								identifierRules,
-								reservedSymbols,
-								embeddingConfig,
-								globalConstraints,
-								SQL_DSL_ID
-						);
-
 		String prompt = generator.generate(sqlGrammar);
 
-		assertThat(prompt).isEqualTo(expectedPrompt);
-	}
+		assertThat(prompt)
+				.contains(SQL_DSL_ID)
+				.contains(SQL_DSL_DESCRIPTION)
+				.contains("=== SYMBOL DEFINITIONS ===")
+				.contains("=== LITERAL DEFINITIONS ===")
+				.contains("=== IDENTIFIER RULES ===")
+				.contains("=== RESERVED SYMBOLS ===")
+				.contains("=== EMBEDDING CONFIGURATION ===")
+				.contains("=== GLOBAL CONSTRAINTS ===");
 
-	private String formatSymbolDefinitions(SxlGrammar grammar) {
-		if (grammar.symbols() == null || grammar.symbols().isEmpty()) {
-			return "No symbols defined.";
-		}
+		// Do not include version lines.
+		assertThat(prompt).doesNotContain("Version:");
+		// Do not include unused separators.
+		assertThat(prompt).doesNotContain("---");
 
-		StringBuilder sb = new StringBuilder();
-		grammar.symbols().entrySet().stream()
-				.sorted(java.util.Map.Entry.comparingByKey())
-				.forEach(entry -> {
-					String symbolName = entry.getKey();
-					SymbolDefinition symbol = entry.getValue();
-
-					sb.append(symbolName);
-					sb.append(":\n");
-					sb.append("  Description: ").append(symbol.description()).append("\n");
-					sb.append("  Kind: ").append(symbol.kind()).append("\n");
-
-					if (symbol.params() != null && !symbol.params().isEmpty()) {
-						sb.append("  Parameters:\n");
-						for (ParameterDefinition param : symbol.params()) {
-							sb.append("    - ").append(param.name());
-							sb.append(" (type: ").append(param.type());
-							sb.append(", cardinality: ").append(param.cardinality()).append(")");
-							if (param.description() != null && !param.description().isEmpty()) {
-								sb.append(": ").append(param.description());
-							}
-							if (param.allowedSymbols() != null && !param.allowedSymbols().isEmpty()) {
-								sb.append("\n      Allowed symbols: ").append(String.join(", ", param.allowedSymbols()));
-							}
-							sb.append("\n");
-						}
-					}
-
-					if (symbol.constraints() != null && !symbol.constraints().isEmpty()) {
-						sb.append("  Constraints:\n");
-						for (SymbolConstraint constraint : symbol.constraints()) {
-							sb.append("    - ").append(constraint.rule());
-							if (constraint.target() != null) {
-								sb.append(" (target: ").append(constraint.target()).append(")");
-							}
-							sb.append("\n");
-						}
-					}
-
-					if (symbol.examples() != null && !symbol.examples().isEmpty()) {
-						sb.append("  Examples:\n");
-						for (Example example : symbol.examples()) {
-							if (example.label() != null && !example.label().isEmpty()) {
-								sb.append("    - ").append(example.label()).append(":\n");
-							}
-							if (example.code() != null && !example.code().isEmpty()) {
-								String[] lines = example.code().split("\n");
-								for (String line : lines) {
-									sb.append("      ").append(line).append("\n");
-								}
-							}
-						}
-					}
-
-					sb.append("\n");
-				});
-
-		return sb.toString().trim();
-	}
-
-	private String formatLiteralDefinitions(SxlGrammar grammar) {
-		if (grammar.literals() == null) {
-			return "No literal definitions.";
-		}
-
-		StringBuilder sb = new StringBuilder();
-		LiteralDefinitions literals = grammar.literals();
-
-		if (literals.string() != null) {
-			sb.append("string:\n");
-			if (literals.string().regex() != null && !literals.string().regex().isEmpty()) {
-				sb.append("  Regex: ").append(literals.string().regex()).append("\n");
-			}
-			if (literals.string().values() != null && !literals.string().values().isEmpty()) {
-				sb.append("  Values: ").append(literals.string().values().stream()
-						.map(v -> v == null ? "null" : v.toString())
-						.collect(java.util.stream.Collectors.joining(", "))).append("\n");
-			}
-			sb.append("\n");
-		}
-
-		if (literals.number() != null) {
-			sb.append("number:\n");
-			if (literals.number().regex() != null && !literals.number().regex().isEmpty()) {
-				sb.append("  Regex: ").append(literals.number().regex()).append("\n");
-			}
-			if (literals.number().values() != null && !literals.number().values().isEmpty()) {
-				sb.append("  Values: ").append(literals.number().values().stream()
-						.map(v -> v == null ? "null" : v.toString())
-						.collect(java.util.stream.Collectors.joining(", "))).append("\n");
-			}
-			sb.append("\n");
-		}
-
-		if (literals.boolean_() != null) {
-			sb.append("boolean:\n");
-			if (literals.boolean_().regex() != null && !literals.boolean_().regex().isEmpty()) {
-				sb.append("  Regex: ").append(literals.boolean_().regex()).append("\n");
-			}
-			if (literals.boolean_().values() != null && !literals.boolean_().values().isEmpty()) {
-				sb.append("  Values: ").append(literals.boolean_().values().stream()
-						.map(v -> v == null ? "null" : v.toString())
-						.collect(java.util.stream.Collectors.joining(", "))).append("\n");
-			}
-			sb.append("\n");
-		}
-
-		if (literals.null_() != null) {
-			sb.append("null:\n");
-			if (literals.null_().regex() != null && !literals.null_().regex().isEmpty()) {
-				sb.append("  Regex: ").append(literals.null_().regex()).append("\n");
-			}
-			if (literals.null_().values() != null && !literals.null_().values().isEmpty()) {
-				sb.append("  Values: ").append(literals.null_().values().stream()
-						.map(v -> v == null ? "null" : v.toString())
-						.collect(java.util.stream.Collectors.joining(", "))).append("\n");
-			}
-			sb.append("\n");
-		}
-
-		String result = sb.toString().trim();
-		return result.isEmpty() ? "No literal definitions." : result;
-	}
-
-	private String formatIdentifierRules(SxlGrammar grammar) {
-		if (grammar.identifier() == null) {
-			return "No identifier rules defined.";
-		}
-
-		StringBuilder sb = new StringBuilder();
-		if (grammar.identifier().description() != null && !grammar.identifier().description().isEmpty()) {
-			sb.append(grammar.identifier().description()).append("\n");
-		}
-		if (grammar.identifier().pattern() != null && !grammar.identifier().pattern().isEmpty()) {
-			sb.append("Pattern: ").append(grammar.identifier().pattern());
-		}
-
-		return sb.toString().trim();
-	}
-
-	private String formatReservedSymbols(SxlGrammar grammar) {
-		if (grammar.reservedSymbols() == null || grammar.reservedSymbols().isEmpty()) {
-			return "No reserved symbols.";
-		}
-
-		return String.join(", ", grammar.reservedSymbols());
-	}
-
-	private String formatEmbeddingConfig(SxlGrammar grammar) {
-		if (grammar.embedding() == null) {
-			return "Embedding not configured.";
-		}
-
-		StringBuilder sb = new StringBuilder();
-		sb.append("Enabled: ").append(grammar.embedding().enabled());
-		if (grammar.embedding().symbol() != null && !grammar.embedding().symbol().isEmpty()) {
-			sb.append("\nSymbol: ").append(grammar.embedding().symbol());
-		}
-
-		return sb.toString();
-	}
-
-	private String formatGlobalConstraints(SxlGrammar grammar) {
-		if (grammar.constraints() == null || grammar.constraints().isEmpty()) {
-			return "No global constraints.";
-		}
-
-		StringBuilder sb = new StringBuilder();
-		for (GlobalConstraint constraint : grammar.constraints()) {
-			sb.append("- ").append(constraint.rule());
-			if (constraint.symbol() != null && !constraint.symbol().isEmpty()) {
-				sb.append(" (symbol: ").append(constraint.symbol()).append(")");
-			}
-			if (constraint.target() != null && !constraint.target().isEmpty()) {
-				sb.append(" (target: ").append(constraint.target()).append(")");
-			}
-			if (constraint.dependsOn() != null && !constraint.dependsOn().isEmpty()) {
-				sb.append(" (depends on: ").append(constraint.dependsOn()).append(")");
-			}
-			sb.append("\n");
-		}
-
-		return sb.toString().trim();
+		// No boilerplate placeholders should appear.
+		assertThat(prompt)
+				.doesNotContain("No symbols defined.")
+				.doesNotContain("No literal definitions.")
+				.doesNotContain("No reserved symbols.")
+				.doesNotContain("Embedding not configured.")
+				.doesNotContain("No global constraints.");
 	}
 
 	// ============================================================
@@ -664,6 +434,35 @@ class SxlGrammarPromptGeneratorTest {
 		assertThat(planPrompt)
 				.contains("P") // Plan
 				.contains("PS"); // PlanStep
+	}
+
+	@Test
+	@DisplayName("should highlight boilerplate emitted for universal grammar")
+	void shouldHighlightBoilerplateEmittedForUniversalGrammar() {
+		String prompt = generator.generate(universalGrammar);
+
+		List<String> boilerplateLines = prompt.lines()
+				.filter(line -> line.startsWith("No ") || line.contains("not configured"))
+				.toList();
+
+		// Boilerplate placeholders should be absent.
+		assertThat(boilerplateLines).isEmpty();
+
+		// Sections without meaningful content should be omitted entirely.
+		assertThat(prompt)
+				.doesNotContain("=== SYMBOL DEFINITIONS ===")
+				.doesNotContain("=== RESERVED SYMBOLS ===")
+				.doesNotContain("=== EMBEDDING CONFIGURATION ===")
+				.doesNotContain("=== GLOBAL CONSTRAINTS ===")
+				.doesNotContain("---");
+
+		// Sections with content should remain.
+		assertThat(prompt)
+				.contains("=== LITERAL DEFINITIONS ===")
+				.contains("=== IDENTIFIER RULES ===");
+
+		// Keep the prompt otherwise non-empty to ensure the generator still outputs guidance.
+		assertThat(prompt).isNotBlank();
 	}
 }
 

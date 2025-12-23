@@ -27,7 +27,8 @@ class ActionSpecTest {
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
 				"Fetch orders via SQL",
-				List.of(embedded, plain)
+				List.of(embedded, plain),
+				null
 		);
 
 		String sxl = spec.toSxl();
@@ -58,7 +59,8 @@ class ActionSpecTest {
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
 				"Fetch orders via SQL",
-				List.of(withDsl, withoutDsl)
+				List.of(withDsl, withoutDsl),
+				null
 		);
 
 		ArrayNode array = ActionDescriptorJsonMapper.toJsonArray(List.of(spec));

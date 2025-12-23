@@ -69,7 +69,7 @@ class PlanNodeVisitorTest {
 	void generatePlanWithErrorStep() {
 		String planText = """
 				(P "Plan with error"
-				  (PS someAction (ERROR "LLM timeout"))
+				  (ERROR "LLM timeout")
 				)
 				""";
 		SxlNode planNode = parse(planText);
@@ -78,6 +78,25 @@ class PlanNodeVisitorTest {
 		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.Error.class);
 		PlanStep.Error error = (PlanStep.Error) plan.planSteps().getFirst();
 		assertThat(error.assistantMessage()).isEqualTo("LLM timeout");
+	}
+
+	@Test
+	void generatePlanWithErrorSteps() {
+		String planText = """
+				(P "Plan with error"
+				  (ERROR "LLM timeout")
+				  (ERROR "Out of tokens")
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan.planSteps()).hasSize(2);
+		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.Error.class);
+		PlanStep.Error error0 = (PlanStep.Error) plan.planSteps().getFirst();
+		assertThat(error0.assistantMessage()).isEqualTo("LLM timeout");
+		assertThat(plan.planSteps().get(1)).isInstanceOf(PlanStep.Error.class);
+		PlanStep.Error error1 = (PlanStep.Error) plan.planSteps().get(1);
+		assertThat(error1.assistantMessage()).isEqualTo("Out of tokens");
 	}
 
 	@Test
@@ -109,6 +128,46 @@ class PlanNodeVisitorTest {
 				""";
 		assertThatThrownBy(() -> parse(planText))
 				.isInstanceOf(SxlParseException.class);
+	}
+
+	@Test
+	void generatePlanWithIdentifierParams() {
+		String planText = """
+				(P "Param-only plan"
+				  (PS displayControlChart
+				    (PA domainEntity "elasticity bundle")
+				    (PA measurementConcept "displacement")
+				    (PA bundleId "A12345")
+				  )
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep.Action step = (PlanStep.Action) plan.planSteps().getFirst();
+		assertThat(step.actionArguments()).containsExactly(
+				"elasticity bundle",
+				"displacement",
+				"A12345"
+		);
+	}
+
+	@Test
+	void generatePlanWithMixedParamsAndEmbed() {
+		String planText = """
+				(P "Mixed plan"
+				  (PS displayControlChart
+				    (EMBED sxl-sql (Q (S 1)))
+				    (PA bundleId "A12345")
+				  )
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep.Action step = (PlanStep.Action) plan.planSteps().getFirst();
+		assertThat(step.actionArguments()).hasSize(2);
+		assertThat(step.actionArguments()[1]).isEqualTo("A12345");
 	}
 
 	private SxlNode parse(String sxl) {
