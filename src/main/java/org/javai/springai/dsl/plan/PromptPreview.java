@@ -1,13 +1,14 @@
 package org.javai.springai.dsl.plan;
 
 import java.util.List;
+import org.springframework.lang.NonNull;
 
 /**
  * Captures the fully rendered prompt that would be sent to the LLM.
  */
 public record PromptPreview(
-		List<String> systemMessages,
-		List<String> userMessages,
+		@NonNull List<String> systemMessages,
+		@NonNull List<String> userMessages,
 		List<String> grammarIds,
 		List<String> actionNames
 ) {

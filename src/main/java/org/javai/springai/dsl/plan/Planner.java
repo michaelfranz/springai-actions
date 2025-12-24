@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.execution.ActionResult;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
@@ -19,6 +18,8 @@ import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
+import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
+import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
@@ -35,7 +36,7 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.javai.springai.dsl.plan.PlanFormulationResult;
+import org.springframework.lang.NonNull;
 
 /**
  * Fluent planner API that wraps Spring AI's ChatClient and surfaces prompt previews.
@@ -123,46 +124,17 @@ public final class Planner {
 		PlannerOptions effective = options != null ? options : PlannerOptions.defaults();
 		CollectedActions actionContext = collectActions();
 
-		PromptPreview preview = buildPromptPreview(requestText, actionContext.descriptors());
-		if (effective.capturePrompt() || capturePromptByDefault) {
-			fireHook(preview);
+		PromptPreview preview = buildPromptPreview(requestText, actionContext.descriptors(), state);
+		maybeFirePromptHook(preview, effective);
+
+		if (isDryRun(effective)) {
+			return formulateDryRunPlan(preview, actionContext);
 		}
 
-		if (effective.dryRun() || chatClient == null) {
-			logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
-			return new PlanFormulationResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
-		}
-
-		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
-		for (String systemMessage : preview.systemMessages()) {
-			if (systemMessage != null) {
-				request.system(systemMessage);
-			}
-		}
-		String userMessage = preview.renderedUser();
-		request.user(Objects.requireNonNull(userMessage));
-
-		String response = request.call().content();
+		String response = invokeModel(preview);
 		Plan plan = parsePlan(response);
-		fireHook(preview);
+		maybeFirePromptHook(preview, effective);
 		return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
-	}
-
-	// Legacy aliases for compatibility; prefer formulatePlan(...)
-	public PlanFormulationResult plan(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults());
-	}
-
-	public PlanFormulationResult plan(String requestText, PlannerOptions options) {
-		return formulatePlan(requestText, options);
-	}
-
-	public PlanFormulationResult planWithDetails(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults(), ConversationState.initial(requestText));
-	}
-
-	public PlanFormulationResult planWithDetails(String requestText, PlannerOptions options) {
-		return formulatePlan(requestText, options, ConversationState.initial(requestText));
 	}
 
 	/**
@@ -193,6 +165,12 @@ public final class Planner {
 	}
 
 	private PromptPreview buildPromptPreview(String requestText, List<ActionDescriptor> actionDescriptors) {
+		return buildPromptPreview(requestText, actionDescriptors, null);
+	}
+
+	private PromptPreview buildPromptPreview(@NonNull String requestText,
+			List<ActionDescriptor> actionDescriptors,
+			ConversationState state) {
 		List<String> systemMessages = new ArrayList<>();
 
 		DslGuidanceProvider guidanceProvider = new InlineGrammarGuidanceProvider(this.grammars);
@@ -206,6 +184,14 @@ public final class Planner {
 
 		systemMessages.addAll(promptContributions);
 
+		// Conversation-aware retry addendum
+		if (state != null) {
+			String addendum = ConversationPromptBuilder.buildRetryAddendum(state);
+			if (!addendum.isBlank()) {
+				systemMessages.add(addendum);
+			}
+		}
+
 		List<String> userMessages = List.of(requestText);
 		List<String> grammarIds = grammars.stream()
 				.map(g -> g.dsl() != null ? g.dsl().id() : null)
@@ -214,6 +200,28 @@ public final class Planner {
 		List<String> actionNames = actionDescriptors.stream().map(ActionDescriptor::id).toList();
 
 		return new PromptPreview(systemMessages, userMessages, grammarIds, actionNames);
+	}
+
+	private void maybeFirePromptHook(PromptPreview preview, PlannerOptions options) {
+		if (options.capturePrompt() || capturePromptByDefault) {
+			fireHook(preview);
+		}
+	}
+
+	private boolean isDryRun(PlannerOptions options) {
+		return options.dryRun() || chatClient == null;
+	}
+
+	private PlanFormulationResult formulateDryRunPlan(PromptPreview preview, CollectedActions actionContext) {
+		logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
+		return new PlanFormulationResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
+	}
+
+	private String invokeModel(PromptPreview preview) {
+		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
+		preview.systemMessages().forEach(request::system);
+		request.user(preview.renderedUser());
+		return request.call().content();
 	}
 
 	private void fireHook(PromptPreview preview) {
