@@ -1,6 +1,7 @@
 package org.javai.springai.dsl.exec;
 
 import java.util.List;
+import java.util.Map;
 import org.javai.springai.dsl.act.ActionBinding;
 
 /**
@@ -14,7 +15,15 @@ public sealed interface ResolvedStep {
 		}
 	}
 
+	record PendingActionStep(String assistantMessage, String actionId, PendingParam[] pendingParams,
+							 Map<String, Object> providedParams)
+			implements ResolvedStep {
+	}
+
 	record ErrorStep(String reason) implements ResolvedStep {
+	}
+
+	record PendingParam(String name, String message) {
 	}
 }
 

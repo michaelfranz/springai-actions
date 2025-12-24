@@ -182,8 +182,11 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		ResolvedPlan secondPlan = secondTurn.resolvedPlan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending
-		// (This test remains disabled until conversation-state merge is implemented.)
 		assertThat(secondPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+
+		PlanExecutionResult executed = executor.execute(secondPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
 
 	@Override
