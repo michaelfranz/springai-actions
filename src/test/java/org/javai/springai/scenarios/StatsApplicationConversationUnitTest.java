@@ -9,7 +9,7 @@ import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
 import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.dsl.conversation.PendingParamSnapshot;
 import org.javai.springai.dsl.plan.Plan;
-import org.javai.springai.dsl.plan.PlanExecutionResult;
+import org.javai.springai.dsl.plan.PlanFormulationResult;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,12 +40,12 @@ class StatsApplicationConversationUnitTest {
 						"exportControlChartToExcel",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("bundleId", "Provide bundle id") },
 						new Object[] { "displacement", "values" })));
-		PlanExecutionResult pendingResult = new PlanExecutionResult(
+		PlanFormulationResult pendingResult = new PlanFormulationResult(
 				"", pendingPlan, null, false, null);
 		when(mockPlanner.planWithDetails(anyString())).thenReturn(pendingResult);
 
 		// Simulate first turn
-		PlanExecutionResult firstTurn = mockPlanner.planWithDetails("export control chart to excel for displacement values");
+		PlanFormulationResult firstTurn = mockPlanner.planWithDetails("export control chart to excel for displacement values");
 		assertThat(firstTurn.plan().planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
 
 		// Build conversation state and retry addendum
@@ -63,11 +63,11 @@ class StatsApplicationConversationUnitTest {
 				List.of(new PlanStep.ActionStep("",
 						"exportControlChartToExcel",
 						new Object[] { "displacement", "values", "A12345" })));
-		PlanExecutionResult resolvedResult = new PlanExecutionResult(
+		PlanFormulationResult resolvedResult = new PlanFormulationResult(
 				"", resolvedPlan, null, false, null);
 		when(mockPlanner.planWithDetails("bundle id is A12345")).thenReturn(resolvedResult);
 
-		PlanExecutionResult secondTurn = mockPlanner.planWithDetails("bundle id is A12345");
+		PlanFormulationResult secondTurn = mockPlanner.planWithDetails("bundle id is A12345");
 		assertThat(secondTurn.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 	}
 }

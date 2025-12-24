@@ -7,6 +7,7 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.javai.springai.dsl.plan.PlanFormulationResult;
 
 class PlannerTest {
 
@@ -73,7 +74,7 @@ class PlannerTest {
 				.addActions(new DemoActions())
 				.build();
 
-		PlanExecutionResult result = planner.planWithDetails("dry run request", PlannerOptions.dryRunOptions());
+		PlanFormulationResult result = planner.planWithDetails("dry run request", PlannerOptions.dryRunOptions());
 
 		Plan plan = result.plan();
 		assertThat(result.dryRun()).isTrue();

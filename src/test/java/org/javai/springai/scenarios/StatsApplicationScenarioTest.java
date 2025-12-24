@@ -12,7 +12,7 @@ import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.plan.Plan;
-import org.javai.springai.dsl.plan.PlanExecutionResult;
+import org.javai.springai.dsl.plan.PlanFormulationResult;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 import org.javai.springai.sxl.grammar.SxlGrammar;
@@ -79,7 +79,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void displayControlChartPlanTest() {
-		PlanExecutionResult planResult = planner.planWithDetails("show me a control chart for displacement values in elasticity bundle A12345");
+		PlanFormulationResult planResult = planner.planWithDetails("show me a control chart for displacement values in elasticity bundle A12345");
 		Plan plan = planResult.plan();
 
 		assertThat(plan).isNotNull();
@@ -97,7 +97,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void exportToExcelTest() {
-		PlanExecutionResult planResult = planner.planWithDetails("export a control chart to excel for displacement values in elasticity bundle A12345");
+		PlanFormulationResult planResult = planner.planWithDetails("export a control chart to excel for displacement values in elasticity bundle A12345");
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -116,7 +116,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void evaluateSpcReadinessTest() {
-		PlanExecutionResult planResult = planner.planWithDetails("evaluate spc readiness for displacement values in bundle A12345");
+		PlanFormulationResult planResult = planner.planWithDetails("evaluate spc readiness for displacement values in bundle A12345");
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -136,7 +136,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Test
 	void unableToIdentifyActionTest() {
 		// No action supports ANOVA
-		PlanExecutionResult planResult = planner.planWithDetails("perform a 2-way ANOVA on vehicle elasticity for bundle A12345");
+		PlanFormulationResult planResult = planner.planWithDetails("perform a 2-way ANOVA on vehicle elasticity for bundle A12345");
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -156,10 +156,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Test
 	void requireMoreInformationTest() {
 		// Export to excel requires bundle ID
-		PlanExecutionResult planResult = planner.planWithDetails("export a control chart to excel for displacement values");
+		PlanFormulationResult planResult = planner.planWithDetails("export a control chart to excel for displacement values");
 		Plan plan = planResult.plan();
-		assertThat(plan).isNotNull();
-
 		assertThat(plan).isNotNull();
 		List<PlanStep> steps = plan.planSteps();
 		assertThat(steps).hasSize(1);
@@ -177,7 +175,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Test
 	void requireMoreInformationFollowUpProvidesMissingBundleId() {
 		// Turn 1: missing bundle id -> expect pending
-		PlanExecutionResult firstTurn = planner.planWithDetails("export a control chart to excel for displacement values");
+		PlanFormulationResult firstTurn = planner.planWithDetails("export a control chart to excel for displacement values");
 		Plan firstPlan = firstTurn.plan();
 		assertThat(firstPlan).isNotNull();
 		assertThat(firstPlan.planSteps()).hasSize(1);
@@ -185,7 +183,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
 		// the system merges context and produces an executable step (documented scenario)
-		PlanExecutionResult secondTurn = planner.planWithDetails("the bundle id is A12345");
+		PlanFormulationResult secondTurn = planner.planWithDetails("the bundle id is A12345");
 		Plan secondPlan = secondTurn.plan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending

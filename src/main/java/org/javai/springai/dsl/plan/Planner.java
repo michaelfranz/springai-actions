@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.execution.ActionResult;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
@@ -34,6 +35,7 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.javai.springai.dsl.plan.PlanFormulationResult;
 
 /**
  * Fluent planner API that wraps Spring AI's ChatClient and surfaces prompt previews.
@@ -65,7 +67,7 @@ public final class Planner {
 	 * Generate a plan for the given request with default options.
 	 */
 	public Plan planActions(String requestText) {
-		return planWithDetails(requestText, PlannerOptions.defaults()).plan();
+		return formulatePlan(requestText, PlannerOptions.defaults()).plan();
 	}
 
 	/**
@@ -83,7 +85,7 @@ public final class Planner {
 		Objects.requireNonNull(resolver, "resolver must not be null");
 		Objects.requireNonNull(executor, "executor must not be null");
 
-		PlanExecutionResult planning = planWithDetails(requestText);
+		PlanFormulationResult planning = formulatePlan(requestText);
 		PlanResolutionResult resolution = resolver.resolve(planning.plan(), planning.actionRegistry());
 		if (!resolution.isSuccess()) {
 			return PlanRunResult.failure(planning, resolution);
@@ -97,14 +99,21 @@ public final class Planner {
 	/**
 	 * Generate a plan and capture prompt details with default options.
 	 */
-	public PlanExecutionResult planWithDetails(String requestText) {
-		return planWithDetails(requestText, PlannerOptions.defaults());
+	public PlanFormulationResult formulatePlan(String requestText) {
+		return formulatePlan(requestText, PlannerOptions.defaults());
+	}
+
+	/**
+	 * Conversation-aware entry point. Currently delegates to the existing options-based method.
+	 */
+	public PlanFormulationResult formulatePlan(String requestText, ConversationState state) {
+		return formulatePlan(requestText, PlannerOptions.defaults());
 	}
 
 	/**
 	 * Generate a plan using the provided options (e.g., dry-run, capture prompt).
 	 */
-	public PlanExecutionResult planWithDetails(String requestText, PlannerOptions options) {
+	public PlanFormulationResult formulatePlan(String requestText, PlannerOptions options) {
 		Objects.requireNonNull(requestText, "requestText must not be null");
 		PlannerOptions effective = options != null ? options : PlannerOptions.defaults();
 		CollectedActions actionContext = collectActions();
@@ -116,7 +125,7 @@ public final class Planner {
 
 		if (effective.dryRun() || chatClient == null) {
 			logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
-			return new PlanExecutionResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
+			return new PlanFormulationResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
 		}
 
 		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
@@ -131,7 +140,24 @@ public final class Planner {
 		String response = request.call().content();
 		Plan plan = parsePlan(response);
 		fireHook(preview);
-		return new PlanExecutionResult(response, plan, preview, false, actionContext.registry());
+		return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
+	}
+
+	// Legacy aliases for compatibility; prefer formulatePlan(...)
+	public PlanFormulationResult plan(String requestText) {
+		return formulatePlan(requestText, PlannerOptions.defaults());
+	}
+
+	public PlanFormulationResult plan(String requestText, PlannerOptions options) {
+		return formulatePlan(requestText, options);
+	}
+
+	public PlanFormulationResult planWithDetails(String requestText) {
+		return formulatePlan(requestText, PlannerOptions.defaults());
+	}
+
+	public PlanFormulationResult planWithDetails(String requestText, PlannerOptions options) {
+		return formulatePlan(requestText, options);
 	}
 
 	/**

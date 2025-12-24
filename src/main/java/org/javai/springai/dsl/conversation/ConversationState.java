@@ -14,6 +14,10 @@ public record ConversationState(
 		String latestUserMessage
 ) {
 
+	public static ConversationState initial(String originalInstruction) {
+		return new ConversationState(originalInstruction, List.of(), Map.of(), null);
+	}
+
 	public ConversationState {
 		pendingParams = pendingParams != null ? List.copyOf(pendingParams) : List.of();
 		providedParams = providedParams != null ? Map.copyOf(providedParams) : Map.of();

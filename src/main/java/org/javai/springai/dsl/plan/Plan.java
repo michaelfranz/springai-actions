@@ -14,4 +14,11 @@ public record Plan(String assistantMessage, List<PlanStep> planSteps) {
 		return PlanNodeVisitor.generate(planNode);
 	}
 
+	public boolean hasPending() {
+		return planSteps.stream().anyMatch(ps -> ps instanceof PlanStep.PendingActionStep);
+	}
+
+	public boolean hasError() {
+		return planSteps.stream().anyMatch(ps -> ps instanceof PlanStep.ErrorStep);
+	}
 }

@@ -1,11 +1,11 @@
 package org.javai.springai.dsl.plan;
 
 /**
- * Rich result for a planning invocation, including the prompt preview.
+ * Rich result for a plan formulation invocation, including the prompt preview.
  */
 import org.javai.springai.dsl.act.ActionRegistry;
 
-public record PlanExecutionResult(
+public record PlanFormulationResult(
 		String llmResponse,
 		Plan plan,
 		PromptPreview promptPreview,
