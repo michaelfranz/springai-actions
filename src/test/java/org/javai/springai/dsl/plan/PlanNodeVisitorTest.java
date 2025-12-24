@@ -3,6 +3,7 @@ package org.javai.springai.dsl.plan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
 import org.javai.springai.sxl.DefaultValidatorRegistry;
@@ -17,7 +18,6 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.assertj.core.api.InstanceOfAssertFactories;
 
 class PlanNodeVisitorTest {
 
@@ -207,8 +207,10 @@ class PlanNodeVisitorTest {
 		Plan plan = PlanNodeVisitor.generate(planNode);
 
 		assertThat(plan.planSteps()).hasSize(1);
-		Object pendingStep = plan.planSteps().getFirst();
-		assertThat(pendingStep.getClass().getSimpleName()).isEqualTo("PendingActionStep");
+		PlanStep.PendingActionStep pendingStep = (PlanStep.PendingActionStep) plan.planSteps().getFirst();
+		assertThat(pendingStep.pendingParams()).hasSize(2);
+		assertThat(pendingStep.providedParams()).hasSize(1);
+		assertThat(pendingStep.providedParams()).containsEntry("domainEntity", "displacement");
 	}
 
 	private SxlNode parse(String sxl) {

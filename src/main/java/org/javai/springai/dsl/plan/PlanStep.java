@@ -1,12 +1,18 @@
 package org.javai.springai.dsl.plan;
 
+import java.util.Map;
+
 public sealed interface PlanStep {
 
 	record ActionStep(String assistantMessage, String actionId, Object[] actionArguments)
 			implements PlanStep {
 	}
 
-	record PendingActionStep(String assistantMessage, String actionId, PendingParam[] pendingParams, Object[] providedArguments)
+	/**
+	 * Pending step retains both the pending requirements and the map of provided params (name->value).
+	 */
+	record PendingActionStep(String assistantMessage, String actionId, PendingParam[] pendingParams,
+			Map<String, Object> providedParams)
 			implements PlanStep {
 	}
 

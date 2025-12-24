@@ -13,88 +13,76 @@ import org.javai.springai.dsl.plan.PlanStep;
 
 /**
  * Default resolver that maps Plan steps to ActionBindings and resolves arguments.
+ * Resolution issues are captured as ResolvedStep.ErrorStep entries.
  */
 public class DefaultPlanResolver implements PlanResolver {
 
 	@Override
-	public PlanResolutionResult resolve(Plan plan, ActionRegistry registry) {
-		if (plan == null) {
-			return PlanResolutionResult.failure(List.of(new PlanResolutionError(null, null, "Plan is null", null)));
-		}
-		if (registry == null) {
-			return PlanResolutionResult.failure(List.of(new PlanResolutionError(null, null, "ActionRegistry is null", null)));
+	public ResolvedPlan resolve(Plan plan, ActionRegistry registry) {
+		if (plan == null || registry == null) {
+			return new ResolvedPlan(List.of(new ResolvedStep.ErrorStep("Plan or registry is null")));
 		}
 
-		List<PlanResolutionError> errors = new ArrayList<>();
 		List<ResolvedStep> resolved = new ArrayList<>();
-
 		for (PlanStep step : plan.planSteps()) {
-			switch (step) {
-				case PlanStep.ErrorStep(String assistantMessage) -> resolved.add(new ResolvedStep.ErrorStep(assistantMessage));
-				case PlanStep.PendingActionStep pendingStep -> {
-					String actionId = pendingStep.actionId();
-					PlanStep.PendingParam[] pendingParams = pendingStep.pendingParams();
-					if (pendingParams != null && pendingParams.length > 0) {
-						for (PlanStep.PendingParam pendingParam : pendingParams) {
-							errors.add(new PlanResolutionError(
-									actionId,
-									pendingParam.name(),
-									"Pending parameter: " + pendingParam.message(),
-									null));
-						}
-					} else {
-						errors.add(new PlanResolutionError(actionId, null,
-								"Pending step cannot be resolved until required parameters are provided", null));
-					}
+			if (step instanceof PlanStep.ActionStep actionStep) {
+				resolveActionStep(actionStep, registry, resolved);
+			}
+			else if (step instanceof PlanStep.ErrorStep(String assistantMessage)) {
+				resolved.add(new ResolvedStep.ErrorStep(assistantMessage));
+			}
+			else if (step instanceof PlanStep.PendingActionStep pendingStep) {
+				String actionId = pendingStep.actionId();
+				PlanStep.PendingParam[] pendingParams = pendingStep.pendingParams();
+				String message = "Pending parameter(s) prevent resolution";
+				if (pendingParams != null && pendingParams.length > 0) {
+					message += ": " + pendingParams[0].name();
 				}
-				case PlanStep.ActionStep actionStep -> {
-					String actionId = actionStep.actionId();
-					ActionBinding binding = registry.getActionBinding(actionId);
-					if (binding == null) {
-						errors.add(new PlanResolutionError(actionId, null, "Unknown action id", null));
-						continue;
-					}
-
-					List<ActionParameterDescriptor> params = binding.parameters();
-					Object[] args = actionStep.actionArguments();
-					if (args == null) {
-						args = new Object[0];
-					}
-					if (args.length != params.size()) {
-						errors.add(new PlanResolutionError(actionId, null,
-								"Argument count mismatch: expected " + params.size() + " got " + args.length, args));
-						continue;
-					}
-
-					List<ResolvedArgument> resolvedArgs = new ArrayList<>();
-					boolean stepFailed = false;
-					for (int i = 0; i < params.size(); i++) {
-						ActionParameterDescriptor param = params.get(i);
-						Object raw = args[i];
-						Object converted = convert(raw, param, errors, actionId);
-						if (converted == ConversionFailure.INSTANCE) {
-							stepFailed = true;
-							break;
-						}
-						resolvedArgs.add(new ResolvedArgument(param.name(), converted, resolveType(param.typeName())));
-					}
-					if (!stepFailed) {
-						resolved.add(new ResolvedStep.ActionStep(binding, resolvedArgs));
-					}
-				}
+				resolved.add(new ResolvedStep.ErrorStep(message + " for action " + actionId));
 			}
 		}
-
-		if (!errors.isEmpty()) {
-			return PlanResolutionResult.failure(errors);
-		}
-		return PlanResolutionResult.success(new ResolvedPlan(resolved));
+		return new ResolvedPlan(resolved);
 	}
 
-	private Object convert(Object raw, ActionParameterDescriptor param, List<PlanResolutionError> errors, String actionId) {
+	private void resolveActionStep(PlanStep.ActionStep actionStep, ActionRegistry registry,
+			List<ResolvedStep> resolved) {
+		String actionId = actionStep.actionId();
+		ActionBinding binding = registry.getActionBinding(actionId);
+		if (binding == null) {
+			resolved.add(new ResolvedStep.ErrorStep("Unknown action id: " + actionId));
+			return;
+		}
+
+		List<ActionParameterDescriptor> params = binding.parameters();
+		Object[] args = actionStep.actionArguments();
+		if (args == null) {
+			args = new Object[0];
+		}
+		if (args.length != params.size()) {
+			resolved.add(new ResolvedStep.ErrorStep(
+					"Argument count mismatch for action " + actionId + ": expected " + params.size() + " got "
+							+ args.length));
+			return;
+		}
+
+		List<ResolvedArgument> resolvedArgs = new ArrayList<>();
+		for (int i = 0; i < params.size(); i++) {
+			ActionParameterDescriptor param = params.get(i);
+			Object raw = args[i];
+			Object converted = convert(raw, param, actionId, resolved);
+			if (converted == ConversionFailure.INSTANCE) {
+				return;
+			}
+			resolvedArgs.add(new ResolvedArgument(param.name(), converted, resolveType(param.typeName())));
+		}
+		resolved.add(new ResolvedStep.ActionStep(binding, resolvedArgs));
+	}
+
+	private Object convert(Object raw, ActionParameterDescriptor param, String actionId, List<ResolvedStep> resolved) {
 		Class<?> targetType = resolveType(param.typeName());
 		if (targetType == null) {
-			errors.add(new PlanResolutionError(actionId, param.name(), "Unknown parameter type: " + param.typeName(), raw));
+			resolved.add(new ResolvedStep.ErrorStep(
+					"Unknown parameter type for action " + actionId + ": " + param.typeName()));
 			return ConversionFailure.INSTANCE;
 		}
 		if (raw == null) {
@@ -105,33 +93,34 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		if (targetType.isArray()) {
-			return convertArray(raw, targetType.componentType(), errors, actionId, param.name());
+			return convertArray(raw, targetType.componentType(), actionId, param.name(), resolved);
 		}
 
 		if (Collection.class.isAssignableFrom(targetType)) {
 			List<?> asList = toList(raw);
 			if (asList == null) {
-				errors.add(new PlanResolutionError(actionId, param.name(),
-						"Expected a collection-compatible value for parameter " + param.name(), raw));
+				resolved.add(new ResolvedStep.ErrorStep(
+						"Expected a collection-compatible value for parameter " + param.name()));
 				return ConversionFailure.INSTANCE;
 			}
 			return asList;
 		}
 
-		return convertScalar(raw, targetType, errors, actionId, param.name());
+		return convertScalar(raw, targetType, actionId, param.name(), resolved);
 	}
 
-	private Object convertArray(Object raw, Class<?> componentType, List<PlanResolutionError> errors, String actionId, String paramName) {
+	private Object convertArray(Object raw, Class<?> componentType, String actionId, String paramName,
+			List<ResolvedStep> resolved) {
 		Object[] elements = toObjectArray(raw);
 		if (elements == null) {
-			errors.add(new PlanResolutionError(actionId, paramName,
-					"Expected an array or collection value for parameter " + paramName, raw));
+			resolved.add(new ResolvedStep.ErrorStep(
+					"Expected an array or collection value for parameter " + paramName));
 			return ConversionFailure.INSTANCE;
 		}
 
 		Object array = Array.newInstance(componentType, elements.length);
 		for (int i = 0; i < elements.length; i++) {
-			Object converted = convertScalar(elements[i], componentType, errors, actionId, paramName);
+			Object converted = convertScalar(elements[i], componentType, actionId, paramName, resolved);
 			if (converted == ConversionFailure.INSTANCE) {
 				return ConversionFailure.INSTANCE;
 			}
@@ -140,7 +129,8 @@ public class DefaultPlanResolver implements PlanResolver {
 		return array;
 	}
 
-	private Object convertScalar(Object raw, Class<?> targetType, List<PlanResolutionError> errors, String actionId, String paramName) {
+	private Object convertScalar(Object raw, Class<?> targetType, String actionId, String paramName,
+			List<ResolvedStep> resolved) {
 		try {
 			if (targetType == String.class) {
 				return raw.toString();
@@ -162,8 +152,9 @@ public class DefaultPlanResolver implements PlanResolver {
 			}
 		}
 		catch (Exception ex) {
-			errors.add(new PlanResolutionError(actionId, paramName,
-					"Failed to convert value to " + targetType.getSimpleName() + ": " + ex.getMessage(), raw));
+			resolved.add(new ResolvedStep.ErrorStep(
+					"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": "
+							+ ex.getMessage()));
 			return ConversionFailure.INSTANCE;
 		}
 
@@ -222,7 +213,8 @@ public class DefaultPlanResolver implements PlanResolver {
 				case "boolean" -> boolean.class;
 				default -> Class.forName(typeName);
 			};
-		} catch (ClassNotFoundException e) {
+		}
+		catch (ClassNotFoundException e) {
 			return null;
 		}
 	}

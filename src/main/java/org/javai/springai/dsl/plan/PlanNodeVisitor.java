@@ -1,7 +1,9 @@
 package org.javai.springai.dsl.plan;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.javai.springai.dsl.bind.EmbedResolverUtil;
 import org.javai.springai.dsl.bind.EmbeddedResolver;
@@ -78,37 +80,39 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 		// Step items: zero or more. ERROR is not allowed inside PS.
 		List<SxlNode> stepItems = args.size() > 1 ? args.subList(1, args.size()) : List.of();
 
-		List<Object> resolvedArgs = new ArrayList<>();
+		Map<String, Object> providedParams = new LinkedHashMap<>();
 		List<PlanStep.PendingParam> pendingParams = new ArrayList<>();
 		for (SxlNode item : stepItems) {
 			if (item.isLiteral()) {
 				throw new IllegalStateException("Plan step items must be nodes (parameters or EMBED)");
 			}
 			if ("EMBED".equals(item.symbol())) {
-				resolvedArgs.addAll(List.of(EmbedResolverUtil.resolveEmbeddedAsArray(item, embeddedResolver)));
+				Object[] embedded = EmbedResolverUtil.resolveEmbeddedAsArray(item, embeddedResolver);
+				for (Object emb : embedded) {
+					providedParams.put("__embed_" + providedParams.size(), emb);
+				}
 				continue;
-			}
-			if ("ERROR".equals(item.symbol())) {
-				throw new IllegalStateException("ERROR cannot appear inside PS; it must be a plan-level step");
 			}
 			if ("PA".equals(item.symbol())) {
 				if (item.args().size() < 2) {
 					throw new IllegalStateException("PA must have a name and at least one literal value");
 				}
 				// Validate the parameter name even though we only capture positional argument values
-				extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
+				String paramName = extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
+				// capture name->value map for provided params
 				List<SxlNode> valueNodes = item.args().subList(1, item.args().size());
 				if (valueNodes.stream().anyMatch(v -> !v.isLiteral())) {
 					throw new IllegalStateException("PA values must be literals");
 				}
 				if (valueNodes.size() == 1) {
-					resolvedArgs.add(valueNodes.getFirst().literalValue());
+					String literal = valueNodes.getFirst().literalValue();
+					providedParams.put(paramName, literal);
 				}
 				else {
 					List<String> values = valueNodes.stream()
 							.map(SxlNode::literalValue)
 							.toList();
-					resolvedArgs.add(values);
+					providedParams.put(paramName, values);
 				}
 				continue;
 			}
@@ -131,10 +135,11 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 		if (!pendingParams.isEmpty()) {
 			planSteps.add(new PlanStep.PendingActionStep(actionStepMessage, actionId,
 					pendingParams.toArray(new PlanStep.PendingParam[0]),
-					resolvedArgs.toArray()));
+					Map.copyOf(providedParams)));
 		}
 		else {
-			planSteps.add(new PlanStep.ActionStep(actionStepMessage, actionId, resolvedArgs.toArray()));
+			planSteps.add(new PlanStep.ActionStep(actionStepMessage, actionId,
+					providedParams.values().toArray()));
 		}
 	}
 

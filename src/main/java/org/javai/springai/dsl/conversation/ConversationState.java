@@ -1,5 +1,6 @@
 package org.javai.springai.dsl.conversation;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.dsl.plan.PlanStep.PendingParam;
@@ -11,7 +12,7 @@ import org.javai.springai.dsl.plan.PlanStep.PendingParam;
 public record ConversationState(
 		String originalInstruction,
 		List<PendingParam> pendingParams,
-		Map<String, String> providedParams,
+		Map<String, Object> providedParams,
 		String latestUserMessage
 ) {
 
@@ -28,7 +29,7 @@ public record ConversationState(
 		if (name == null || name.isBlank()) {
 			return this;
 		}
-		Map<String, String> updated = new java.util.HashMap<>(this.providedParams);
+		Map<String, Object> updated = new HashMap<>(this.providedParams);
 		updated.put(name, value);
 		return new ConversationState(this.originalInstruction, this.pendingParams, Map.copyOf(updated), this.latestUserMessage);
 	}
@@ -39,6 +40,18 @@ public record ConversationState(
 
 	public ConversationState withPendingParams(List<PendingParam> pending) {
 		return new ConversationState(this.originalInstruction, pending, this.providedParams, this.latestUserMessage);
+	}
+
+	public ConversationState withProvidedParams(Map<String, Object> provided) {
+		Map<String, Object> updated = new HashMap<>(this.providedParams);
+		if (provided != null) {
+			for (Map.Entry<String, Object> entry : provided.entrySet()) {
+				if (entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
+					updated.put(entry.getKey(), entry.getValue().toString());
+				}
+			}
+		}
+		return new ConversationState(this.originalInstruction, this.pendingParams, Map.copyOf(updated), this.latestUserMessage);
 	}
 }
 

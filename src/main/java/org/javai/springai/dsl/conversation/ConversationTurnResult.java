@@ -1,32 +1,26 @@
 package org.javai.springai.dsl.conversation;
 
-import java.util.Objects;
-import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.exec.PlanResolutionResult;
-import org.javai.springai.dsl.exec.PlanResolver;
-import org.javai.springai.dsl.plan.Plan;
+import java.util.List;
+import java.util.Map;
+import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.plan.PlanStatus;
+import org.javai.springai.dsl.plan.PlanStep;
 
 /**
- * Result of processing a single conversation turn: the plan produced and the updated state.
- * Status is derived from the plan when needed, and a convenience resolver is provided when READY.
+ * Result of processing a single conversation turn: the resolved plan (if any), pending items, and updated state.
  */
-public record ConversationTurnResult(Plan plan, ConversationState state, ActionRegistry actionRegistry) {
+public record ConversationTurnResult(ResolvedPlan resolvedPlan,
+		ConversationState state,
+		List<PlanStep.PendingParam> pendingParams,
+		Map<String, Object> providedParams) {
 
-	public PlanStatus status() {
-		return plan != null ? plan.status() : PlanStatus.ERROR;
+	public ConversationTurnResult {
+		pendingParams = pendingParams != null ? List.copyOf(pendingParams) : List.of();
+		providedParams = providedParams != null ? Map.copyOf(providedParams) : Map.of();
 	}
 
-	/**
-	 * Resolve the plan using the provided resolver. Precondition: status() must be READY,
-	 * otherwise an IllegalStateException is thrown.
-	 */
-	public PlanResolutionResult resolve(PlanResolver resolver) {
-		Objects.requireNonNull(resolver, "resolver must not be null");
-		if (status() != PlanStatus.READY) {
-			throw new IllegalStateException("Plan is not READY; status=" + status());
-		}
-		return resolver.resolve(plan, actionRegistry);
+	public PlanStatus status() {
+		return resolvedPlan != null ? resolvedPlan.status() : PlanStatus.ERROR;
 	}
 }
 

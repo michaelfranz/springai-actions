@@ -6,7 +6,10 @@ import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.ai.chat.client.ChatClient;
 
+@SuppressWarnings("NullAway")
 class PlannerTest {
 
 	private SxlGrammar planGrammar;
@@ -80,6 +83,28 @@ class PlannerTest {
 		assertThat(plan.planSteps()).isEmpty();
 		assertThat(result.promptPreview()).isNotNull();
 		assertThat(result.promptPreview().userMessages()).contains("dry run request");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway")
+	void unparsableResponseReturnsErrorPlan() {
+		// Mock ChatClient to return an unparsable S-expression
+		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
+		Mockito.when(mockClient.prompt().call().content()).thenReturn("((("); // malformed plan
+
+		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
+				.withChatClient(mockClient)
+				.addActions(new DemoActions())
+				.build();
+
+		PlanFormulationResult result = planner.formulatePlan("irrelevant input", PlannerOptions.defaults());
+
+		assertThat(result.plan()).isNotNull();
+		assertThat(result.plan().planSteps()).hasSize(1);
+		assertThat(result.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) result.plan().planSteps().getFirst();
+		assertThat(error.assistantMessage()).contains("Failed to parse");
 	}
 
 	static class DemoActions {

@@ -17,6 +17,9 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			return new PlanExecutionResult(false, List.of(
 					new StepExecutionResult(null, false, null, null, "Plan is null")));
 		}
+		if (plan.status() != org.javai.springai.dsl.plan.PlanStatus.READY) {
+			throw new IllegalStateException("ResolvedPlan is not READY; status=" + plan.status());
+		}
 
 		List<StepExecutionResult> results = new ArrayList<>();
 		boolean success = true;

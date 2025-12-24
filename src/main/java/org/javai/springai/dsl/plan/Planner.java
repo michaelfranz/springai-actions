@@ -21,8 +21,8 @@ import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
 import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
-import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
+import org.javai.springai.dsl.exec.PlanVerifier;
 import org.javai.springai.dsl.exec.ResolvedArgument;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
@@ -30,6 +30,7 @@ import org.javai.springai.dsl.prompt.DslGrammarSource;
 import org.javai.springai.dsl.prompt.DslGuidanceProvider;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.SxlNode;
+import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
 import org.javai.springai.sxl.grammar.SxlGrammar;
@@ -67,64 +68,71 @@ public final class Planner {
 	/**
 	 * Generate a plan for the given request with default options.
 	 */
-	public Plan planActions(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults()).plan();
+	public Plan planActions(@NonNull String requestText) {
+		return formulatePlan(Objects.requireNonNull(requestText), PlannerOptions.defaults()).plan();
 	}
 
 	/**
 	 * Convenience: plan, resolve and execute in one step using defaults.
 	 */
-	public PlanRunResult planResolveAndExecute(String requestText) throws PlanExecutionException {
+	public PlanRunResult planResolveAndExecute(@NonNull String requestText) throws PlanExecutionException {
 		return planResolveAndExecute(requestText, new DefaultPlanResolver(), new DefaultPlanExecutor());
 	}
 
 	/**
 	 * Convenience: plan, resolve and execute in one step with custom resolver/executor.
 	 */
-	public PlanRunResult planResolveAndExecute(String requestText, PlanResolver resolver, PlanExecutor executor)
+	public PlanRunResult planResolveAndExecute(@NonNull String requestText, PlanResolver resolver, PlanExecutor executor)
 			throws PlanExecutionException {
+		Objects.requireNonNull(requestText, "requestText must not be null");
 		Objects.requireNonNull(resolver, "resolver must not be null");
 		Objects.requireNonNull(executor, "executor must not be null");
 
 		PlanFormulationResult planning = formulatePlan(requestText);
-		PlanResolutionResult resolution = resolver.resolve(planning.plan(), planning.actionRegistry());
-		if (!resolution.isSuccess()) {
-			return PlanRunResult.failure(planning, resolution);
+		ResolvedPlan resolution = resolver.resolve(planning.plan(), planning.actionRegistry());
+
+		if (resolution.status() != org.javai.springai.dsl.plan.PlanStatus.READY) {
+			throw new PlanExecutionException("Resolved plan is not READY: " + resolution.status(), null);
 		}
 
-		ExecutablePlan executablePlan = toExecutablePlan(resolution.resolvedPlan());
+		ExecutablePlan executablePlan = toExecutablePlan(resolution);
 		ActionContext context = executor.execute(executablePlan);
 		return PlanRunResult.success(planning, resolution, context);
 	}
 
 	// Conversation-aware entry point. Supply the rolling conversation state; this is the public API.
-	public PlanFormulationResult formulatePlan(String requestText, ConversationState state) {
+	public PlanFormulationResult formulatePlan(@NonNull String requestText, ConversationState state) {
 		return formulatePlan(requestText, PlannerOptions.defaults(), state);
 	}
 
 	/**
 	 * Convenience for tests: formulate with an initial state (first turn).
 	 */
-	PlanFormulationResult formulatePlan(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults(), ConversationState.initial(requestText));
+	PlanFormulationResult formulatePlan(@NonNull String requestText) {
+		return formulatePlan(Objects.requireNonNull(requestText), PlannerOptions.defaults(), ConversationState.initial(requestText));
 	}
 
 	/**
 	 * Internal/test-only: generate a plan using the provided options (e.g., dry-run, capture prompt).
 	 */
-	PlanFormulationResult formulatePlan(String requestText, PlannerOptions options) {
-		return formulatePlan(requestText, options, ConversationState.initial(requestText));
+	PlanFormulationResult formulatePlan(@NonNull String requestText, PlannerOptions options) {
+		return formulatePlan(Objects.requireNonNull(requestText), options, ConversationState.initial(requestText));
 	}
 
 	/**
 	 * Core formulation path.
 	 */
-	private PlanFormulationResult formulatePlan(String requestText, PlannerOptions options, ConversationState state) {
-		Objects.requireNonNull(requestText, "requestText must not be null");
+	private PlanFormulationResult formulatePlan(@NonNull String requestText, PlannerOptions options, ConversationState state) {
 		PlannerOptions effective = options != null ? options : PlannerOptions.defaults();
 		CollectedActions actionContext = collectActions();
+		List<ActionDescriptor> actionDescriptors = actionContext.descriptors();
+		if (actionDescriptors == null) {
+			actionDescriptors = List.of();
+		}
 
-		PromptPreview preview = buildPromptPreview(requestText, actionContext.descriptors(), state);
+		PromptPreview preview = buildPromptPreview(Objects.requireNonNull(requestText),
+				Objects.requireNonNull(actionDescriptors),
+				state);
 		maybeFirePromptHook(preview, effective);
 
 		if (isDryRun(effective)) {
@@ -132,16 +140,34 @@ public final class Planner {
 		}
 
 		String response = invokeModel(preview);
-		Plan plan = parsePlan(response);
-		maybeFirePromptHook(preview, effective);
-		return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
+		try {
+			Plan plan = parsePlan(response);
+			plan = new PlanVerifier(actionContext.registry()).verify(plan);
+			maybeFirePromptHook(preview, effective);
+			return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
+		}
+		catch (SxlParseException e) {
+			// Surface a structured error plan instead of throwing, so callers can present
+			// the issue without crashing the conversation.
+			Plan errorPlan = new Plan(
+					response,
+					List.of(new PlanStep.ErrorStep("Failed to parse plan: " + e.getMessage()))
+			);
+			maybeFirePromptHook(preview, effective);
+			return new PlanFormulationResult(response, errorPlan, preview, false, actionContext.registry());
+		}
 	}
 
 	/**
 	 * Build a prompt preview without calling the LLM.
 	 */
 	public PromptPreview preview(String requestText) {
-		return buildPromptPreview(requestText, collectActions().descriptors());
+		Objects.requireNonNull(requestText, "requestText must not be null");
+		List<ActionDescriptor> descriptors = collectActions().descriptors();
+		if (descriptors == null) {
+			descriptors = List.of();
+		}
+		return buildPromptPreview(Objects.requireNonNull(requestText), Objects.requireNonNull(descriptors));
 	}
 
 	public ActionRegistry actionRegistry() {
@@ -165,11 +191,13 @@ public final class Planner {
 	}
 
 	private PromptPreview buildPromptPreview(String requestText, List<ActionDescriptor> actionDescriptors) {
-		return buildPromptPreview(requestText, actionDescriptors, null);
+		String nonNullRequest = Objects.requireNonNull(requestText, "requestText must not be null");
+		List<ActionDescriptor> safeDescriptors = actionDescriptors != null ? actionDescriptors : List.of();
+		return buildPromptPreview(nonNullRequest, Objects.requireNonNull(safeDescriptors), null);
 	}
 
 	private PromptPreview buildPromptPreview(@NonNull String requestText,
-			List<ActionDescriptor> actionDescriptors,
+			@NonNull List<ActionDescriptor> actionDescriptors,
 			ConversationState state) {
 		List<String> systemMessages = new ArrayList<>();
 
@@ -185,12 +213,7 @@ public final class Planner {
 		systemMessages.addAll(promptContributions);
 
 		// Conversation-aware retry addendum
-		if (state != null) {
-			String addendum = ConversationPromptBuilder.buildRetryAddendum(state);
-			if (!addendum.isBlank()) {
-				systemMessages.add(addendum);
-			}
-		}
+		ConversationPromptBuilder.buildRetryAddendum(state).ifPresent(systemMessages::add);
 
 		List<String> userMessages = List.of(requestText);
 		List<String> grammarIds = grammars.stream()
@@ -199,7 +222,11 @@ public final class Planner {
 				.toList();
 		List<String> actionNames = actionDescriptors.stream().map(ActionDescriptor::id).toList();
 
-		return new PromptPreview(systemMessages, userMessages, grammarIds, actionNames);
+		return new PromptPreview(
+				Objects.requireNonNull(systemMessages),
+				Objects.requireNonNull(userMessages),
+				grammarIds,
+				actionNames);
 	}
 
 	private void maybeFirePromptHook(PromptPreview preview, PlannerOptions options) {
@@ -218,9 +245,11 @@ public final class Planner {
 	}
 
 	private String invokeModel(PromptPreview preview) {
+		Objects.requireNonNull(preview, "preview must not be null");
+		Objects.requireNonNull(chatClient, "chatClient must not be null when invoking model");
 		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
 		preview.systemMessages().forEach(request::system);
-		request.user(preview.renderedUser());
+		request.user(Objects.requireNonNull(preview.renderedUser()));
 		return request.call().content();
 	}
 

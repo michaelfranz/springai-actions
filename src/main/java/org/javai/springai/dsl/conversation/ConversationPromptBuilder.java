@@ -1,6 +1,7 @@
 package org.javai.springai.dsl.conversation;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.StringJoiner;
 import org.javai.springai.dsl.plan.PlanStep;
 
@@ -17,9 +18,9 @@ public final class ConversationPromptBuilder {
 	 * Includes original instruction (or summary), provided params, pending items,
 	 * and the latest user reply.
 	 */
-	public static String buildRetryAddendum(ConversationState state) {
-		if (state == null) {
-			return "";
+	public static Optional<String> buildRetryAddendum(ConversationState state) {
+		if (state == null || state.pendingParams().isEmpty()) {
+			return Optional.empty();
 		}
 
 		StringBuilder sb = new StringBuilder();
@@ -31,7 +32,7 @@ public final class ConversationPromptBuilder {
 
 		if (!state.providedParams().isEmpty()) {
 			StringJoiner provided = new StringJoiner(", ");
-			for (Map.Entry<String, String> entry : state.providedParams().entrySet()) {
+			for (Map.Entry<String, Object> entry : state.providedParams().entrySet()) {
 				provided.add(entry.getKey() + "=" + entry.getValue());
 			}
 			sb.append("Already provided: ").append(provided).append("\n");
@@ -51,8 +52,9 @@ public final class ConversationPromptBuilder {
 			sb.append("Latest user reply: \"").append(state.latestUserMessage()).append("\"\n");
 		}
 
-		sb.append("Use the new reply only if it truly satisfies the pending items; otherwise emit PENDING. Do not guess. Use user-friendly phrasing when asking for missing info.\n");
-		return sb.toString();
+		sb.append("Use the latest reply only to satisfy the pending items listed above; otherwise emit PENDING. Do not guess.\n");
+		sb.append("Do not add new actions or parameters beyond those already provided or pending. All prior system instructions still apply (Plan DSL only, no prose, use only defined actions/params). Output must be a single Plan S-expression in the PLAN DSL shape: (P \"...\" (PS <action-id> (PA name \"value\") ...)) with P/PS/PA/PENDING/ERROR symbols only; never JSON or free-form or colon/dash syntax. Action ids must match the catalog exactly (e.g., exportControlChartToExcel).\n");
+		return Optional.of(sb.toString());
 	}
 }
 

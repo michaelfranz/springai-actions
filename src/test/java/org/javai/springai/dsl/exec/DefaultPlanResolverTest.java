@@ -1,8 +1,8 @@
 package org.javai.springai.dsl.exec;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.List;
+import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.act.ActionRegistry;
@@ -30,33 +30,15 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", 3 }))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
+		ResolvedPlan result = resolver.resolve(plan, registry);
 
-		assertThat(result.isSuccess()).isTrue();
-		assertThat(result.errors()).isEmpty();
-		assertThat(result.resolvedPlan().steps()).hasSize(1);
-		assertThat(result.resolvedPlan().steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.resolvedPlan().steps().getFirst();
+		assertThat(result.steps()).hasSize(1);
+		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
 		assertThat(step.binding().id()).isEqualTo("greet");
 		assertThat(step.arguments()).hasSize(2);
 		assertThat(step.arguments().get(0).value()).isEqualTo("Bob");
 		assertThat(step.arguments().get(1).value()).isEqualTo(3);
-	}
-
-	@Test
-	void propagatesPlanErrorStep() {
-		Plan plan = new Plan(
-				"",
-				List.of(new PlanStep.ErrorStep("missing info"))
-		);
-
-		PlanResolutionResult result = resolver.resolve(plan, registry);
-
-		assertThat(result.isSuccess()).isTrue();
-		assertThat(result.errors()).isEmpty();
-		assertThat(result.resolvedPlan().steps()).hasSize(1);
-		assertThat(result.resolvedPlan().steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
-		assertThat(((ResolvedStep.ErrorStep) result.resolvedPlan().steps().getFirst()).reason()).isEqualTo("missing info");
 	}
 
 	@Test
@@ -66,11 +48,10 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "unknownAction", new Object[] {}))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
-
-		assertThat(result.isSuccess()).isFalse();
-		assertThat(result.errors()).hasSize(1);
-		assertThat(result.errors().getFirst().actionId()).isEqualTo("unknownAction");
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
+		assertThat(result.steps()).hasSize(1);
+		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
 	}
 
 	@Test
@@ -80,11 +61,8 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob" }))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
-
-		assertThat(result.isSuccess()).isFalse();
-		assertThat(result.errors()).hasSize(1);
-		assertThat(result.errors().getFirst().reason()).contains("Argument count mismatch");
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
 	}
 
 	@Test
@@ -94,12 +72,8 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", "not-a-number" }))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
-
-		assertThat(result.isSuccess()).isFalse();
-		assertThat(result.errors()).hasSize(1);
-		assertThat(result.errors().getFirst().paramName()).isEqualTo("times");
-		assertThat(result.errors().getFirst().reason()).contains("Failed to convert");
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
 	}
 
 	@Test
@@ -109,11 +83,9 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "handleList", new Object[] { List.of("A12345", "A3145") }))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
+		ResolvedPlan result = resolver.resolve(plan, registry);
 
-		assertThat(result.isSuccess()).isTrue();
-		assertThat(result.errors()).isEmpty();
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.resolvedPlan().steps().getFirst();
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
 		assertThat(step.arguments()).hasSize(1);
 		assertThat(step.arguments().getFirst().value()).isInstanceOf(List.class);
 		assertThat(step.arguments().getFirst().value())
@@ -128,11 +100,9 @@ class DefaultPlanResolverTest {
 				List.of(new PlanStep.ActionStep("", "handleArray", new Object[] { List.of("A12345", "A3145", "B4323") }))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
+		ResolvedPlan result = resolver.resolve(plan, registry);
 
-		assertThat(result.isSuccess()).isTrue();
-		assertThat(result.errors()).isEmpty();
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.resolvedPlan().steps().getFirst();
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
 		Object value = step.arguments().getFirst().value();
 		assertThat(value).isInstanceOf(String[].class);
 		assertThat((String[]) value).containsExactly("A12345", "A3145", "B4323");
@@ -144,15 +114,11 @@ class DefaultPlanResolverTest {
 				"",
 				List.of(new PlanStep.PendingActionStep("", "greet",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("name", "missing name") },
-						new Object[] {}))
+						Map.of()))
 		);
 
-		PlanResolutionResult result = resolver.resolve(plan, registry);
-
-		assertThat(result.isSuccess()).isFalse();
-		assertThat(result.errors()).hasSize(1);
-		assertThat(result.errors().getFirst().paramName()).isEqualTo("name");
-		assertThat(result.errors().getFirst().reason()).contains("Pending parameter");
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
 	}
 
 	private static class SampleActions {

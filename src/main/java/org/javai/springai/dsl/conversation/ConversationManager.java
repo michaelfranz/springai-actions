@@ -1,11 +1,15 @@
 package org.javai.springai.dsl.conversation;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.javai.springai.dsl.exec.PlanResolver;
+import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanFormulationResult;
+import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 
 /**
@@ -18,7 +22,6 @@ import org.javai.springai.dsl.plan.Planner;
 public class ConversationManager {
 
 	private final Planner planner;
-	@SuppressWarnings("unused")
 	private final PlanResolver resolver;
 	private final ConversationStateStore stateStore;
 
@@ -33,6 +36,7 @@ public class ConversationManager {
 	 * initialize a new conversation state; otherwise continue with the stored state.
 	 */
 	public ConversationTurnResult converse(String userMessage, String sessionId) {
+		Objects.requireNonNull(userMessage, "userMessage must not be null");
 		// Load prior state or initialize a new conversation
 		Optional<ConversationState> prior = stateStore.load(sessionId);
 		ConversationState state = prior
@@ -44,16 +48,30 @@ public class ConversationManager {
 		if (plan == null) {
 			plan = new Plan("", List.of());
 		}
+		List<PlanStep.PendingParam> pending = plan.pendingParams();
+		Map<String, Object> newlyProvided = Map.of();
+		if (!plan.planSteps().isEmpty() && plan.planSteps().getFirst() instanceof PlanStep.PendingActionStep pendingStep) {
+			newlyProvided = pendingStep.providedParams();
+		}
+
+		Map<String, Object> mergedProvided = new HashMap<>(state.providedParams());
+		for (Map.Entry<String, Object> entry : newlyProvided.entrySet()) {
+			if (entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
+				mergedProvided.put(entry.getKey(), entry.getValue());
+			}
+		}
+
+		ResolvedPlan resolvedPlan = resolver.resolve(plan, planningResult.actionRegistry());
 
 		ConversationState nextState = new ConversationState(
 				state.originalInstruction(),
-				plan.pendingParams(), // Zero-length list if there are no pending params
-				state.providedParams(),
+				pending, // Zero-length list if there are no pending params
+				Map.copyOf(mergedProvided),
 				userMessage
 		);
 		stateStore.save(sessionId, nextState);
 
-		return new ConversationTurnResult(plan, nextState, planningResult.actionRegistry());
+		return new ConversationTurnResult(resolvedPlan, nextState, pending, newlyProvided);
 	}
 
 }

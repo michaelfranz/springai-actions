@@ -4,10 +4,11 @@ import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.plan.Plan;
 
 /**
- * Resolves a parsed Plan into executable steps (bindings + arguments) or structured errors.
+ * Resolves a parsed Plan into executable steps (bindings + arguments).
+ * Non-ready plans are mapped into resolved plans that may contain error steps.
  */
 public interface PlanResolver {
 
-	PlanResolutionResult resolve(Plan plan, ActionRegistry registry);
+	ResolvedPlan resolve(Plan plan, ActionRegistry registry);
 }
 

@@ -1,9 +1,9 @@
 package org.javai.springai.dsl.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.List;
 import java.util.Map;
+import org.javai.springai.dsl.plan.PlanStep;
 import org.junit.jupiter.api.Test;
 
 class ConversationStateTest {
@@ -12,7 +12,7 @@ class ConversationStateTest {
 	void copiesCollectionsAndAllowsUpdates() {
 		ConversationState state = new ConversationState(
 				"export control chart",
-				List.of(new PendingParamSnapshot("exportControlChartToExcel", "bundleId", "Provide bundle id")),
+				List.of(new PlanStep.PendingParam("bundleId", "Provide bundle id")),
 				Map.of(),
 				""
 		);
@@ -24,7 +24,7 @@ class ConversationStateTest {
 		assertThat(updated.providedParams()).containsEntry("bundleId", "A12345");
 		assertThat(updated.latestUserMessage()).isEqualTo("bundle is A12345");
 		assertThat(updated.pendingParams()).hasSize(1);
-		assertThat(updated.pendingParams().getFirst().paramName()).isEqualTo("bundleId");
+		assertThat(updated.pendingParams().getFirst().name()).isEqualTo("bundleId");
 	}
 
 	@Test
@@ -37,11 +37,11 @@ class ConversationStateTest {
 		);
 
 		ConversationState updated = state.withPendingParams(
-				List.of(new PendingParamSnapshot("action", "param", "msg")));
+				List.of(new PlanStep.PendingParam("param", "msg")));
 
 		assertThat(state.pendingParams()).isEmpty();
 		assertThat(updated.pendingParams()).hasSize(1);
-		assertThat(updated.pendingParams().getFirst().paramName()).isEqualTo("param");
+		assertThat(updated.pendingParams().getFirst().name()).isEqualTo("param");
 	}
 }
 

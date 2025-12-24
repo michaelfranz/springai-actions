@@ -1,26 +1,27 @@
 package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.tuning.LlmTuningConfig;
 import org.javai.springai.actions.tuning.PlanSupplier;
 import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
-import org.javai.springai.dsl.exec.DefaultPlanResolver;
-import org.javai.springai.dsl.exec.PlanResolutionResult;
-import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.conversation.ConversationManager;
-import org.javai.springai.dsl.conversation.ConversationState;
+import org.javai.springai.dsl.conversation.ConversationTurnResult;
 import org.javai.springai.dsl.conversation.InMemoryConversationStateStore;
-import org.javai.springai.dsl.plan.Plan;
-import org.javai.springai.dsl.plan.PlanFormulationResult;
+import org.javai.springai.dsl.exec.DefaultPlanExecutor;
+import org.javai.springai.dsl.exec.DefaultPlanResolver;
+import org.javai.springai.dsl.exec.PlanExecutionResult;
+import org.javai.springai.dsl.exec.PlanResolver;
+import org.javai.springai.dsl.exec.ResolvedPlan;
+import org.javai.springai.dsl.exec.ResolvedStep;
+import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,10 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	private static SxlGrammar planGrammar;
 
 	Planner planner;
+	PlanResolver resolver;
+	DefaultPlanExecutor executor;
+	ConversationManager conversationManager;
+	StatsActions statsActions;
 
 
 	@BeforeAll
@@ -72,141 +77,113 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				.defaultOptions(Objects.requireNonNull(options))
 				.build();
 
+		statsActions = new StatsActions();
+
 		planner = Planner.builder()
 				.withChatClient(chatClient)
 				.addGrammar(universalGrammar)
 				.addGrammar(planGrammar)
-				.addActions(new StatsActions())
+				.addActions(statsActions)
 				.build();
+		resolver = new DefaultPlanResolver();
+		executor = new DefaultPlanExecutor();
+		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
 	}
 
 	@Test
 	void displayControlChartPlanTest() {
 		String request = "show me a control chart for displacement values in elasticity bundle A12345";
-		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
-		Plan plan = planResult.plan();
+		ConversationTurnResult turn = conversationManager.converse(request, "display-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
 
-		assertThat(plan).isNotNull();
-		List<PlanStep> steps = plan.planSteps();
-		assertThat(steps).hasSize(1);
-		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
-		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
-		assertThat(action.actionId()).isEqualTo("displayControlChart");
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(resolvedPlan.steps()).hasSize(1);
+		ResolvedStep step = resolvedPlan.steps().getFirst();
+		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
 
-		PlanResolver planResolver = new DefaultPlanResolver();
-		PlanResolutionResult resolve = planResolver.resolve(plan, planResult.actionRegistry());
-		assertThat(resolve.isSuccess()).isTrue();
+		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(statsActions.displayControlChartInvoked()).isTrue();
 	}
 
 	@Test
 	void exportToExcelTest() {
-		String request = "export a control chart to excel for displacement values in elasticity bundle A12345";
-		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
-		Plan plan = planResult.plan();
-		assertThat(plan).isNotNull();
+		String request = "export a control chart to excel for bushing displacement values in elasticity bundle A12345";
+		ConversationTurnResult turn = conversationManager.converse(request, "export-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(resolvedPlan.steps()).hasSize(1);
+		ResolvedStep step = resolvedPlan.steps().getFirst();
+		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
 
-		assertThat(plan).isNotNull();
-		List<PlanStep> steps = plan.planSteps();
-		assertThat(steps).hasSize(1);
-		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
-		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
-		assertThat(action.actionId()).isEqualTo("exportControlChartToExcel");
-
-		PlanResolver planResolver = new DefaultPlanResolver();
-		PlanResolutionResult resolve = planResolver.resolve(plan, planResult.actionRegistry());
-		assertThat(resolve.isSuccess()).isTrue();
+		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
 
 	@Test
 	void evaluateSpcReadinessTest() {
 		String request = "evaluate spc readiness for displacement values in bundle A12345";
-		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
-		Plan plan = planResult.plan();
-		assertThat(plan).isNotNull();
+		ConversationTurnResult turn = conversationManager.converse(request, "spc-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(resolvedPlan.steps()).hasSize(1);
 
-		assertThat(plan).isNotNull();
-		List<PlanStep> steps = plan.planSteps();
-		assertThat(steps).hasSize(1);
-		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
-		PlanStep.ActionStep action = (PlanStep.ActionStep) step;
-		assertThat(action.actionId()).isEqualTo("evaluateSpcReadiness");
-
-		PlanResolver planResolver = new DefaultPlanResolver();
-		PlanResolutionResult resolve = planResolver.resolve(plan, planResult.actionRegistry());
-		assertThat(resolve.isSuccess()).isTrue();
+		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(statsActions.evaluateSpcReadinessInvoked()).isTrue();
 	}
 
 	@Test
 	void unableToIdentifyActionTest() {
 		// No action supports ANOVA
 		String request = "perform a 2-way ANOVA on vehicle elasticity for bundle A12345";
-		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
-		Plan plan = planResult.plan();
-		assertThat(plan).isNotNull();
-
-		assertThat(plan).isNotNull();
-		List<PlanStep> steps = plan.planSteps();
-		assertThat(steps).hasSize(1);
-		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.ErrorStep.class);
-		PlanStep.ErrorStep error = (PlanStep.ErrorStep) step;
-		assertThat(error.assistantMessage()).isNotNull().isNotBlank();
-
-		PlanResolver planResolver = new DefaultPlanResolver();
-		PlanResolutionResult resolve = planResolver.resolve(plan, planResult.actionRegistry());
-		assertThat(resolve.isSuccess()).isTrue();
+		ConversationTurnResult turn = conversationManager.converse(request, "anova-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(resolvedPlan.steps()).hasSize(1);
+		ResolvedStep step = resolvedPlan.steps().getFirst();
+		assertThat(step).isInstanceOf(ResolvedStep.ErrorStep.class);
 	}
 
 	@Test
 	void requireMoreInformationTest() {
 		// Export to excel requires bundle ID
 		String request = "export a control chart to excel for displacement values";
-		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
-		Plan plan = planResult.plan();
-		assertThat(plan).isNotNull();
-		List<PlanStep> steps = plan.planSteps();
-		assertThat(steps).hasSize(1);
-		PlanStep step = steps.getFirst();
-		assertThat(step).isInstanceOf(PlanStep.PendingActionStep.class);
-		PlanStep.PendingActionStep pending = (PlanStep.PendingActionStep) step;
-		PlanStep.PendingParam[] pendingParams = pending.pendingParams();
-		assertThat(pendingParams.length).isGreaterThan(0);
-		for (PlanStep.PendingParam param : pendingParams) {
-			assertThat(param.name()).isIn("bundleId", "domainEntity");
-		}
+		ConversationTurnResult turn = conversationManager.converse(request, "pending-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(turn.pendingParams()).isNotEmpty();
+		assertThat(turn.pendingParams().stream().map(PlanStep.PendingParam::name))
+				.anyMatch(name -> name.equals("bundleId") || name.equals("domainEntity"));
 	}
 
-	@Disabled("Conversation-state follow-up not yet wired; serves as a placeholder scenario for step 6")
 	@Test
 	void requireMoreInformationFollowUpProvidesMissingBundleId() {
-		ConversationManager conversationManager = new ConversationManager(
-				planner,
-				new DefaultPlanResolver(),
-				new InMemoryConversationStateStore()
-		);
-
 		String sessionId = "stats-session";
 
 		// Turn 1: missing bundle id -> expect pending
-		Plan firstPlan = conversationManager
-				.converse("export a control chart to excel for displacement values", sessionId)
-				.plan();
-		assertThat(firstPlan).isNotNull();
-		assertThat(firstPlan.planSteps()).hasSize(1);
-		assertThat(firstPlan.planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
+		ConversationTurnResult firstTurn = conversationManager
+				.converse("export a control chart to excel for displacement values", sessionId);
+		ResolvedPlan firstResolved = firstTurn.resolvedPlan();
+		assertThat(firstResolved).isNotNull();
+		assertThat(firstResolved.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(firstTurn.pendingParams()).isNotEmpty();
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
 		// the system merges context and produces an executable step (documented scenario)
-		Plan secondPlan = conversationManager
-				.converse("the bundle id is A12345", sessionId)
-				.plan();
+		ConversationTurnResult secondTurn = conversationManager
+				.converse("the bundle id is A12345", sessionId);
+		ResolvedPlan secondPlan = secondTurn.resolvedPlan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending
 		// (This test remains disabled until conversation-state merge is implemented.)
-		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
+		assertThat(secondPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
 	}
 
 	@Override
@@ -230,22 +207,26 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	}
 
 	public static class StatsActions {
+		private final AtomicBoolean displayControlChartInvoked = new AtomicBoolean(false);
+		private final AtomicBoolean exportControlChartToExcelInvoked = new AtomicBoolean(false);
+		private final AtomicBoolean evaluateSpcReadinessInvoked = new AtomicBoolean(false);
+
 		@Action(description = """
 				Use the user's input to derive the parameters necessary for the application to compute and display a
 				control chart. Don't try to create or compute a control chart. Just provide the parameters.""")
 		public void displayControlChart(
-				@ActionParam(description = "Entity or component being measured e.g. bushing, screw, piston") String domainEntity,
 				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
 				@ActionParam(description = "Bundle ID") String bundleId) {
+			displayControlChartInvoked.set(true);
 		}
 
 		@Action(description = """
 				Use the user's input to derive the parameters necessary for the application to compute and export a
 				control chart to Excel. Don't try to create or compute a control chart. Just provide the parameters.""")
 		public void exportControlChartToExcel(
-				@ActionParam(description = "Entity or component being measured e.g. bushing, screw, piston") String domainEntity,
 				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
 				@ActionParam(description = "Bundle ID") String bundleId) {
+			exportControlChartToExcelInvoked.set(true);
 		}
 
 		@Action(description = """
@@ -254,6 +235,19 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		public void evaluateSpcReadiness(
 				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
 				@ActionParam(description = "Bundle ID") String bundleId) {
+			evaluateSpcReadinessInvoked.set(true);
+		}
+
+		boolean displayControlChartInvoked() {
+			return displayControlChartInvoked.get();
+		}
+
+		boolean exportControlChartToExcelInvoked() {
+			return exportControlChartToExcelInvoked.get();
+		}
+
+		boolean evaluateSpcReadinessInvoked() {
+			return evaluateSpcReadinessInvoked.get();
 		}
 
 	}

@@ -2,12 +2,12 @@ package org.javai.springai.dsl.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.when;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
@@ -19,10 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-/**
- * Skeleton unit test for ConversationManager. This will fail until
- * ConversationManager is fully implemented.
- */
+@SuppressWarnings({ "DataFlowIssue", "NullAway" })
 class ConversationManagerUnitTest {
 
 	@Mock
@@ -46,6 +43,7 @@ class ConversationManagerUnitTest {
 	}
 
 	@Test
+	@SuppressWarnings("NullAway")
 	void conversationFlowPendingThenResolved() {
 		// Illustrative API showing desired flow; will not compile/run until ConversationManager,
 		// Planner, and PlanResolver support ConversationState-based planning.
@@ -57,28 +55,29 @@ class ConversationManagerUnitTest {
 				List.of(new PlanStep.PendingActionStep("",
 						"exportControlChartToExcel",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("bundleId", "Provide bundle id") },
-						new Object[] { "displacement", "values" })));
-		when(mockPlanner.formulatePlan(anyString(), any(ConversationState.class)))
+						Map.of("domainEntity", "displacement", "measurementConcept", "values"))));
+		when(mockPlanner.formulatePlan("export control chart to excel for displacement values", argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", pendingPlan, null, false, null));
 		when(mockStore.load("session-1")).thenReturn(Optional.of(ConversationState.initial("export control chart to excel for displacement values")));
+		when(mockResolver.resolve(pendingPlan, null)).thenReturn(new ResolvedPlan(
+				List.of(new ResolvedStep.ErrorStep("Pending parameter"))));
 
 		ConversationTurnResult first = manager.converse("export control chart to excel for displacement values", "session-1");
 		assertThat(first.state().pendingParams()).hasSize(1);
-		assertThat(first.plan().planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
+		assertThat(first.resolvedPlan().status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
 
 		// Turn 2: user provides bundleId -> action
 		Plan resolvedPlan = new Plan("desc",
 				List.of(new PlanStep.ActionStep("",
 						"exportControlChartToExcel",
 						new Object[] { "displacement", "values", "A12345" })));
-		when(mockPlanner.formulatePlan(anyString(), any(ConversationState.class)))
+		when(mockPlanner.formulatePlan("bundle id is A12345", argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", resolvedPlan, null, false, null));
 		when(mockResolver.resolve(resolvedPlan, null))
-				.thenReturn(PlanResolutionResult.success(new ResolvedPlan(
-						List.of(new ResolvedStep.ActionStep(null, List.of())))));
+				.thenReturn(new ResolvedPlan(List.of(new ResolvedStep.ActionStep(null, List.of()))));
 
 		ConversationTurnResult second = manager.converse("bundle id is A12345", "session-1");
-		assertThat(second.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
+		assertThat(second.resolvedPlan().status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
 		assertThat(second.state().pendingParams()).isEmpty();
 	}
 }

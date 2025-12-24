@@ -2,7 +2,6 @@ package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +21,7 @@ import org.mockito.MockitoAnnotations;
  * a two-turn flow: turn 1 yields a pending bundleId; turn 2 provides it and
  * yields an executable action.
  */
+@SuppressWarnings("NullAway")
 class StatsApplicationConversationUnitTest {
 
 	@Mock
@@ -33,6 +33,7 @@ class StatsApplicationConversationUnitTest {
 	}
 
 	@Test
+	@SuppressWarnings("NullAway")
 	void conversationResolvesPendingWithFollowUp() {
 		String initialInstruction = "export control chart to excel for displacement values";
 
@@ -41,7 +42,7 @@ class StatsApplicationConversationUnitTest {
 				List.of(new PlanStep.PendingActionStep("",
 						"exportControlChartToExcel",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("bundleId", "Provide bundle id") },
-						new Object[] { "displacement", "values" })));
+						Map.of("domainEntity", "displacement", "measurementConcept", "values"))));
 		PlanFormulationResult pendingResult = new PlanFormulationResult(
 				"", pendingPlan, null, false, null);
 		// Turn 2: planner returns resolved action
@@ -52,7 +53,7 @@ class StatsApplicationConversationUnitTest {
 		PlanFormulationResult resolvedResult = new PlanFormulationResult(
 				"", resolvedPlan, null, false, null);
 
-		when(mockPlanner.formulatePlan(anyString(), any(ConversationState.class)))
+		when(mockPlanner.formulatePlan("export control chart to excel for displacement values", any(ConversationState.class)))
 				.thenReturn(pendingResult)
 				.thenReturn(resolvedResult);
 
@@ -68,7 +69,7 @@ class StatsApplicationConversationUnitTest {
 				pendingParams,
 				Map.of("domainEntity", "displacement", "measurementConcept", "values"),
 				"bundle id is A12345");
-		String addendum = ConversationPromptBuilder.buildRetryAddendum(retryState);
+		String addendum = ConversationPromptBuilder.buildRetryAddendum(retryState).orElseThrow();
 		assertThat(addendum).contains("bundleId").contains("bundle id is A12345");
 
 		PlanFormulationResult secondTurn = mockPlanner.formulatePlan("bundle id is A12345", retryState);
