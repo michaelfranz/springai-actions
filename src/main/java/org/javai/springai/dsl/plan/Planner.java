@@ -96,24 +96,29 @@ public final class Planner {
 		return PlanRunResult.success(planning, resolution, context);
 	}
 
-	/**
-	 * Generate a plan and capture prompt details with default options.
-	 */
-	public PlanFormulationResult formulatePlan(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults());
-	}
-
-	/**
-	 * Conversation-aware entry point. Currently delegates to the existing options-based method.
-	 */
+	// Conversation-aware entry point. Supply the rolling conversation state; this is the public API.
 	public PlanFormulationResult formulatePlan(String requestText, ConversationState state) {
-		return formulatePlan(requestText, PlannerOptions.defaults());
+		return formulatePlan(requestText, PlannerOptions.defaults(), state);
 	}
 
 	/**
-	 * Generate a plan using the provided options (e.g., dry-run, capture prompt).
+	 * Convenience for tests: formulate with an initial state (first turn).
 	 */
-	public PlanFormulationResult formulatePlan(String requestText, PlannerOptions options) {
+	PlanFormulationResult formulatePlan(String requestText) {
+		return formulatePlan(requestText, PlannerOptions.defaults(), ConversationState.initial(requestText));
+	}
+
+	/**
+	 * Internal/test-only: generate a plan using the provided options (e.g., dry-run, capture prompt).
+	 */
+	PlanFormulationResult formulatePlan(String requestText, PlannerOptions options) {
+		return formulatePlan(requestText, options, ConversationState.initial(requestText));
+	}
+
+	/**
+	 * Core formulation path.
+	 */
+	private PlanFormulationResult formulatePlan(String requestText, PlannerOptions options, ConversationState state) {
 		Objects.requireNonNull(requestText, "requestText must not be null");
 		PlannerOptions effective = options != null ? options : PlannerOptions.defaults();
 		CollectedActions actionContext = collectActions();
@@ -153,11 +158,11 @@ public final class Planner {
 	}
 
 	public PlanFormulationResult planWithDetails(String requestText) {
-		return formulatePlan(requestText, PlannerOptions.defaults());
+		return formulatePlan(requestText, PlannerOptions.defaults(), ConversationState.initial(requestText));
 	}
 
 	public PlanFormulationResult planWithDetails(String requestText, PlannerOptions options) {
-		return formulatePlan(requestText, options);
+		return formulatePlan(requestText, options, ConversationState.initial(requestText));
 	}
 
 	/**
