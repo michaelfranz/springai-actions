@@ -10,6 +10,13 @@ Stop emitting empty/guessed values for required params. Instead, treat each plan
 - **Shape (Plan DSL):**  
   `(PENDING (stepId s1) (action exportControlChartToExcel) (param bundleId) (kind missing_required) (reason "bundleId required to export control chart") (prompt "Provide bundleId"))`
 
+## Conversation State & Orchestration
+- **Conversation-aware API:** `formulatePlan(String userInput, ConversationState state)` appends a retry addendum from the state (pending items, prior provided params, latest user reply) and returns a plan plus derived status.
+- **Retry addendum:** System addendum reminds the model it is a retry, lists pendings with user-friendly labels, includes the latest user reply verbatim, and reiterates “use the new reply only if it truly satisfies pending items; otherwise emit PENDING; do not guess.”
+- **ConversationManager:** Orchestrates a turn: load state (by session), call `formulatePlan`, branch on status (`READY` → resolve/execute, `PENDING` → ask, `ERROR` → inform), and persist the next `ConversationState` derived from the returned plan. Supports multiple sessions/tabs via keyed storage.
+- **State persistence:** Currently in-memory for unit flow; planned to be Spring-backed (e.g., bean + repository) for real deployment.
+- **Token discipline:** Keep structured state exact (pendings, provided params, latest reply). Summaries are only for long free-form user text and are bounded; never summarize pending/provided maps. Keep a tiny rolling window for UX-only context; feed the model only structured state + latest reply.
+
 ## High-Level Flow
 1) User asks; planner parses.  
 2) If a step lacks required info or has invalid/uncertain input, emit `PENDING` instead of an executable action.  
@@ -45,34 +52,32 @@ Stop emitting empty/guessed values for required params. Instead, treat each plan
 5) **Resolver/runtime** ✅  
    - On `PENDING`, do not execute; surface assistant message synthesized from `pending` messages.  
    - Provide a helper to build user-facing follow-up prompts.
-6) **Conversation state**  
-   - Persist partial plan + pendings; on user follow-up, merge new values and re-run planner (re-invocation path for previously pending plans once user supplies info).  
-   - Maintain compact rolling context: original instruction (or summary), already-provided params, current pendings, latest user reply. Avoid replaying full history.
-   - On retry, append a system-prompt addendum: note this is a retry, list pendings with user-friendly labels, include the latest user reply verbatim, and remind “use the new reply only if it truly satisfies pending items; otherwise emit PENDING; do not guess.”
-   - Follow-up asks should be user-friendly (e.g., “I need the bundleId to export the control chart”), not internal action identifiers.
-   - If user cancels, clear pendings/plan.
-   - Conversation-aware API: make `planWithDetails` accept `ConversationState` (turn 1 uses `ConversationState.initial(...)`; retries use persisted state). Planner builds/appends retry addendum internally; callers just pass state + user input.
-   - Add a `ConversationManager` wrapper to orchestrate turns: load/save state by session, build retry addendum, call planner, derive next state from the returned plan, and branch on status (`READY` → resolve/execute; `PENDING` → ask; `ERROR` → inform). Support multiple sessions/tabs by keying state.
-   - `ConversationState.fromPlan(plan, prev, latestUserMsg)` derives next state in one place; status enum (READY, PENDING, ERROR) drives flow. Keep planner stateless; persist state externally.
-   - Token discipline and summarization: keep structured state exact (pending list, provided params); only summarize long free-form user replies when a size threshold is exceeded, using a bounded template that preserves values/identifiers. Keep a tiny rolling window for UX; feed only structured state + latest reply to the model. Summarization is a last resort to control size, not per-turn. Never summarize pending/provided maps.
-   - Make the planner API conversation-centric: change `planWithDetails` to accept `ConversationState` (turn 1 uses an initial/empty state; retries use persisted state). The planner builds the retry addendum internally from state (using the prompt builder) and appends it to the system prompt; callers just pass state and user input. Backward compatibility not required.
+6) **Conversation state & orchestration (in progress)**  
+   - Planner entrypoint is conversation-centric: `formulatePlan(userInput, state)` builds retry addendum from `ConversationState` and returns a plan + status.  
+   - `ConversationState.fromPlan(plan, prev, latestUserMsg)` (planned helper) derives next state; status enum (READY, PENDING, ERROR) drives branching.  
+   - `ConversationManager` loads/persists state (in-memory now; Spring-backed later), calls planner, and branches execution vs. user follow-up.  
+   - Planner remains stateless; external persistence supplies continuity across turns/sessions.  
+   - Token discipline enforced: keep structured state exact; summarize long free-form user replies only when necessary and never summarize pending/provided maps.
+   - `ConversationTurnResult` (target shape): include the latest `Plan`, updated `ConversationState`, a `PlanStatus` (READY, PENDING, ERROR), and—when status is READY—the resolved plan (or resolution result) ready for execution; when PENDING, include structured pending asks; when ERROR, include the surfaced error. Single carrier of per-turn UX artifacts; keep it small and user-facing, no raw chat history.
 7) **Prompting & guardrails**  
    - In system messages, instruct: “For missing/unclear required params, emit PENDING; do not emit the executable action for that step.”  
    - Add guardrails to avoid inappropriate action invocation: if no suitable action exists, emit `ERROR` instead of guessing a “closest” action.
 
-## Backward Compatibility
-- Existing outputs with empty strings for required params should now fail validation, producing `PENDING` instead.  
-- Existing grammars gain universal guardrail; Plan DSL adds the new construct. Ensure older tests that assume immediate execution are updated to allow pendings when info is missing.
-
 ## Open Questions / Decisions
-- Should a single `PENDING` block the entire plan, or can independent steps execute? (Recommended: block whole plan initially, relax later if needed.)  
-- Inline vs. top-level pendings: choose one to simplify parsing (recommended: inline per step).  
-- How to represent multiple missing params for a single step: multiple `PENDING` entries vs. one with a list. (Recommended: multiple entries, one per param, keyed by `stepId`.)
+- Pending UX: shape of a `PendingRequirement` DTO, richer turn result (assistant message + structured ask + status).  
+- PENDING blocking scope: should one pending block the entire plan or can independent steps execute? (Current stance: block whole plan; revisit later.)  
+- Inline vs. top-level pendings: keep inline per step vs. promoting to a dedicated section.  
+- Representation of multiple missing params: multiple `PENDING` entries vs. one with a list (current stance: multiple, keyed by `stepId`).  
+- Placement of pending asks in the user turn: inline within the pending step vs. a summarized top-level ask block.
 
 ## Current State (WIP)
 - Steps 1–5 implemented (guardrails, Plan DSL PENDING, validator, symmetric plan model, resolver blocks pending, executor added).
-- Step 6 partially implemented:
-  - Conversation scaffolding (`ConversationState`, `PendingParamSnapshot`, `ConversationPromptBuilder`) with unit tests.
-  - Mocked conversation flow (`StatsApplicationConversationUnitTest`) shows two-turn pending → resolved action.
-  - Integration follow-up test in `StatsApplicationScenarioTest` remains **disabled** until live conversation-aware re-plan wiring is added (goal: turn 2 with user-provided bundleId yields an `ActionStep`).
+- Step 6 status:
+  - Conversation scaffolding implemented: `ConversationState` now stores `List<PlanStep.PendingParam>` (no `PendingParamSnapshot`), helpers (`initial`, `withLatestUserMessage`, `withProvidedParam`), and tests updated.
+  - Conversation storage: `ConversationStateStore` returns `Optional`; `InMemoryConversationStateStore` added.
+  - Prompting: `ConversationPromptBuilder.buildRetryAddendum` implemented and tested.
+  - Orchestration: `ConversationManager.converse` implemented; returns `ConversationTurnResult` (plan + next state) and persists state; currently branches up to planning/resolution only.
+  - Planner: conversation-centric API (`formulatePlan(userInput, ConversationState)`), prompt preview carries retry addendum, internal helpers refactored for readability, `Plan.pendingParams()` exposed.
+  - Tests: `ConversationManagerUnitTest` uses mocks to cover two-turn flow; integration follow-up test `requireMoreInformationFollowUpProvidesMissingBundleId` remains **disabled** until end-to-end re-plan/resolve/execute wiring is completed.
+  - Remaining Step 6 work: user-facing pending ask helper, merge newly provided params into state for retries, cancel/new-instruction handling, executing resolved plans after successful retries, token-discipline safeguards for long replies.
 

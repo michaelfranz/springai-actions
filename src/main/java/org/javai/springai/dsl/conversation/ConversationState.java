@@ -2,6 +2,7 @@ package org.javai.springai.dsl.conversation;
 
 import java.util.List;
 import java.util.Map;
+import org.javai.springai.dsl.plan.PlanStep.PendingParam;
 
 /**
  * Captures compact conversational state needed to continue planning across turns.
@@ -9,7 +10,7 @@ import java.util.Map;
  */
 public record ConversationState(
 		String originalInstruction,
-		List<PendingParamSnapshot> pendingParams,
+		List<PendingParam> pendingParams,
 		Map<String, String> providedParams,
 		String latestUserMessage
 ) {
@@ -36,7 +37,7 @@ public record ConversationState(
 		return new ConversationState(this.originalInstruction, this.pendingParams, this.providedParams, message);
 	}
 
-	public ConversationState withPendingParams(List<PendingParamSnapshot> pending) {
+	public ConversationState withPendingParams(List<PendingParam> pending) {
 		return new ConversationState(this.originalInstruction, pending, this.providedParams, this.latestUserMessage);
 	}
 }

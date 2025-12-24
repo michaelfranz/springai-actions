@@ -2,6 +2,7 @@ package org.javai.springai.dsl.conversation;
 
 import java.util.Map;
 import java.util.StringJoiner;
+import org.javai.springai.dsl.plan.PlanStep;
 
 /**
  * Builds compact prompt addenda for conversation-aware re-planning.
@@ -38,8 +39,8 @@ public final class ConversationPromptBuilder {
 
 		if (!state.pendingParams().isEmpty()) {
 			StringJoiner pending = new StringJoiner("; ");
-			for (PendingParamSnapshot p : state.pendingParams()) {
-				String label = (p.paramName() != null ? p.paramName() : "param");
+			for (PlanStep.PendingParam p : state.pendingParams()) {
+				String label = (p.name() != null ? p.name() : "param");
 				String msg = (p.message() != null ? p.message() : "");
 				pending.add(label + (msg.isBlank() ? "" : " (" + msg + ")"));
 			}

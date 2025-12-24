@@ -1,13 +1,11 @@
 package org.javai.springai.dsl.conversation;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanFormulationResult;
-import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 
 /**
@@ -41,40 +39,22 @@ public class ConversationManager {
 				.map(p -> p.withLatestUserMessage(userMessage))
 				.orElse(ConversationState.initial(userMessage));
 
-		// Call the planner with the conversation state (planner may ignore state until fully wired)
-		PlanFormulationResult planResult = planner.formulatePlan(userMessage, state);
-		Plan plan = planResult.plan();
-
-		// Derive pending snapshots from the returned plan
-		List<PendingParamSnapshot> pendings = extractPendings(plan);
+		PlanFormulationResult planningResult = planner.formulatePlan(userMessage, state);
+		Plan plan = planningResult.plan();
+		if (plan == null) {
+			plan = new Plan("", List.of());
+		}
 
 		ConversationState nextState = new ConversationState(
 				state.originalInstruction(),
-				pendings,
+				plan.pendingParams(), // Zero-length list if there are no pending params
 				state.providedParams(),
 				userMessage
 		);
 		stateStore.save(sessionId, nextState);
 
-		return new ConversationTurnResult(plan, nextState);
+		return new ConversationTurnResult(plan, nextState, planningResult.actionRegistry());
 	}
 
-	private List<PendingParamSnapshot> extractPendings(Plan plan) {
-		if (plan == null || plan.planSteps() == null) {
-			return List.of();
-		}
-		List<PendingParamSnapshot> out = new ArrayList<>();
-		for (PlanStep step : plan.planSteps()) {
-			if (step instanceof PlanStep.PendingActionStep pending) {
-				String actionId = pending.actionId();
-				if (pending.pendingParams() != null) {
-					for (PlanStep.PendingParam p : pending.pendingParams()) {
-						out.add(new PendingParamSnapshot(actionId, p.name(), p.message()));
-					}
-				}
-			}
-		}
-		return out;
-	}
 }
 

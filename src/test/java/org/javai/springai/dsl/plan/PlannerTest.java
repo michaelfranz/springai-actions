@@ -1,13 +1,11 @@
 package org.javai.springai.dsl.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.javai.springai.dsl.plan.PlanFormulationResult;
 
 class PlannerTest {
 
@@ -74,7 +72,7 @@ class PlannerTest {
 				.addActions(new DemoActions())
 				.build();
 
-		PlanFormulationResult result = planner.planWithDetails("dry run request", PlannerOptions.dryRunOptions());
+		PlanFormulationResult result = planner.formulatePlan("dry run request", PlannerOptions.dryRunOptions());
 
 		Plan plan = result.plan();
 		assertThat(result.dryRun()).isTrue();

@@ -11,6 +11,9 @@ import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
+import org.javai.springai.dsl.conversation.ConversationManager;
+import org.javai.springai.dsl.conversation.ConversationState;
+import org.javai.springai.dsl.conversation.InMemoryConversationStateStore;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanFormulationResult;
 import org.javai.springai.dsl.plan.PlanStep;
@@ -79,7 +82,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void displayControlChartPlanTest() {
-		PlanFormulationResult planResult = planner.planWithDetails("show me a control chart for displacement values in elasticity bundle A12345");
+		String request = "show me a control chart for displacement values in elasticity bundle A12345";
+		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
 		Plan plan = planResult.plan();
 
 		assertThat(plan).isNotNull();
@@ -97,7 +101,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void exportToExcelTest() {
-		PlanFormulationResult planResult = planner.planWithDetails("export a control chart to excel for displacement values in elasticity bundle A12345");
+		String request = "export a control chart to excel for displacement values in elasticity bundle A12345";
+		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -116,7 +121,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 	@Test
 	void evaluateSpcReadinessTest() {
-		PlanFormulationResult planResult = planner.planWithDetails("evaluate spc readiness for displacement values in bundle A12345");
+		String request = "evaluate spc readiness for displacement values in bundle A12345";
+		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -136,7 +142,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Test
 	void unableToIdentifyActionTest() {
 		// No action supports ANOVA
-		PlanFormulationResult planResult = planner.planWithDetails("perform a 2-way ANOVA on vehicle elasticity for bundle A12345");
+		String request = "perform a 2-way ANOVA on vehicle elasticity for bundle A12345";
+		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 
@@ -156,7 +163,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Test
 	void requireMoreInformationTest() {
 		// Export to excel requires bundle ID
-		PlanFormulationResult planResult = planner.planWithDetails("export a control chart to excel for displacement values");
+		String request = "export a control chart to excel for displacement values";
+		PlanFormulationResult planResult = planner.formulatePlan(request, ConversationState.initial(request));
 		Plan plan = planResult.plan();
 		assertThat(plan).isNotNull();
 		List<PlanStep> steps = plan.planSteps();
@@ -174,17 +182,27 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	@Disabled("Conversation-state follow-up not yet wired; serves as a placeholder scenario for step 6")
 	@Test
 	void requireMoreInformationFollowUpProvidesMissingBundleId() {
+		ConversationManager conversationManager = new ConversationManager(
+				planner,
+				new DefaultPlanResolver(),
+				new InMemoryConversationStateStore()
+		);
+
+		String sessionId = "stats-session";
+
 		// Turn 1: missing bundle id -> expect pending
-		PlanFormulationResult firstTurn = planner.planWithDetails("export a control chart to excel for displacement values");
-		Plan firstPlan = firstTurn.plan();
+		Plan firstPlan = conversationManager
+				.converse("export a control chart to excel for displacement values", sessionId)
+				.plan();
 		assertThat(firstPlan).isNotNull();
 		assertThat(firstPlan.planSteps()).hasSize(1);
 		assertThat(firstPlan.planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
 		// the system merges context and produces an executable step (documented scenario)
-		PlanFormulationResult secondTurn = planner.planWithDetails("the bundle id is A12345");
-		Plan secondPlan = secondTurn.plan();
+		Plan secondPlan = conversationManager
+				.converse("the bundle id is A12345", sessionId)
+				.plan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending
 		// (This test remains disabled until conversation-state merge is implemented.)
