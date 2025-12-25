@@ -12,7 +12,7 @@ import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class ActionPromptEmitterTest {
+class ActionPromptContributorTest {
 
 	@BeforeEach
 	void setup() {
@@ -25,7 +25,7 @@ class ActionPromptEmitterTest {
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.SXL, spec -> spec.id().endsWith("runQuery"));
+		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL, spec -> spec.id().endsWith("runQuery"));
 
 		assertThat(prompt).contains("(PS").contains("runQuery").contains("EMBED sxl-sql");
 		assertThat(prompt).doesNotContain("otherAction");
@@ -37,7 +37,7 @@ class ActionPromptEmitterTest {
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.JSON, spec -> spec.id().endsWith("runQuery"));
+		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.JSON, spec -> spec.id().endsWith("runQuery"));
 
 		ObjectMapper mapper = new ObjectMapper();
 		JsonNode node = mapper.readTree(prompt);
@@ -54,7 +54,7 @@ class ActionPromptEmitterTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ListActions());
 
-		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.SXL, spec -> spec.id().equals("processBundleIds"));
+		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL, spec -> spec.id().equals("processBundleIds"));
 
 		assertThat(prompt).contains("(PA bundleIds \"<bundleIds item1>\" \"<bundleIds item2>\")");
 	}
@@ -64,7 +64,7 @@ class ActionPromptEmitterTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ConstrainedActions());
 
-		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.SXL,
+		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL,
 				spec -> spec.id().equals("constrainedAction"));
 
 		assertThat(prompt).contains("constrainedAction");

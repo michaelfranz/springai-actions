@@ -14,7 +14,7 @@ Allow developers to constrain action parameters beyond type (e.g., enums, whitel
    - Extend reflection that builds the `ActionRegistry` (planner builder `addActions`) to populate these fields. **Done** (derives enum constants when no explicit allowedValues).
    - Extend `@ActionParam` (or a new attribute on `@Action`) with optional constraints: `allowedValues`, `allowedRegex`, optional `caseInsensitive`. Defaults = no constraint. These feed into the descriptor. **Done**
 2) **Prompt emission**
-   - Update `ActionPromptEmitter` to include allowed values per parameter (e.g., “allowed: A|B|C”; for regex, emit pattern guidance). **Done** (SXL prompts include Constraints block).
+   - Update `ActionPromptContributor` to include allowed values per parameter (e.g., “allowed: A|B|C”; for regex, emit pattern guidance). **Done** (SXL prompts include Constraints block).
    - Optionally add a short “pending example” showing how to ask for a valid choice. **Already present**
 3) **Verification (plan phase)**
    - Enhance `PlanVerifier` to check literal values against allowed sets/regex; produce `ErrorStep` or `PendingActionStep` with a message like “value must be one of [...]”.
@@ -25,7 +25,7 @@ Allow developers to constrain action parameters beyond type (e.g., enums, whitel
 
 ## TDD / Work Plan
 1) **Metadata & prompt**
-   - Add tests for `ActionPromptEmitter` to assert allowed values are emitted. **Done** (`ActionPromptEmitterTest`).
+   - Add tests for `ActionPromptContributor` to assert allowed values are emitted. **Done** (`ActionPromptContributorTest`).
    - Implement metadata changes (descriptor fields, annotation support, registry build). **Done**.
 2) **Verification**
    - Add `PlanVerifier` tests: invalid enum value → error/pending; valid value passes.
@@ -44,8 +44,8 @@ Allow developers to constrain action parameters beyond type (e.g., enums, whitel
 ## Status Summary
 - ActionParam constraints added; enum values derived automatically when not explicitly provided.
 - ActionParameterDescriptor and ActionRegistry carry constraints. **Done**
-- ActionPromptEmitter surfaces constraints in SXL prompts. **Done**
-- Tests updated for prompt emission (ActionPromptEmitterTest) and constructors (ActionSpecTest, ActionSerializationFootprintTest). **Done**
+- ActionPromptContributor surfaces constraints in SXL prompts. **Done**
+- Tests updated for prompt emission (ActionPromptContributorTest) and constructors (ActionSpecTest, ActionSerializationFootprintTest). **Done**
 - Verification and resolution enforcement for value constraints:
   - PlanVerifier value checks **Done**
   - Enum-aware conversion and allowed-set validation in DefaultPlanResolver **Done**

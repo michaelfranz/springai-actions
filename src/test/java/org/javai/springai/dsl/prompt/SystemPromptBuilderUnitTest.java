@@ -21,7 +21,7 @@ class SystemPromptBuilderUnitTest {
 		TypeFactoryBootstrap.registerBuiltIns();
 		registry = new ActionRegistry();
 		guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("META-INF/sxl-meta-grammar-plan.yml", "META-INF/sxl-meta-grammar-sql.yml"),
+				List.of("META-INF/sxl-meta-grammar-universal.yml", "META-INF/sxl-meta-grammar-plan.yml", "META-INF/sxl-meta-grammar-sql.yml"),
 				getClass().getClassLoader());
 	}
 
@@ -72,6 +72,26 @@ class SystemPromptBuilderUnitTest {
 
 		assertThat(prompt).contains("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
+	}
+
+	@Test
+	void ordersGuidanceUniversalThenPlanThenOthersAlphabetically() {
+		registry.registerActions(new SqlActions());
+
+		String prompt = SystemPromptBuilder.build(
+				registry,
+				ad -> true,
+				guidanceProvider,
+				SystemPromptBuilder.Mode.SXL
+		);
+
+		int idxUniversal = prompt.indexOf("DSL sxl-universal:");
+		int idxPlan = prompt.indexOf("DSL sxl-plan:");
+		int idxSql = prompt.indexOf("DSL sxl-sql:");
+
+		assertThat(idxUniversal).isNotNegative();
+		assertThat(idxPlan).isGreaterThan(idxUniversal);
+		assertThat(idxSql).isGreaterThan(idxPlan);
 	}
 
 	private static class PlanOnlyActions {

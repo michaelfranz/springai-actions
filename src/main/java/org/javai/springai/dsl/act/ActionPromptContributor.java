@@ -14,7 +14,7 @@ import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 /**
  * Emits action specs for inclusion in system prompts, in either SXL or JSON style.
  */
-public final class ActionPromptEmitter {
+public final class ActionPromptContributor {
 
 	public enum Mode {
 		SXL, JSON
@@ -22,7 +22,7 @@ public final class ActionPromptEmitter {
 
 	private static final ObjectMapper mapper = new ObjectMapper();
 
-	private ActionPromptEmitter() {
+	private ActionPromptContributor() {
 	}
 
 	public static String emit(ActionRegistry registry, Mode mode) {
@@ -73,7 +73,7 @@ public final class ActionPromptEmitter {
 	private static String defaultExample(ActionDescriptor d) {
 		// Provide a canonical plan-shaped exemplar using PS + PA params (no EMBED unless the action DSL id is specified).
 		String params = d.actionParameterSpecs().stream()
-				.map(ActionPromptEmitter::renderParameterExample)
+				.map(ActionPromptContributor::renderParameterExample)
 				.collect(Collectors.joining(" "));
 		return "(P \"Example for " + d.id() + "\" (PS " + d.id()
 				+ (params.isEmpty() ? "" : " " + params) + "))";

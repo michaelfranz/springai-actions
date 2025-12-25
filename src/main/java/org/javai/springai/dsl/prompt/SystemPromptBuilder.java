@@ -4,14 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
-import org.javai.springai.dsl.act.ActionPromptEmitter;
+import org.javai.springai.dsl.act.ActionPromptContributor;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.sxl.grammar.SxlGrammarJsonSchemaEmitter;
 
@@ -39,7 +41,7 @@ public final class SystemPromptBuilder {
 			ActionDescriptorFilter filter,
 			DslGuidanceProvider guidanceProvider,
 			Mode mode) {
-		return build(registry, filter, guidanceProvider, mode, null, null);
+		return build(registry, filter, guidanceProvider, mode, List.of(new PlanActionsContextContributor()), Map.of(), null, null);
 	}
 
 	/**
@@ -51,29 +53,66 @@ public final class SystemPromptBuilder {
 			Mode mode,
 			String providerId,
 			String modelId) {
+		return build(registry, filter, guidanceProvider, mode, List.of(new PlanActionsContextContributor()), Map.of(), providerId, modelId);
+	}
+
+	/**
+	 * Build a system prompt with optional DSL context contributors and per-DSL context.
+	 */
+	public static String build(ActionRegistry registry,
+			ActionDescriptorFilter filter,
+			DslGuidanceProvider guidanceProvider,
+			Mode mode,
+			List<DslContextContributor> contributors,
+			Map<String, Object> dslContext,
+			String providerId,
+			String modelId) {
 		if (filter == null) {
 			filter = ActionDescriptorFilter.ALL;
 		}
 		if (guidanceProvider == null) {
 			guidanceProvider = DslGuidanceProvider.NONE;
 		}
-
-		String actionsSection = ActionPromptEmitter.emit(registry,
-				mode == Mode.SXL ? ActionPromptEmitter.Mode.SXL : ActionPromptEmitter.Mode.JSON,
-				filter);
+		if (contributors == null) {
+			contributors = List.of();
+		}
+		if (dslContext == null) {
+			dslContext = Map.of();
+		}
 
 		Set<String> dslIds = collectDslIds(registry, filter, guidanceProvider);
-		List<GuidanceEntry> dslGuidance = buildDslSection(dslIds, guidanceProvider, providerId, modelId, mode);
-		List<ObjectNode> dslSchemas = collectDslSchemas(dslIds, guidanceProvider);
+		for (DslContextContributor contributor : contributors) {
+			if (contributor != null && contributor.dslId() != null && !contributor.dslId().isBlank()) {
+				dslIds.add(contributor.dslId());
+			}
+		}
+		List<String> orderedDslIds = sortDslIds(dslIds);
+		List<GuidanceEntry> dslGuidance = buildDslSection(orderedDslIds, guidanceProvider, providerId, modelId, mode);
+		List<ObjectNode> dslSchemas = collectDslSchemas(orderedDslIds, guidanceProvider);
+
+		List<ActionDescriptor> selectedDescriptors = registry.getActionDescriptors().stream()
+				.filter(filter::include)
+				.toList();
+		SystemPromptContext ctx = new SystemPromptContext(registry, selectedDescriptors, filter, dslContext);
 
 		if (mode == Mode.JSON) {
+			String actionsSection = buildJsonActions(registry, filter);
 			return buildJson(actionsSection, dslGuidance, dslSchemas);
 		}
 
+		final List<DslContextContributor> ctxContributors = contributors;
 		String dslSection = dslGuidance.stream()
-				.map(g -> "DSL " + g.dslId() + ":\n" + g.text())
+				.map(g -> {
+					StringBuilder section = new StringBuilder("DSL " + g.dslId() + ":\n" + g.text());
+					for (DslContextContributor contributor : ctxContributors) {
+						if (contributor != null && g.dslId().equals(contributor.dslId())) {
+							contributor.contribute(ctx).ifPresent(text -> section.append("\n\n").append(text));
+						}
+					}
+					return section.toString();
+				})
 				.collect(Collectors.joining("\n\n"));
-		return "DSL GUIDANCE:\n" + dslSection + "\n\nACTIONS:\n" + actionsSection;
+		return "DSL GUIDANCE:\n" + dslSection;
 	}
 
 	private static Set<String> collectDslIds(ActionRegistry registry, ActionDescriptorFilter filter, DslGuidanceProvider guidanceProvider) {
@@ -88,8 +127,11 @@ public final class SystemPromptBuilder {
 				}
 			});
 		}
-		// Always include plan DSL if available via grammar source
+		// Always include universal/plan DSLs if available via grammar source
 		if (guidanceProvider instanceof DslGrammarSource source) {
+			if (source.grammarFor("sxl-universal").isPresent()) {
+				ids.add("sxl-universal");
+			}
 			if (source.grammarFor("sxl-plan").isPresent()) {
 				ids.add("sxl-plan");
 			}
@@ -97,7 +139,7 @@ public final class SystemPromptBuilder {
 		return ids;
 	}
 
-	private static List<GuidanceEntry> buildDslSection(Set<String> dslIds, DslGuidanceProvider provider, String providerId, String modelId, Mode mode) {
+	private static List<GuidanceEntry> buildDslSection(List<String> dslIds, DslGuidanceProvider provider, String providerId, String modelId, Mode mode) {
 		List<GuidanceEntry> entries = new ArrayList<>();
 		for (String id : dslIds) {
 			String guidance = provider.guidanceFor(id, providerId, modelId).orElse("(no guidance available)");
@@ -119,7 +161,7 @@ public final class SystemPromptBuilder {
 		return entries;
 	}
 
-	private static List<ObjectNode> collectDslSchemas(Set<String> dslIds, DslGuidanceProvider provider) {
+	private static List<ObjectNode> collectDslSchemas(List<String> dslIds, DslGuidanceProvider provider) {
 		if (!(provider instanceof DslGrammarSource source)) {
 			return List.of();
 		}
@@ -128,6 +170,19 @@ public final class SystemPromptBuilder {
 			source.grammarFor(id).ifPresent(grammar -> schemas.add(SxlGrammarJsonSchemaEmitter.emit(grammar)));
 		}
 		return schemas;
+	}
+
+	private static List<String> sortDslIds(Set<String> dslIds) {
+		List<String> ids = new ArrayList<>(dslIds);
+		Comparator<String> comparator = Comparator
+				.comparingInt((String id) -> {
+					if ("sxl-universal".equals(id)) return 0;
+					if ("sxl-plan".equals(id)) return 1;
+					return 2;
+				})
+				.thenComparing(Comparator.naturalOrder());
+		ids.sort(comparator);
+		return ids;
 	}
 
 	private static String buildJson(String actionsJsonArray, List<GuidanceEntry> dslGuidance, List<ObjectNode> dslSchemas) {
@@ -151,6 +206,12 @@ public final class SystemPromptBuilder {
 		} catch (Exception e) {
 			throw new IllegalStateException("Failed to build JSON system prompt", e);
 		}
+	}
+
+	private static String buildJsonActions(ActionRegistry registry, ActionDescriptorFilter filter) {
+		return ActionPromptContributor.emit(registry,
+				ActionPromptContributor.Mode.JSON,
+				filter != null ? filter : ActionDescriptorFilter.ALL);
 	}
 
 	private record GuidanceEntry(String dslId, String text) {}

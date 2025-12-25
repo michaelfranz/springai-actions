@@ -2,6 +2,7 @@ package org.javai.springai.dsl.plan;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,8 @@ import org.javai.springai.dsl.exec.ResolvedArgument;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.prompt.DslGrammarSource;
+import org.javai.springai.dsl.prompt.DslContextContributor;
+import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
 import org.javai.springai.dsl.prompt.DslGuidanceProvider;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.SxlNode;
@@ -51,6 +54,8 @@ public final class Planner {
 	private final List<SxlGrammar> grammars;
 	private final List<String> promptContributions;
 	private final CollectedActions collectedActions;
+	private final List<DslContextContributor> dslContributors;
+	private final Map<String, Object> dslContext;
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
 
@@ -59,6 +64,8 @@ public final class Planner {
 		this.grammars = List.copyOf(builder.grammars);
 		this.promptContributions = List.copyOf(builder.promptContributions);
 		this.collectedActions = collectActions(builder.actionSources);
+		this.dslContributors = List.copyOf(builder.dslContributors);
+		this.dslContext = Map.copyOf(builder.dslContext);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
 	}
@@ -201,7 +208,11 @@ public final class Planner {
 				collectedActions.registry(),
 				ActionDescriptorFilter.ALL,
 				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL
+				SystemPromptBuilder.Mode.SXL,
+				this.dslContributors,
+				this.dslContext,
+				null,
+				null
 		);
 		systemMessages.add(systemPrompt);
 
@@ -313,6 +324,8 @@ public final class Planner {
 		private final List<SxlGrammar> grammars = new ArrayList<>();
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
+		private final List<DslContextContributor> dslContributors = new ArrayList<>();
+		private final Map<String, Object> dslContext = new HashMap<>();
 		private boolean capturePromptByDefault;
 		private Consumer<PromptPreview> promptHook;
 
@@ -354,6 +367,20 @@ public final class Planner {
 			return this;
 		}
 
+		public Builder addDslContextContributor(DslContextContributor contributor) {
+			if (contributor != null) {
+				this.dslContributors.add(contributor);
+			}
+			return this;
+		}
+
+		public Builder addDslContext(String dslId, Object context) {
+			if (dslId != null && !dslId.isBlank() && context != null) {
+				this.dslContext.put(dslId, context);
+			}
+			return this;
+		}
+
 		public Builder enablePromptCapture() {
 			this.capturePromptByDefault = true;
 			return this;
@@ -388,6 +415,13 @@ public final class Planner {
 			}
 			this.grammars.clear();
 			this.grammars.addAll(merged.values());
+
+			// Ensure plan actions contributor is present
+			boolean hasPlanContributor = this.dslContributors.stream()
+					.anyMatch(c -> c != null && "sxl-plan".equals(c.dslId()));
+			if (!hasPlanContributor) {
+				this.dslContributors.add(new PlanActionsContextContributor());
+			}
 			return new Planner(this);
 		}
 	}
