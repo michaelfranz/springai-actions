@@ -18,7 +18,7 @@ class PlannerTest {
 	void setup() {
 		SxlGrammarParser parser = new SxlGrammarParser();
 		planGrammar = parser.parse(
-				PlannerTest.class.getClassLoader().getResourceAsStream("sxl-meta-grammar-plan.yml"));
+				PlannerTest.class.getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml"));
 	}
 
 	@Test

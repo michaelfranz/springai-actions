@@ -1,11 +1,14 @@
 package org.javai.springai.dsl.exec;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.lang.reflect.Method;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.javai.springai.dsl.act.ActionBinding;
-import org.javai.springai.dsl.act.ActionParameterDescriptor;
+import org.javai.springai.actions.api.ActionContext;
+import org.javai.springai.actions.execution.ActionResult;
+import org.javai.springai.actions.execution.ExecutableAction;
+import org.javai.springai.actions.execution.ExecutablePlan;
+import org.javai.springai.actions.execution.PlanExecutionException;
 import org.junit.jupiter.api.Test;
 
 class DefaultPlanExecutorTest {
@@ -13,49 +16,32 @@ class DefaultPlanExecutorTest {
 	@Test
 	void executesActionStep() throws Exception {
 		AtomicBoolean invoked = new AtomicBoolean(false);
-		SampleActions actions = new SampleActions(invoked);
+		ExecutableAction action = ctx -> {
+			invoked.set(true);
+			return new ActionResult.Success("ok");
+		};
 
-		Method method = SampleActions.class.getMethod("hello", String.class);
-		ActionBinding binding = new ActionBinding(
-				"hello",
-				"Say hello",
-				actions,
-				method,
-				List.of(new ActionParameterDescriptor("name", String.class.getName(), "string", "Name", null,
-						new String[0], "", false))
-		);
+		ExecutablePlan plan = new ExecutablePlan(List.of(action));
 
-		ResolvedStep.ActionStep step = new ResolvedStep.ActionStep(binding,
-				List.of(new ResolvedArgument("name", "world", String.class)));
-		ResolvedPlan plan = new ResolvedPlan(List.of(step));
+		org.javai.springai.actions.execution.DefaultPlanExecutor executor = new org.javai.springai.actions.execution.DefaultPlanExecutor();
+		ActionContext context = executor.execute(plan);
 
-		DefaultPlanExecutor executor = new DefaultPlanExecutor();
-		PlanExecutionResult result = executor.execute(plan);
-
-		assertThat(result.success()).isTrue();
-		assertThat(result.steps()).hasSize(1);
 		assertThat(invoked.get()).isTrue();
+		assertThat(context).isNotNull();
 	}
 
 	@Test
-	void stopsOnErrorStep() {
-		ResolvedStep.ErrorStep error = new ResolvedStep.ErrorStep("missing info");
-		ResolvedPlan plan = new ResolvedPlan(List.of(error));
+	void stopsOnActionFailure() {
+		ExecutableAction failing = ctx -> {
+			throw new IllegalStateException("boom");
+		};
 
-		DefaultPlanExecutor executor = new DefaultPlanExecutor();
-		PlanExecutionResult result = executor.execute(plan);
+		ExecutablePlan plan = new ExecutablePlan(List.of(failing));
 
-		assertThat(result.success()).isFalse();
-		assertThat(result.steps()).hasSize(1);
-		assertThat(result.steps().getFirst().message()).contains("missing info");
+		org.javai.springai.actions.execution.DefaultPlanExecutor executor = new org.javai.springai.actions.execution.DefaultPlanExecutor();
+		assertThatThrownBy(() -> executor.execute(plan))
+				.isInstanceOf(PlanExecutionException.class)
+				.hasMessageContaining("Plan execution failed");
 	}
-
-	private record SampleActions(AtomicBoolean invoked) {
-
-		@SuppressWarnings("unused") // invoked via reflection in executor
-			public void hello(String name) {
-				invoked.set(true);
-			}
-		}
 }
 

@@ -28,8 +28,8 @@ class SystemPromptCasesTest {
 		TypeFactoryBootstrap.registerBuiltIns();
 		guidanceProvider = new GrammarBackedDslGuidanceProvider(
 				List.of(
-						"sxl-meta-grammar-sql.yml",
-						"sxl-meta-grammar-plan.yml"
+						"META-INF/sxl-meta-grammar-sql.yml",
+						"META-INF/sxl-meta-grammar-plan.yml"
 				),
 				getClass().getClassLoader()
 		);

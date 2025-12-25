@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
  * - Universal guidance is composed correctly from loaded grammars
  *
  * NOTE: These tests will FAIL until Phase 4-5 removes universal guidance
- * from domain-specific grammars (sxl-meta-grammar-plan.yml, sxl-meta-grammar-sql.yml).
+ * from domain-specific grammars (META-INF/sxl-meta-grammar-plan.yml, META-INF/sxl-meta-grammar-sql.yml).
  * The failure documents that the architecture still needs refinement.
  */
 @DisplayName("Universal DSL Guidance Integration Tests")
@@ -33,7 +33,7 @@ class UniversalDslGuidanceIntegrationTest {
 	@DisplayName("Should include universal guidance when loading universal grammar")
 	void shouldIncludeUniversalGuidanceWhenLoaded() {
 		DslGuidanceProvider guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("sxl-meta-grammar-universal.yml"),
+				List.of("META-INF/sxl-meta-grammar-universal.yml"),
 				classLoader
 		);
 
@@ -54,9 +54,9 @@ class UniversalDslGuidanceIntegrationTest {
 		
 		DslGuidanceProvider guidanceProvider = new GrammarBackedDslGuidanceProvider(
 				List.of(
-						"sxl-meta-grammar-sql.yml",
-						"sxl-meta-grammar-plan.yml",
-						"sxl-meta-grammar-universal.yml"
+						"META-INF/sxl-meta-grammar-sql.yml",
+						"META-INF/sxl-meta-grammar-plan.yml",
+						"META-INF/sxl-meta-grammar-universal.yml"
 				),
 				classLoader
 		);
@@ -81,13 +81,13 @@ class UniversalDslGuidanceIntegrationTest {
 		assertThat(sqlGuidance)
 				.as("SQL guidance should NOT contain universal rules - it should only have SQL-specific guidance. " +
 						"Currently it contains universal guidance because it hasn't been separated yet. " +
-						"Remove universal guidance from sxl-meta-grammar-sql.yml to make this pass.")
+						"Remove universal guidance from META-INF/sxl-meta-grammar-sql.yml to make this pass.")
 				.doesNotContain("UNIVERSAL SXL RULES");
 
 		assertThat(planGuidance)
 				.as("Plan guidance should NOT contain universal rules - it should only have Plan-specific guidance. " +
 						"Currently it contains universal guidance because it hasn't been separated yet. " +
-						"Remove universal guidance from sxl-meta-grammar-plan.yml to make this pass.")
+						"Remove universal guidance from META-INF/sxl-meta-grammar-plan.yml to make this pass.")
 				.doesNotContain("UNIVERSAL SXL RULES");
 
 		// Universal guidance SHOULD be in the universal grammar only
@@ -102,8 +102,8 @@ class UniversalDslGuidanceIntegrationTest {
 		// Configuration 1: SQL + Universal (no Plan)
 		GrammarBackedDslGuidanceProvider provider1 = new GrammarBackedDslGuidanceProvider(
 				List.of(
-						"sxl-meta-grammar-sql.yml",
-						"sxl-meta-grammar-universal.yml"
+						"META-INF/sxl-meta-grammar-sql.yml",
+						"META-INF/sxl-meta-grammar-universal.yml"
 				),
 				classLoader
 		);
@@ -111,8 +111,8 @@ class UniversalDslGuidanceIntegrationTest {
 		// Configuration 2: Plan + Universal (no SQL)
 		GrammarBackedDslGuidanceProvider provider2 = new GrammarBackedDslGuidanceProvider(
 				List.of(
-						"sxl-meta-grammar-plan.yml",
-						"sxl-meta-grammar-universal.yml"
+						"META-INF/sxl-meta-grammar-plan.yml",
+						"META-INF/sxl-meta-grammar-universal.yml"
 				),
 				classLoader
 		);
@@ -133,16 +133,16 @@ class UniversalDslGuidanceIntegrationTest {
 	void universalGuidanceShouldSurviveAddingOtherGrammars() {
 		// Load universal only
 		DslGuidanceProvider providerUniversalOnly = new GrammarBackedDslGuidanceProvider(
-				List.of("sxl-meta-grammar-universal.yml"),
+				List.of("META-INF/sxl-meta-grammar-universal.yml"),
 				classLoader
 		);
 
 		// Load universal + SQL + Plan
 		DslGuidanceProvider providerWithDomainGrammars = new GrammarBackedDslGuidanceProvider(
 				List.of(
-						"sxl-meta-grammar-universal.yml",
-						"sxl-meta-grammar-sql.yml",
-						"sxl-meta-grammar-plan.yml"
+						"META-INF/sxl-meta-grammar-universal.yml",
+						"META-INF/sxl-meta-grammar-sql.yml",
+						"META-INF/sxl-meta-grammar-plan.yml"
 				),
 				classLoader
 		);

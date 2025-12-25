@@ -37,7 +37,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should load single SQL grammar from resource")
 		void shouldLoadSingleSqlGrammar() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -51,7 +51,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should load single Plan grammar from resource")
 		void shouldLoadSinglePlanGrammar() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-plan.yml"),
+					List.of("META-INF/sxl-meta-grammar-plan.yml"),
 					classLoader
 			);
 
@@ -65,7 +65,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should load single Universal grammar from resource")
 		void shouldLoadSingleUniversalGrammar() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-universal.yml"),
+					List.of("META-INF/sxl-meta-grammar-universal.yml"),
 					classLoader
 			);
 
@@ -80,9 +80,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldLoadMultipleGrammars() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -99,8 +99,8 @@ class GrammarBackedDslGuidanceProviderTest {
 					List.of("non-existent-grammar.yml"),
 					classLoader
 			))
-					.isInstanceOf(IllegalStateException.class)
-					.hasMessageContaining("Failed to load grammar");
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("Resource not found");
 		}
 
 		@Test
@@ -131,7 +131,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return default guidance when no provider/model specified")
 		void shouldReturnDefaultGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -145,7 +145,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return provider-specific guidance when provider specified")
 		void shouldReturnProviderSpecificGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -160,7 +160,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return model-specific guidance when model specified")
 		void shouldReturnModelSpecificGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-plan.yml"),
+					List.of("META-INF/sxl-meta-grammar-plan.yml"),
 					classLoader
 			);
 
@@ -174,7 +174,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return empty for non-existent DSL")
 		void shouldReturnEmptyForNonExistentDsl() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -188,7 +188,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldReturnEmptyWhenNoLlmSpecs() {
 			// Load a grammar and verify it returns empty if no specs
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -202,7 +202,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should prioritize guidance correctly: model > provider > default")
 		void shouldPrioritizeGuidanceCorrectly() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-plan.yml"),
+					List.of("META-INF/sxl-meta-grammar-plan.yml"),
 					classLoader
 			);
 
@@ -229,7 +229,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Universal grammar should provide universal guidance")
 		void universalGrammarShouldProvideUniversalGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-universal.yml"),
+					List.of("META-INF/sxl-meta-grammar-universal.yml"),
 					classLoader
 			);
 
@@ -246,7 +246,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Universal grammar should provide provider-specific guidance")
 		void universalGrammarShouldProvideProviderSpecificGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-universal.yml"),
+					List.of("META-INF/sxl-meta-grammar-universal.yml"),
 					classLoader
 			);
 
@@ -262,9 +262,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void multipleGrammarsShouldAccessUniversalGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -290,7 +290,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should implement DslGrammarSource interface")
 		void shouldImplementDslGrammarSource() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -301,7 +301,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return grammar for valid DSL id")
 		void shouldReturnGrammarForValidDslId() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -315,7 +315,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return empty optional for invalid DSL id")
 		void shouldReturnEmptyForInvalidDslId() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -329,8 +329,8 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldReturnCorrectGrammarForMultiple() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml"
 					),
 					classLoader
 			);
@@ -354,8 +354,8 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldPreserveOrderSqlThenPlan() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml"
 					),
 					classLoader
 			);
@@ -370,8 +370,8 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldPreserveOrderPlanThenSql() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-sql.yml"
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-sql.yml"
 					),
 					classLoader
 			);
@@ -386,9 +386,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldPreserveOrderSqlPlanUniversal() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -404,9 +404,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldPreserveOrderUniversalFirst() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-universal.yml",
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-universal.yml",
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml"
 					),
 					classLoader
 			);
@@ -421,9 +421,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Determinism: Loading same order twice produces consistent results")
 		void shouldBeDeterministicWithSameLoadOrder() {
 			List<String> resourceOrder = List.of(
-					"sxl-meta-grammar-sql.yml",
-					"sxl-meta-grammar-plan.yml",
-					"sxl-meta-grammar-universal.yml"
+					"META-INF/sxl-meta-grammar-sql.yml",
+					"META-INF/sxl-meta-grammar-plan.yml",
+					"META-INF/sxl-meta-grammar-universal.yml"
 			);
 
 			GrammarBackedDslGuidanceProvider provider1 = new GrammarBackedDslGuidanceProvider(
@@ -450,15 +450,15 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldReturnConsistentGuidanceForSameDsl() {
 			// Load SQL alone
 			GrammarBackedDslGuidanceProvider providerSqlOnly = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
 			// Load SQL with Plan
 			GrammarBackedDslGuidanceProvider providerSqlAndPlan = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml"
 					),
 					classLoader
 			);
@@ -477,9 +477,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldMaintainDeterministicBehaviorAcrossMultipleAccess() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -506,9 +506,9 @@ class GrammarBackedDslGuidanceProviderTest {
 			// Order 1: SQL -> Plan -> Universal
 			GrammarBackedDslGuidanceProvider provider1 = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -516,9 +516,9 @@ class GrammarBackedDslGuidanceProviderTest {
 			// Order 2: Universal -> Plan -> SQL
 			GrammarBackedDslGuidanceProvider provider2 = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-universal.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-sql.yml"
+							"META-INF/sxl-meta-grammar-universal.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-sql.yml"
 					),
 					classLoader
 			);
@@ -548,7 +548,7 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Scenario: Load SQL, then use guidance")
 		void scenarioLoadSqlThenUseGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("sxl-meta-grammar-sql.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
@@ -565,8 +565,8 @@ class GrammarBackedDslGuidanceProviderTest {
 		void scenarioLoadSqlAndPlanThenUseGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml"
 					),
 					classLoader
 			);
@@ -588,9 +588,9 @@ class GrammarBackedDslGuidanceProviderTest {
 		void scenarioLoadAllThreeGrammars() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"sxl-meta-grammar-sql.yml",
-							"sxl-meta-grammar-plan.yml",
-							"sxl-meta-grammar-universal.yml"
+							"META-INF/sxl-meta-grammar-sql.yml",
+							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);

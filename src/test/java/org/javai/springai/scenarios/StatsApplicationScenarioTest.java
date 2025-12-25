@@ -5,9 +5,6 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.tuning.LlmTuningConfig;
-import org.javai.springai.actions.tuning.PlanSupplier;
-import org.javai.springai.actions.tuning.ScenarioPlanSupplier;
 import org.javai.springai.dsl.conversation.ConversationManager;
 import org.javai.springai.dsl.conversation.ConversationTurnResult;
 import org.javai.springai.dsl.conversation.InMemoryConversationStateStore;
@@ -20,10 +17,7 @@ import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
-import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -31,19 +25,10 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
-public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
+public class StatsApplicationScenarioTest {
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
-
-	private static final LlmTuningConfig BASELINE_CONFIG = new LlmTuningConfig(
-			"You are an expert in dad jokes. Keep the humor light-hearted.",
-			0.1,
-			1.0
-	);
-	private static SxlGrammarRegistry grammarRegistry;
-	private static SxlGrammar universalGrammar;
-	private static SxlGrammar planGrammar;
 
 	Planner planner;
 	PlanResolver resolver;
@@ -51,14 +36,6 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 	ConversationManager conversationManager;
 	StatsActions statsActions;
 
-
-	@BeforeAll
-	static void setUpBeforeClass() throws Exception {
-		ClassLoader loader = SxlGrammar.class.getClassLoader();
-		grammarRegistry = SxlGrammarRegistry.create();
-		universalGrammar = grammarRegistry.registerResource("sxl-meta-grammar-universal.yml", loader);
-		planGrammar = grammarRegistry.registerResource("sxl-meta-grammar-plan.yml", loader);
-	}
 
 	@BeforeEach
 	void setUp() {
@@ -81,8 +58,6 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
-				.addGrammar(universalGrammar)
-				.addGrammar(planGrammar)
 				.addActions(statsActions)
 				.build();
 		resolver = new DefaultPlanResolver();
@@ -187,26 +162,6 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		PlanExecutionResult executed = executor.execute(secondPlan);
 		assertThat(executed.success()).isTrue();
 		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
-	}
-
-	@Override
-	public String scenarioId() {
-		return "stats-application";
-	}
-
-	@Override
-	public String description() {
-		return "Simulates the kind of DSL that one might find in an application with statistical features";
-	}
-
-	@Override
-	public LlmTuningConfig defaultConfig() {
-		return BASELINE_CONFIG;
-	}
-
-	@Override
-	public PlanSupplier planSupplier(LlmTuningConfig config) {
-		return () -> null;
 	}
 
 	public static class StatsActions {

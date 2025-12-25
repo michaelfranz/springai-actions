@@ -13,7 +13,7 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldLoadGrammarFromResource() {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		SxlGrammar grammar = registry.registerResource("sxl-meta-grammar-plan.yml", getClass().getClassLoader());
+		SxlGrammar grammar = registry.registerResource("META-INF/sxl-meta-grammar-plan.yml", getClass().getClassLoader());
 
 		assertThat(grammar).isNotNull();
 		assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
@@ -23,8 +23,8 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldDeduplicateByDslId() {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		SxlGrammar first = registry.registerResource("sxl-meta-grammar-sql.yml", getClass().getClassLoader());
-		SxlGrammar second = registry.registerResource("sxl-meta-grammar-sql.yml", getClass().getClassLoader());
+		SxlGrammar first = registry.registerResource("META-INF/sxl-meta-grammar-sql.yml", getClass().getClassLoader());
+		SxlGrammar second = registry.registerResource("META-INF/sxl-meta-grammar-sql.yml", getClass().getClassLoader());
 
 		assertThat(second).isSameAs(first);
 		assertThat(registry.grammars()).hasSize(1);
@@ -33,7 +33,7 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldRegisterFromPath() throws Exception {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("sxl-meta-grammar-plan.yml"));
+		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("META-INF/sxl-meta-grammar-plan.yml"));
 		Path path = Path.of(resource.toURI());
 
 		SxlGrammar grammar = registry.registerPath(path);

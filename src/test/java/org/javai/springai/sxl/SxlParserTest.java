@@ -36,7 +36,7 @@ class SxlParserTest {
 		SxlGrammarParser parser = new SxlGrammarParser();
 		
 		// Load SQL grammar from resources for validation of SQL expressions
-		sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
+		sqlGrammar = loadGrammar("META-INF/sxl-meta-grammar-sql.yml", parser);
 		
 		// Create registry with SQL grammar
 		registry = new DefaultValidatorRegistry();

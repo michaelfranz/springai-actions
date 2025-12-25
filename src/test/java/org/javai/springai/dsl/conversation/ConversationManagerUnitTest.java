@@ -3,6 +3,7 @@ package org.javai.springai.dsl.conversation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +57,7 @@ class ConversationManagerUnitTest {
 						"exportControlChartToExcel",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("bundleId", "Provide bundle id") },
 						Map.of("domainEntity", "displacement", "measurementConcept", "values"))));
-		when(mockPlanner.formulatePlan("export control chart to excel for displacement values", argThat(Objects::nonNull)))
+		when(mockPlanner.formulatePlan(eq("export control chart to excel for displacement values"), argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", pendingPlan, null, false, null));
 		when(mockStore.load("session-1")).thenReturn(Optional.of(ConversationState.initial("export control chart to excel for displacement values")));
 		when(mockResolver.resolve(pendingPlan, null)).thenReturn(new ResolvedPlan(
@@ -71,7 +72,7 @@ class ConversationManagerUnitTest {
 				List.of(new PlanStep.ActionStep("",
 						"exportControlChartToExcel",
 						new Object[] { "displacement", "values", "A12345" })));
-		when(mockPlanner.formulatePlan("bundle id is A12345", argThat(Objects::nonNull)))
+		when(mockPlanner.formulatePlan(eq("bundle id is A12345"), argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", resolvedPlan, null, false, null));
 		when(mockResolver.resolve(resolvedPlan, null))
 				.thenReturn(new ResolvedPlan(List.of(new ResolvedStep.ActionStep(null, List.of()))));

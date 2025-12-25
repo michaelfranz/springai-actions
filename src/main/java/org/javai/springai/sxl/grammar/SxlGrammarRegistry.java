@@ -1,12 +1,19 @@
 package org.javai.springai.sxl.grammar;
 
 import java.io.InputStream;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +28,7 @@ public final class SxlGrammarRegistry {
 
 	private static final Logger logger = LoggerFactory.getLogger(SxlGrammarRegistry.class);
 
-	private static final String UNIVERSAL_GRAMMAR_RESOURCE = "sxl-meta-grammar-universal.yml";
+	private static final String UNIVERSAL_GRAMMAR_RESOURCE = "META-INF/sxl-meta-grammar-universal.yml";
 
 	private final Map<String, SxlGrammar> grammars = new LinkedHashMap<>();
 	private final SxlGrammarParser parser;
@@ -61,6 +68,33 @@ public final class SxlGrammarRegistry {
 	 */
 	public SxlGrammar registerUniversal(ClassLoader loader) {
 		return registerResource(UNIVERSAL_GRAMMAR_RESOURCE, loader);
+	}
+
+	/**
+	 * Discover and register grammars found under META-INF on the classpath.
+	 * <p>
+	 * This scans both exploded directories and JARs for files named
+	 * {@code sxl-meta-grammar-*.yml}. The first grammar for a given DSL id wins; later
+	 * matches with the same id are ignored.
+	 */
+	public SxlGrammarRegistry registerMetaInfGrammars(ClassLoader loader) {
+		Objects.requireNonNull(loader, "loader must not be null");
+		try {
+			Enumeration<URL> resources = loader.getResources("META-INF/");
+			while (resources.hasMoreElements()) {
+				URL url = resources.nextElement();
+				if ("file".equalsIgnoreCase(url.getProtocol())) {
+					loadFromDirectory(url);
+				}
+				else if ("jar".equalsIgnoreCase(url.getProtocol())) {
+					loadFromJar(url);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new IllegalStateException("Failed to scan META-INF for grammars", e);
+		}
+		return this;
 	}
 
 	/**
@@ -140,6 +174,58 @@ public final class SxlGrammarRegistry {
 	 */
 	public List<SxlGrammar> grammars() {
 		return List.copyOf(grammars.values());
+	}
+
+	private void loadFromDirectory(URL url) {
+		try {
+			Path path = Paths.get(url.toURI());
+			if (!Files.isDirectory(path)) {
+				return;
+			}
+			Files.list(path)
+					.filter(p -> Files.isRegularFile(p))
+					.filter(p -> p.getFileName().toString().startsWith("sxl-meta-grammar-"))
+					.filter(p -> p.getFileName().toString().endsWith(".yml"))
+					.forEach(p -> {
+						try (InputStream is = Files.newInputStream(p)) {
+							register(parser.parse(is));
+						}
+						catch (Exception ex) {
+							logger.warn("Failed to load grammar from {}", p, ex);
+						}
+					});
+		}
+		catch (Exception e) {
+			logger.warn("Failed to scan directory {}", url, e);
+		}
+	}
+
+	private void loadFromJar(URL url) {
+		try {
+			JarURLConnection conn = (JarURLConnection) url.openConnection();
+			try (JarFile jar = conn.getJarFile()) {
+				Enumeration<JarEntry> entries = jar.entries();
+				while (entries.hasMoreElements()) {
+					JarEntry entry = entries.nextElement();
+					if (entry.isDirectory()) {
+						continue;
+					}
+					String name = entry.getName();
+					if (!name.startsWith("META-INF/") || !name.endsWith(".yml") || !name.contains("sxl-meta-grammar-")) {
+						continue;
+					}
+					try (InputStream is = jar.getInputStream(entry)) {
+						register(parser.parse(is));
+					}
+					catch (Exception ex) {
+						logger.warn("Failed to load grammar from JAR entry {}", name, ex);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			logger.warn("Failed to scan JAR {}", url, e);
+		}
 	}
 }
 

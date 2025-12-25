@@ -24,7 +24,7 @@ class ConversationPromptBuilderTest {
 		assertThat(addendum).contains("Already provided: domainEntity=displacement");
 		assertThat(addendum).contains("Pending: bundleId");
 		assertThat(addendum).contains("Latest user reply: \"bundle id is A12345\"");
-		assertThat(addendum).contains("Use the new reply only if it truly satisfies the pending items");
+		assertThat(addendum).contains("Use the latest reply only to satisfy the pending items");
 	}
 }
 

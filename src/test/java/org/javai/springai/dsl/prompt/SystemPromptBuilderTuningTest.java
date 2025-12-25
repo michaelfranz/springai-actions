@@ -83,7 +83,7 @@ class SystemPromptBuilderTuningTest {
 		registry.registerActions(new RunQueryAction());
 
 		DslGuidanceProvider guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("sxl-meta-grammar-sql.yml", "sxl-meta-grammar-plan.yml"),
+				List.of("META-INF/sxl-meta-grammar-sql.yml", "META-INF/sxl-meta-grammar-plan.yml"),
 				getClass().getClassLoader());
 
 		String systemPrompt = SystemPromptBuilder.build(
@@ -259,9 +259,9 @@ class SystemPromptBuilderTuningTest {
 	private Plan parsePlan(String response) {
 		SxlGrammarParser parser = new SxlGrammarParser();
 		var planGrammar = parser.parse(
-				getClass().getClassLoader().getResourceAsStream("sxl-meta-grammar-plan.yml"));
+				getClass().getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml"));
 		var sqlGrammar = parser.parse(
-				getClass().getClassLoader().getResourceAsStream("sxl-meta-grammar-sql.yml"));
+				getClass().getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-sql.yml"));
 
 		DefaultValidatorRegistry registry = new DefaultValidatorRegistry();
 		registry.addGrammar("sxl-plan", planGrammar);

@@ -20,6 +20,7 @@ import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
 import org.javai.springai.dsl.conversation.ConversationState;
+import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.PlanVerifier;
@@ -34,6 +35,7 @@ import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
 import org.javai.springai.sxl.grammar.SxlGrammar;
+import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -363,6 +365,29 @@ public final class Planner {
 		}
 
 		public Planner build() {
+			// Ensure built-in DSL type mappings exist (plan/sql)
+			TypeFactoryBootstrap.registerBuiltIns();
+
+			// Auto-discover grammars: explicit additions win, then defaults/meta-inf.
+			SxlGrammarRegistry registry = SxlGrammarRegistry.create();
+			registry.registerUniversal(Planner.class.getClassLoader());
+			registry.registerResource("META-INF/sxl-meta-grammar-plan.yml");
+			registry.registerResource("META-INF/sxl-meta-grammar-sql.yml");
+			registry.registerMetaInfGrammars(Planner.class.getClassLoader());
+
+			Map<String, SxlGrammar> merged = new LinkedHashMap<>();
+			for (SxlGrammar grammar : this.grammars) {
+				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
+					merged.putIfAbsent(grammar.dsl().id(), grammar);
+				}
+			}
+			for (SxlGrammar grammar : registry.grammars()) {
+				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
+					merged.putIfAbsent(grammar.dsl().id(), grammar);
+				}
+			}
+			this.grammars.clear();
+			this.grammars.addAll(merged.values());
 			return new Planner(this);
 		}
 	}

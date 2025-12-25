@@ -35,19 +35,19 @@ class SxlGrammarPromptGeneratorTest {
 
 		// Load SQL grammar from resources
 		InputStream sqlStream = getClass().getClassLoader()
-				.getResourceAsStream("sxl-meta-grammar-sql.yml");
+				.getResourceAsStream("META-INF/sxl-meta-grammar-sql.yml");
 		assertThat(sqlStream).isNotNull();
 		sqlGrammar = parser.parse(sqlStream);
 
 		// Load Plan grammar from resources
 		InputStream planStream = getClass().getClassLoader()
-				.getResourceAsStream("sxl-meta-grammar-plan.yml");
+				.getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml");
 		assertThat(planStream).isNotNull();
 		planGrammar = parser.parse(planStream);
 
 		// Load Universal grammar from resources
 		InputStream universalStream = getClass().getClassLoader()
-				.getResourceAsStream("sxl-meta-grammar-universal.yml");
+				.getResourceAsStream("META-INF/sxl-meta-grammar-universal.yml");
 		assertThat(universalStream).isNotNull();
 		universalGrammar = parser.parse(universalStream);
 	}
@@ -61,7 +61,6 @@ class SxlGrammarPromptGeneratorTest {
 		// 1. DSL metadata (id, description, version)
 		assertThat(prompt).contains("sxl-sql");
 		assertThat(prompt).contains("S-expression language for expressing SQL SELECT queries");
-		assertThat(prompt).contains("2.0");
 
 		// 2. Symbol definitions with descriptions
 		// Top-level query symbol

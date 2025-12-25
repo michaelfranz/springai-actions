@@ -1,6 +1,7 @@
 package org.javai.springai.dsl.plan;
 
 import java.util.List;
+import org.javai.springai.sxl.SExpressionType;
 import org.javai.springai.sxl.SxlNode;
 
 /**
@@ -8,7 +9,12 @@ import org.javai.springai.sxl.SxlNode;
  * @param assistantMessage a model-generated message to accompany the plan
  * @param planSteps are the steps of the plan
  */
-public record Plan(String assistantMessage, List<PlanStep> planSteps) {
+public record Plan(String assistantMessage, List<PlanStep> planSteps) implements SExpressionType {
+
+	@Override
+	public String dslId() {
+		return "sxl-plan";
+	}
 
 	public static Plan of(SxlNode planNode) {
 		return PlanNodeVisitor.generate(planNode);

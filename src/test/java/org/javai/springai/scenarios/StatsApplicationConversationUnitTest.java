@@ -2,6 +2,7 @@ package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
@@ -53,8 +54,9 @@ class StatsApplicationConversationUnitTest {
 		PlanFormulationResult resolvedResult = new PlanFormulationResult(
 				"", resolvedPlan, null, false, null);
 
-		when(mockPlanner.formulatePlan("export control chart to excel for displacement values", any(ConversationState.class)))
-				.thenReturn(pendingResult)
+		when(mockPlanner.formulatePlan(eq("export control chart to excel for displacement values"), any(ConversationState.class)))
+				.thenReturn(pendingResult);
+		when(mockPlanner.formulatePlan(eq("bundle id is A12345"), any(ConversationState.class)))
 				.thenReturn(resolvedResult);
 
 		// Simulate first turn

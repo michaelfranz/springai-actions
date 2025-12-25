@@ -1,0 +1,18 @@
+meta_grammar_version: 1.2
+
+dsl:
+  id: sxl-test
+  description: "Test DSL loaded from META-INF"
+  version: 1.0
+
+symbols:
+  T:
+    description: "Root test node"
+    kind: node
+    params:
+      - name: value
+        description: "Value payload"
+        type: literal(string)
+        cardinality: required
+        ordered: true
+

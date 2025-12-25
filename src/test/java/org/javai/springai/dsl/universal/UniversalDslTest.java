@@ -37,11 +37,11 @@ class UniversalDslTest {
 		SxlGrammarParser parser = new SxlGrammarParser();
 
 		// Load universal grammar from resources
-		universalGrammar = loadGrammar("sxl-meta-grammar-universal.yml", parser);
+		universalGrammar = loadGrammar("META-INF/sxl-meta-grammar-universal.yml", parser);
 
 		// Load SQL and Plan grammars for embedding tests
-		sqlGrammar = loadGrammar("sxl-meta-grammar-sql.yml", parser);
-		planGrammar = loadGrammar("sxl-meta-grammar-plan.yml", parser);
+		sqlGrammar = loadGrammar("META-INF/sxl-meta-grammar-sql.yml", parser);
+		planGrammar = loadGrammar("META-INF/sxl-meta-grammar-plan.yml", parser);
 
 		// Create registry with all grammars
 		registry = new DefaultValidatorRegistry();

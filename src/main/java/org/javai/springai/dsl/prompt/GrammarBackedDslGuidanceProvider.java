@@ -9,7 +9,7 @@ import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
  * Loads DSL guidance from SxlGrammar resources.
  * 
  * ARCHITECTURE: This provider automatically loads the universal grammar
- * (sxl-meta-grammar-universal.yml) FIRST, ensuring all DSLs receive
+ * (META-INF/sxl-meta-grammar-universal.yml) FIRST, ensuring all DSLs receive
  * universal S-expression guidance. Domain-specific grammars are then
  * loaded, allowing them to override or extend universal guidance.
  * 
@@ -25,7 +25,7 @@ public class GrammarBackedDslGuidanceProvider implements DslGuidanceProvider, Ds
 	/**
 	 * Load grammars from resource paths; the DSL id is taken from each grammar's dsl.id.
 	 * 
-	 * The universal grammar (sxl-meta-grammar-universal.yml) is ALWAYS loaded first,
+	 * The universal grammar (META-INF/sxl-meta-grammar-universal.yml) is ALWAYS loaded first,
 	 * ensuring universal guidance is available to all DSLs. User-specified grammars
 	 * are loaded after in the order provided.
 	 * 

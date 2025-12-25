@@ -27,8 +27,8 @@ class PlanNodeVisitorTest {
 	@BeforeAll
 	static void setUpBeforeClass() {
 		SxlGrammarParser grammarParser = new SxlGrammarParser();
-		planGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("sxl-meta-grammar-plan.yml"));
-		sqlGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("sxl-meta-grammar-sql.yml"));
+		planGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml"));
+		sqlGrammar = grammarParser.parse(SxlGrammar.class.getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-sql.yml"));
 		TypeFactoryBootstrap.registerBuiltIns();
 	}
 

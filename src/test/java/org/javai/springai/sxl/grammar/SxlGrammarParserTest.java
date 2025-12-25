@@ -1063,10 +1063,10 @@ class SxlGrammarParserTest {
 	class RealGrammarFileTests {
 
 		@Test
-		@DisplayName("should parse sxl-meta-grammar-plan.yml")
+		@DisplayName("should parse META-INF/sxl-meta-grammar-plan.yml")
 		void shouldParsePlanGrammar() {
 			InputStream stream = getClass().getClassLoader()
-				.getResourceAsStream("sxl-meta-grammar-plan.yml");
+				.getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml");
 			assertThat(stream).isNotNull();
 
 			SxlGrammar grammar = parser.parse(stream);
@@ -1085,10 +1085,10 @@ class SxlGrammarParserTest {
 		}
 
 		@Test
-		@DisplayName("should parse sxl-meta-grammar-sql.yml")
+		@DisplayName("should parse META-INF/sxl-meta-grammar-sql.yml")
 		void shouldParseSqlGrammar() {
 			InputStream stream = getClass().getClassLoader()
-				.getResourceAsStream("sxl-meta-grammar-sql.yml");
+				.getResourceAsStream("META-INF/sxl-meta-grammar-sql.yml");
 			assertThat(stream).isNotNull();
 
 			SxlGrammar grammar = parser.parse(stream);

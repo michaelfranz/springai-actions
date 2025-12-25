@@ -42,7 +42,7 @@ class PlanDslTest {
 		SxlGrammarParser parser = new SxlGrammarParser();
 
 		// Load plan grammar from resources
-		SxlGrammar planGrammar = loadGrammar("sxl-meta-grammar-plan.yml", parser);
+		SxlGrammar planGrammar = loadGrammar("META-INF/sxl-meta-grammar-plan.yml", parser);
 
 		// Create simplified SQL grammar for embedding tests
 		// This avoids issues with parameter ordering in the full SQL grammar
