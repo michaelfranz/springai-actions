@@ -10,7 +10,7 @@ import org.javai.springai.actions.api.FromContext;
 
 class ActionArgumentBinder {
 
-	private final ObjectMapper mapper = new ObjectMapper();
+	private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
 	public DeserializationResult<?>[] bindArguments(Method method,
 													JsonNode argNode,

@@ -1,5 +1,6 @@
 package org.javai.springai.dsl.exec;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +19,8 @@ import org.javai.springai.dsl.plan.PlanStep;
  * Resolution issues are captured as ResolvedStep.ErrorStep entries.
  */
 public class DefaultPlanResolver implements PlanResolver {
+
+	private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
 	@Override
 	public ResolvedPlan resolve(Plan plan, ActionRegistry registry) {
@@ -132,52 +135,66 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String actionId, String paramName) {
+		Object normalized = normalizeRaw(raw);
 		try {
 			if (targetType == String.class) {
-				return ConversionOutcome.success(raw.toString());
+				return ConversionOutcome.success(normalized.toString());
 			}
 			if (targetType.isEnum()) {
-				return convertEnum(raw, targetType, paramName);
+				return convertEnum(normalized, targetType, paramName);
 			}
 			if (targetType == Integer.class || targetType == int.class) {
-				return ConversionOutcome.success(Integer.valueOf(raw.toString()));
+				return ConversionOutcome.success(Integer.valueOf(normalized.toString()));
 			}
 			if (targetType == Long.class || targetType == long.class) {
-				return ConversionOutcome.success(Long.valueOf(raw.toString()));
+				return ConversionOutcome.success(Long.valueOf(normalized.toString()));
 			}
 			if (targetType == Double.class || targetType == double.class) {
-				return ConversionOutcome.success(Double.valueOf(raw.toString()));
+				return ConversionOutcome.success(Double.valueOf(normalized.toString()));
 			}
 			if (targetType == Float.class || targetType == float.class) {
-				return ConversionOutcome.success(Float.valueOf(raw.toString()));
+				return ConversionOutcome.success(Float.valueOf(normalized.toString()));
 			}
 			if (targetType == Boolean.class || targetType == boolean.class) {
-				return ConversionOutcome.success(Boolean.valueOf(raw.toString()));
+				return ConversionOutcome.success(Boolean.valueOf(normalized.toString()));
 			}
+
+			// Fallback to JSON mapping for complex types and records
+			Object mapped = mapper.convertValue(normalized, targetType);
+			return ConversionOutcome.success(mapped);
 		}
 		catch (Exception ex) {
 			return ConversionOutcome.failure(
 					"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": "
 							+ ex.getMessage());
 		}
-
-		if (targetType.isInstance(raw)) {
-			return ConversionOutcome.success(raw);
-		}
-
-		// Fallback: no conversion path
-		return ConversionOutcome.failure(
-				"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": unsupported type or value");
 	}
 
-	@SuppressWarnings({ "rawtypes", "unchecked" })
+	private Object normalizeRaw(Object raw) {
+		if (raw instanceof String s && looksLikeJson(s)) {
+			try {
+				// Parse into a generic tree/map so Jackson can bind to the target type.
+				return mapper.readValue(s, Object.class);
+			}
+			catch (Exception ignored) {
+				// If parsing fails, fall through and let convertValue surface the error.
+			}
+		}
+		return raw;
+	}
+
+	private boolean looksLikeJson(String s) {
+		String trimmed = s.trim();
+		return (!trimmed.isEmpty()) && (trimmed.startsWith("{") || trimmed.startsWith("["));
+	}
+
 	private ConversionOutcome convertEnum(Object raw, Class<?> targetType, String paramName) {
 		if (raw == null) {
 			return ConversionOutcome.success(null);
 		}
 		String candidate = raw.toString();
 		for (Object constant : targetType.getEnumConstants()) {
-			if (constant.toString().equalsIgnoreCase(candidate) || ((Enum) constant).name().equalsIgnoreCase(candidate)) {
+			if (constant.toString().equalsIgnoreCase(candidate) || ((Enum<?>) constant).name().equalsIgnoreCase(candidate)) {
 				return ConversionOutcome.success(constant);
 			}
 		}

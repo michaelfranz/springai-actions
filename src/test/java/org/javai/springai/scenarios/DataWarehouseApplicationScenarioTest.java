@@ -1,6 +1,7 @@
 package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
@@ -69,7 +70,7 @@ public class DataWarehouseApplicationScenarioTest {
 	}
 
 	@Test
-	void selectWithNoDatabaseObjectConstraintsTest() {
+	void selectWithoutDatabaseObjectConstraintsTest() {
 		String request = "create a query to select and sum all displacement values from the elasticity table for bundle A12345";
 		ConversationTurnResult turn = conversationManager.converse(request, "select-session");
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
@@ -131,9 +132,38 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(dataWarehouseActions.executeAndDisplaySqlQueryInvoked()).isTrue();
 	}
 
+	@Test
+	void aggregateOrderValueWithJsonRecordParameters() {
+		String request = """
+				calculate the total order value for customer Mike between 2024-01-01 and 2024-01-31
+				""";
+
+		ConversationTurnResult turn = conversationManager.converse(request, "order-value-session");
+		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+
+		assertThat(resolvedPlan).isNotNull();
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(resolvedPlan.steps()).hasSize(1);
+		assertThat(resolvedPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+
+		PlanExecutionResult executed = executor.execute(resolvedPlan);
+
+		assertThat(executed.success()).isTrue();
+		assertThat(dataWarehouseActions.aggregateOrderValueInvoked()).isTrue();
+
+		OrderValueQuery query = dataWarehouseActions.lastOrderValueQuery();
+		assertThat(query).isNotNull();
+		assertThat(query.customer_name()).isEqualTo("Mike");
+		assertThat(query.period()).isNotNull();
+		assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
+		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
+	}
+
 	public static class DataWarehouseActions {
 		private final AtomicBoolean displaySqlQueryInvoked = new AtomicBoolean(false);
 		private final AtomicBoolean executeAndDisplaySqlQueryInvoked = new AtomicBoolean(false);
+		private final AtomicBoolean aggregateOrderValueInvoked = new AtomicBoolean(false);
+		private OrderValueQuery lastOrderValueQuery;
 
 		@Action(description = """
 				Use the user's input to derive an sql query.""")
@@ -151,6 +181,20 @@ public class DataWarehouseApplicationScenarioTest {
 			System.out.println(query.sqlString(Query.Dialect.ANSI));
 		}
 
+		@Action(description = """
+				Use the user's input to derive a JSON order value query with a customer_name and ISO-8601 period start/end.
+				Prefer JSON; do not emit an s-expression for this payload.""")
+		public void aggregateOrderValue(
+				@ActionParam(description = "Order value inputs as JSON with customer_name and nested period {start,end}")
+				OrderValueQuery orderValueQuery) {
+			aggregateOrderValueInvoked.set(true);
+			lastOrderValueQuery = orderValueQuery;
+			System.out.printf("Aggregating order value for %s from %s to %s%n",
+					orderValueQuery.customer_name(),
+					orderValueQuery.period().start(),
+					orderValueQuery.period().end());
+		}
+
 
 		boolean displaySqlQueryInvoked() {
 			return displaySqlQueryInvoked.get();
@@ -160,5 +204,19 @@ public class DataWarehouseApplicationScenarioTest {
 			return executeAndDisplaySqlQueryInvoked.get();
 		}
 
+		boolean aggregateOrderValueInvoked() {
+			return aggregateOrderValueInvoked.get();
+		}
+
+		OrderValueQuery lastOrderValueQuery() {
+			return lastOrderValueQuery;
+		}
+
+	}
+
+	public record OrderValueQuery(String customer_name, Period period) {
+	}
+
+	public record Period(LocalDate start, LocalDate end) {
 	}
 }

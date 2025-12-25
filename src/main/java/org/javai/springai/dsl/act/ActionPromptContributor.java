@@ -44,12 +44,15 @@ public final class ActionPromptContributor {
 				.collect(Collectors.toMap(ActionDescriptor::id, d -> d));
 
 		return switch (mode) {
-			case SXL -> emitSxl(selectedDescriptors);
+			case SXL -> emitSxl(selectedDescriptors, selectedBindings);
 			case JSON -> emitJson(selectedBindings, descriptorById);
 		};
 	}
 
-	private static String emitSxl(List<ActionDescriptor> specs) {
+	private static String emitSxl(List<ActionDescriptor> specs, List<ActionBinding> bindings) {
+		Map<String, String> schemaByActionId = bindings.stream()
+				.collect(Collectors.toMap(ActionBinding::id, ActionPromptContributor::generateSchemaSafely));
+
 		return specs.stream()
 				.map(descriptor -> {
 					String base = descriptor.toSxl();
@@ -65,6 +68,10 @@ public final class ActionPromptContributor {
 					}
 					sb.append("\nExample: ").append(example.trim());
 					sb.append("\nPending Example: ").append(pendingExample.trim());
+					String schema = schemaByActionId.get(descriptor.id());
+					if (schema != null && !schema.isBlank()) {
+						sb.append("\nJSON Schema: ").append(schema);
+					}
 					return sb.toString();
 				})
 				.collect(Collectors.joining("\n\n"));
@@ -128,18 +135,30 @@ public final class ActionPromptContributor {
 				node.set("parameters", params);
 			}
 			// Add Spring AI-style schema for the method input
-			Method method = binding.method();
-			if (method == null) {
-				throw new IllegalStateException("Action binding missing method for action id: " + binding.id());
-			}
-			String schemaJson = JsonSchemaGenerator.generateForMethodInput(method);
+			String schemaJson = generateSchemaSafely(binding);
 			try {
-				node.set("schema", mapper.readTree(schemaJson));
+				if (schemaJson != null) {
+					node.set("schema", mapper.readTree(schemaJson));
+				}
 			} catch (Exception e) {
 				throw new IllegalStateException("Failed to parse schema for action: " + binding.id(), e);
 			}
 			array.add(node);
 		}
 		return array.toPrettyString();
+	}
+
+	private static String generateSchemaSafely(ActionBinding binding) {
+		Method method = binding.method();
+		if (method == null) {
+			throw new IllegalStateException("Action binding missing method for action id: " + binding.id());
+		}
+		try {
+			return JsonSchemaGenerator.generateForMethodInput(method);
+		}
+		catch (Exception ex) {
+			// Propagate as runtime to surface prompt-generation failures early
+			throw new IllegalStateException("Failed to generate schema for action: " + binding.id(), ex);
+		}
 	}
 }

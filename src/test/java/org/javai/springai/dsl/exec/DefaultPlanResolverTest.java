@@ -1,6 +1,7 @@
 package org.javai.springai.dsl.exec;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
@@ -177,6 +178,28 @@ class DefaultPlanResolverTest {
 		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
 	}
 
+	@Test
+	void convertsMapToRecordWithNestedPeriod() {
+		Map<String, Object> period = Map.of("start", "2024-01-01", "end", "2024-01-31");
+		Map<String, Object> payload = Map.of("customer_name", "Mike", "period", period);
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "useOrderValue", new Object[] { payload }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(step.arguments()).hasSize(1);
+		assertThat(step.arguments().getFirst().value()).isInstanceOf(SampleActions.OrderValueQuery.class);
+
+		SampleActions.OrderValueQuery query = (SampleActions.OrderValueQuery) step.arguments().getFirst().value();
+		assertThat(query.customer_name()).isEqualTo("Mike");
+		assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
+		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
+	}
+
 	private static class SampleActions {
 		@Action(description = "Say hello")
 		public void greet(String name, Integer times) {
@@ -202,8 +225,18 @@ class DefaultPlanResolverTest {
 		public void usePriorityArray(Priority[] priorities) {
 		}
 
+		@Action(description = "Use order value record")
+		public void useOrderValue(OrderValueQuery orderValueQuery) {
+		}
+
 		enum Priority {
 			HIGH, MEDIUM, LOW
+		}
+
+		record OrderValueQuery(String customer_name, Period period) {
+		}
+
+		record Period(LocalDate start, LocalDate end) {
 		}
 	}
 }
