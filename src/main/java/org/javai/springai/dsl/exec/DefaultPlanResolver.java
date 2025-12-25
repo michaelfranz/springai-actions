@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.commons.lang3.stream.Streams;
 import org.javai.springai.dsl.act.ActionBinding;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
@@ -135,6 +136,9 @@ public class DefaultPlanResolver implements PlanResolver {
 			if (targetType == String.class) {
 				return ConversionOutcome.success(raw.toString());
 			}
+			if (targetType.isEnum()) {
+				return convertEnum(raw, targetType, paramName);
+			}
 			if (targetType == Integer.class || targetType == int.class) {
 				return ConversionOutcome.success(Integer.valueOf(raw.toString()));
 			}
@@ -161,8 +165,27 @@ public class DefaultPlanResolver implements PlanResolver {
 			return ConversionOutcome.success(raw);
 		}
 
-		// Fallback: no conversion performed
-		return ConversionOutcome.success(raw);
+		// Fallback: no conversion path
+		return ConversionOutcome.failure(
+				"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": unsupported type or value");
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	private ConversionOutcome convertEnum(Object raw, Class<?> targetType, String paramName) {
+		if (raw == null) {
+			return ConversionOutcome.success(null);
+		}
+		String candidate = raw.toString();
+		for (Object constant : targetType.getEnumConstants()) {
+			if (constant.toString().equalsIgnoreCase(candidate) || ((Enum) constant).name().equalsIgnoreCase(candidate)) {
+				return ConversionOutcome.success(constant);
+			}
+		}
+		String allowed = Arrays.stream(targetType.getEnumConstants())
+				.map(Object::toString)
+				.collect(Collectors.joining(", "));
+		return ConversionOutcome.failure(
+				"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": allowed values are " + allowed);
 	}
 
 	private Object[] toObjectArray(Object raw) {

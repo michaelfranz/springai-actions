@@ -15,14 +15,20 @@ class ActionSpecTest {
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				"SQL query payload",
-				"sxl-sql"
+				"sxl-sql",
+				new String[0],
+				"",
+				false
 		);
 		ActionParameterDescriptor plain = new ActionParameterDescriptor(
 				"note",
 				"java.lang.String",
 				"String",
 				"Additional note",
-				null
+				null,
+				new String[0],
+				"",
+				false
 		);
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
@@ -47,14 +53,20 @@ class ActionSpecTest {
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				"SQL query payload",
-				"sxl-sql"
+				"sxl-sql",
+				new String[0],
+				"",
+				false
 		);
 		ActionParameterDescriptor withoutDsl = new ActionParameterDescriptor(
 				"note",
 				"java.lang.String",
 				"String",
 				"Additional note",
-				null
+				null,
+				new String[0],
+				"",
+				false
 		);
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",

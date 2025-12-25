@@ -1,7 +1,6 @@
 package org.javai.springai.dsl.exec;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,7 +21,8 @@ class DefaultPlanExecutorTest {
 				"Say hello",
 				actions,
 				method,
-				List.of(new ActionParameterDescriptor("name", String.class.getName(), "string", "Name", null))
+				List.of(new ActionParameterDescriptor("name", String.class.getName(), "string", "Name", null,
+						new String[0], "", false))
 		);
 
 		ResolvedStep.ActionStep step = new ResolvedStep.ActionStep(binding,

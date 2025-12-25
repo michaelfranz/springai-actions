@@ -8,8 +8,20 @@ package org.javai.springai.dsl.act;
  * @param typeId short, LLM-facing type identifier (communicated to the LLM)
  * @param description human-friendly description
  * @param dslId optional DSL id if the parameter is supplied via an embedded DSL
+ * @param allowedValues optional list of whitelisted values (may be derived from enums)
+ * @param allowedRegex optional regex constraint
+ * @param caseInsensitive whether allowed value matching is case-insensitive
  */
-public record ActionParameterDescriptor(String name, String typeName, String typeId, String description, String dslId) {
+public record ActionParameterDescriptor(
+		String name,
+		String typeName,
+		String typeId,
+		String description,
+		String dslId,
+		String[] allowedValues,
+		String allowedRegex,
+		boolean caseInsensitive
+) {
 	public String toSxl() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("(").append(name).append(" ");

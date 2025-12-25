@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
@@ -53,12 +53,19 @@ public final class ActionPromptEmitter {
 		return specs.stream()
 				.map(descriptor -> {
 					String base = descriptor.toSxl();
+					String constraints = descriptor.renderConstraints();
 					String example = descriptor.example();
 					if (example == null || example.isBlank()) {
 						example = defaultExample(descriptor);
 					}
 					String pendingExample = defaultPendingExample(descriptor);
-					return base + "\nExample: " + example.trim() + "\nPending Example: " + pendingExample.trim();
+					StringBuilder sb = new StringBuilder(base);
+					if (!constraints.isBlank()) {
+						sb.append("\nConstraints:\n").append(constraints);
+					}
+					sb.append("\nExample: ").append(example.trim());
+					sb.append("\nPending Example: ").append(pendingExample.trim());
+					return sb.toString();
 				})
 				.collect(Collectors.joining("\n\n"));
 	}

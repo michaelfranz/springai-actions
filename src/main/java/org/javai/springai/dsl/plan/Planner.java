@@ -66,13 +66,6 @@ public final class Planner {
 	}
 
 	/**
-	 * Generate a plan for the given request with default options.
-	 */
-	public Plan planActions(@NonNull String requestText) {
-		return formulatePlan(Objects.requireNonNull(requestText), PlannerOptions.defaults()).plan();
-	}
-
-	/**
 	 * Convenience: plan, resolve and execute in one step using defaults.
 	 */
 	public PlanRunResult planResolveAndExecute(@NonNull String requestText) throws PlanExecutionException {

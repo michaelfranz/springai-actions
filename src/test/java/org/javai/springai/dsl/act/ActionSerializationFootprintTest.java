@@ -52,7 +52,7 @@ class ActionSerializationFootprintTest {
 
 	private static List<ActionDescriptor> simpleSpec() {
 		ActionParameterDescriptor p = new ActionParameterDescriptor(
-				"note", "java.lang.String", "String", "Note content", null);
+				"note", "java.lang.String", "String", "Note content", null, new String[0], "", false);
 		return List.of(new ActionDescriptor("addNote", "Add a note", List.of(p), null));
 	}
 
@@ -62,14 +62,20 @@ class ActionSerializationFootprintTest {
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				complexSql ? "Complex SQL payload" : "SQL payload",
-				"sxl-sql"
+				"sxl-sql",
+				new String[0],
+				"",
+				false
 		);
 		ActionParameterDescriptor plain = new ActionParameterDescriptor(
 				"note",
 				"java.lang.String",
 				"String",
 				"Additional note",
-				null
+				null,
+				new String[0],
+				"",
+				false
 		);
 		return List.of(new ActionDescriptor(
 				complexSql ? "fetchOrdersComplex" : "fetchOrders",
@@ -86,32 +92,39 @@ class ActionSerializationFootprintTest {
 				"org.javai.springai.dsl.sql.Query",
 				"sxl-sql:Query",
 				complexDesc,
-				"sxl-sql"
+				"sxl-sql",
+				new String[0],
+				"",
+				false
 		);
 	}
 
 	private static List<ActionDescriptor> multiEmbedSpec() {
 		ActionParameterDescriptor sql = new ActionParameterDescriptor(
-				"sqlQuery", "org.javai.springai.dsl.sql.Query", "sxl-sql:Query", "SQL payload", "sxl-sql");
+				"sqlQuery", "org.javai.springai.dsl.sql.Query", "sxl-sql:Query", "SQL payload", "sxl-sql",
+				new String[0], "", false);
 		ActionParameterDescriptor plan = new ActionParameterDescriptor(
-				"subPlan", "org.javai.springai.dsl.plan.Plan", "sxl-plan:Plan", "Nested plan", "sxl-plan");
+				"subPlan", "org.javai.springai.dsl.plan.Plan", "sxl-plan:Plan", "Nested plan", "sxl-plan",
+				new String[0], "", false);
 		ActionParameterDescriptor note = new ActionParameterDescriptor(
-				"note", "java.lang.String", "String", "Extra note", null);
+				"note", "java.lang.String", "String", "Extra note", null,
+				new String[0], "", false);
 		return List.of(new ActionDescriptor("multiEmbedAction", "Do multiple things", List.of(sql, plan, note), null));
 	}
 
 	private static List<ActionDescriptor> manyParamsSpec() {
 		List<ActionParameterDescriptor> params = Stream.of(
-						new ActionParameterDescriptor("p1", "java.lang.String", "String", "param1", null),
-						new ActionParameterDescriptor("p2", "java.lang.String", "String", "param2", null),
-						new ActionParameterDescriptor("p3", "java.lang.String", "String", "param3", null),
-						new ActionParameterDescriptor("p4", "java.lang.String", "String", "param4", null),
-						new ActionParameterDescriptor("p5", "java.lang.String", "String", "param5", null),
-						new ActionParameterDescriptor("p6", "java.lang.String", "String", "param6", null),
-						new ActionParameterDescriptor("p7", "java.lang.String", "String", "param7", null),
-						new ActionParameterDescriptor("p8", "java.lang.String", "String", "param8", null),
-						new ActionParameterDescriptor("p9", "java.lang.String", "String", "param9", null),
-						new ActionParameterDescriptor("payload", "org.javai.springai.dsl.sql.Query", "sxl-sql:Query", "SQL payload", "sxl-sql")
+						new ActionParameterDescriptor("p1", "java.lang.String", "String", "param1", null, new String[0], "", false),
+						new ActionParameterDescriptor("p2", "java.lang.String", "String", "param2", null, new String[0], "", false),
+						new ActionParameterDescriptor("p3", "java.lang.String", "String", "param3", null, new String[0], "", false),
+						new ActionParameterDescriptor("p4", "java.lang.String", "String", "param4", null, new String[0], "", false),
+						new ActionParameterDescriptor("p5", "java.lang.String", "String", "param5", null, new String[0], "", false),
+						new ActionParameterDescriptor("p6", "java.lang.String", "String", "param6", null, new String[0], "", false),
+						new ActionParameterDescriptor("p7", "java.lang.String", "String", "param7", null, new String[0], "", false),
+						new ActionParameterDescriptor("p8", "java.lang.String", "String", "param8", null, new String[0], "", false),
+						new ActionParameterDescriptor("p9", "java.lang.String", "String", "param9", null, new String[0], "", false),
+						new ActionParameterDescriptor("payload", "org.javai.springai.dsl.sql.Query", "sxl-sql:Query", "SQL payload", "sxl-sql",
+								new String[0], "", false)
 				)
 				.toList();
 		return List.of(new ActionDescriptor("manyParams", "Action with many params", params, null));

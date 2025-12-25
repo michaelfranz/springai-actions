@@ -59,11 +59,66 @@ class PlanVerifierTest {
 		assertThat(error.assistantMessage()).contains("Arity mismatch");
 	}
 
+	@Test
+	void convertsDisallowedValueToError() {
+		ActionRegistry constrainedRegistry = new ActionRegistry();
+		constrainedRegistry.registerActions(new ConstrainedActions());
+		PlanVerifier constrainedVerifier = new PlanVerifier(constrainedRegistry);
+
+		Plan plan = new Plan("", List.of(
+				new PlanStep.ActionStep("", "constrainedAction", new Object[] { "BLUE", "A123" })
+		));
+
+		Plan verified = constrainedVerifier.verify(plan);
+		assertThat(verified.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) verified.planSteps().getFirst();
+		assertThat(error.assistantMessage()).contains("allowed value");
+	}
+
+	@Test
+	void convertsRegexMismatchToError() {
+		ActionRegistry constrainedRegistry = new ActionRegistry();
+		constrainedRegistry.registerActions(new ConstrainedActions());
+		PlanVerifier constrainedVerifier = new PlanVerifier(constrainedRegistry);
+
+		Plan plan = new Plan("", List.of(
+				new PlanStep.ActionStep("", "constrainedAction", new Object[] { "RED", "B999" })
+		));
+
+		Plan verified = constrainedVerifier.verify(plan);
+		assertThat(verified.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) verified.planSteps().getFirst();
+		assertThat(error.assistantMessage()).contains("regex");
+	}
+
+	@Test
+	void passesAllowedValuesAndRegex() {
+		ActionRegistry constrainedRegistry = new ActionRegistry();
+		constrainedRegistry.registerActions(new ConstrainedActions());
+		PlanVerifier constrainedVerifier = new PlanVerifier(constrainedRegistry);
+
+		Plan plan = new Plan("", List.of(
+				new PlanStep.ActionStep("", "constrainedAction", new Object[] { "RED", "A123" })
+		));
+
+		Plan verified = constrainedVerifier.verify(plan);
+		assertThat(verified.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
+	}
+
 	private static class DemoActions {
 		@Action
 		public void demoAction(
 				@ActionParam String first,
 				@ActionParam String second) {
+			// no-op
+		}
+	}
+
+	private static class ConstrainedActions {
+		@Action
+		public void constrainedAction(
+				@ActionParam(allowedValues = { "RED", "GREEN" }) String color,
+				@ActionParam(allowedRegex = "^A[0-9]{3}$") String code) {
 			// no-op
 		}
 	}

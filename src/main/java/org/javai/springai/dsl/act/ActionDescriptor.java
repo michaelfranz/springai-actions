@@ -32,5 +32,31 @@ public record ActionDescriptor(
 		sxlExpression.append("))");
 		return sxlExpression.toString();
 	}
+
+	public String renderConstraints() {
+		StringBuilder sb = new StringBuilder();
+		for (ActionParameterDescriptor param : actionParameterSpecs) {
+			boolean hasAllowed = param.allowedValues() != null && param.allowedValues().length > 0;
+			boolean hasRegex = param.allowedRegex() != null && !param.allowedRegex().isBlank();
+			if (!hasAllowed && !hasRegex) {
+				continue;
+			}
+			sb.append("Param ").append(param.name()).append(": ");
+			if (hasAllowed) {
+				sb.append("allowed values ").append(String.join(", ", param.allowedValues()));
+				if (param.caseInsensitive()) {
+					sb.append(" (case-insensitive)");
+				}
+				if (hasRegex) {
+					sb.append("; ");
+				}
+			}
+			if (hasRegex) {
+				sb.append("regex ").append(param.allowedRegex());
+			}
+			sb.append("\n");
+		}
+		return sb.toString().trim();
+	}
 }
 

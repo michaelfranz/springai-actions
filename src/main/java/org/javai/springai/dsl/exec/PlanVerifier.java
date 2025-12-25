@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionDescriptor;
+import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanStep;
@@ -58,7 +59,52 @@ public final class PlanVerifier {
 		if (expected != actual) {
 			return new PlanStep.ErrorStep("Arity mismatch for action " + actionId + ": expected " + expected + " but got " + actual);
 		}
+		// Validate parameter constraints (allowed values / regex)
+		for (int i = 0; i < expected; i++) {
+			ActionParameterDescriptor paramDesc = descriptor.actionParameterSpecs().get(i);
+			Object arg = action.actionArguments()[i];
+			String error = validateConstraint(paramDesc, arg);
+			if (error != null) {
+				return new PlanStep.ErrorStep(error);
+			}
+		}
 		return action;
+	}
+
+	private String validateConstraint(ActionParameterDescriptor paramDesc, Object arg) {
+		if (arg == null) {
+			return null; // Let downstream handle nulls; constraints are about value presence/matching
+		}
+		String value = arg.toString();
+		if (paramDesc.allowedValues() != null && paramDesc.allowedValues().length > 0) {
+			boolean match = false;
+			for (String allowed : paramDesc.allowedValues()) {
+				if (paramDesc.caseInsensitive()) {
+					if (value.equalsIgnoreCase(allowed)) {
+						match = true;
+						break;
+					}
+				}
+				else if (value.equals(allowed)) {
+					match = true;
+					break;
+				}
+			}
+			if (!match) {
+				return "Value for parameter '" + paramDesc.name() + "' must be one of the allowed values: "
+						+ String.join(", ", paramDesc.allowedValues());
+			}
+		}
+		if (paramDesc.allowedRegex() != null && !paramDesc.allowedRegex().isBlank()) {
+			String pattern = paramDesc.allowedRegex();
+			boolean matches = paramDesc.caseInsensitive()
+					? value.toLowerCase().matches(pattern.toLowerCase())
+					: value.matches(pattern);
+			if (!matches) {
+				return "Value for parameter '" + paramDesc.name() + "' must match regex: " + pattern;
+			}
+		}
+		return null;
 	}
 }
 

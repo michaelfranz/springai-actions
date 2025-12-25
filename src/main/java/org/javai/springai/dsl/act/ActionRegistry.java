@@ -3,6 +3,7 @@ package org.javai.springai.dsl.act;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,13 +42,34 @@ public final class ActionRegistry {
 	private static ActionParameterDescriptor createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
 		String dslId = TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null);
+		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
+		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
+		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
 		return new ActionParameterDescriptor(
 				parameter.getName(),
 				parameter.getType().getName(),
 				deriveShortTypeId(parameter.getType(), dslId),
 				createActionParameterDescription(annotation, parameter.getName()),
-				dslId
+				dslId,
+				derivedAllowedValues,
+				allowedRegex,
+				caseInsensitive
 		);
+	}
+
+	private static String[] deriveAllowedValues(Parameter parameter, ActionParam annotation) {
+		// Explicit allowedValues wins
+		if (annotation != null && annotation.allowedValues().length > 0) {
+			return annotation.allowedValues();
+		}
+		Class<?> type = parameter.getType();
+		if (type.isEnum()) {
+			Object[] constants = type.getEnumConstants();
+			if (constants != null && constants.length > 0) {
+				return Arrays.stream(constants).map(Object::toString).toArray(String[]::new);
+			}
+		}
+		return new String[0];
 	}
 
 	private static String createActionParameterDescription(ActionParam actionParam, String name) {

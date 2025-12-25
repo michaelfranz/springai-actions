@@ -16,7 +16,14 @@ public record ResolvedPlan(List<ResolvedStep> steps) {
 			return PlanStatus.ERROR;
 		}
 		boolean hasError = steps.stream().anyMatch(s -> s instanceof ResolvedStep.ErrorStep);
-		return hasError ? PlanStatus.ERROR : PlanStatus.READY;
+		if (hasError) {
+			return PlanStatus.ERROR;
+		}
+		boolean hasPending = steps.stream().anyMatch(s -> s instanceof ResolvedStep.PendingActionStep);
+		if (hasPending) {
+			return PlanStatus.PENDING;
+		}
+		return PlanStatus.READY;
 	}
 }
 

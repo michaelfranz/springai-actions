@@ -118,7 +118,63 @@ class DefaultPlanResolverTest {
 		);
 
 		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.PENDING);
+		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.PendingActionStep.class);
+	}
+
+	@Test
+	void convertsStringToNumericTypes() {
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "useNumbers", new Object[] { "3.14", "42" }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(step.arguments().get(0).value()).isInstanceOf(Double.class).isEqualTo(3.14d);
+		assertThat(step.arguments().get(1).value()).isInstanceOf(Integer.class).isEqualTo(42);
+	}
+
+	@Test
+	void convertsStringToEnum() {
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "usePriority", new Object[] { "HIGH" }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(step.arguments().getFirst().value()).isInstanceOf(SampleActions.Priority.class)
+				.isEqualTo(SampleActions.Priority.HIGH);
+	}
+
+	@Test
+	void convertsStringsToEnumArray() {
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "usePriorityArray", new Object[] { List.of("LOW", "MEDIUM") }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		Object value = step.arguments().getFirst().value();
+		assertThat(value).isInstanceOf(SampleActions.Priority[].class);
+		assertThat((SampleActions.Priority[]) value).containsExactly(SampleActions.Priority.LOW, SampleActions.Priority.MEDIUM);
+	}
+
+	@Test
+	void failsOnInvalidEnumValue() {
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "usePriority", new Object[] { "BLUE" }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
 		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
+		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
 	}
 
 	private static class SampleActions {
@@ -132,6 +188,22 @@ class DefaultPlanResolverTest {
 
 		@Action(description = "Handle bundle array")
 		public void handleArray(String[] bundleIds) {
+		}
+
+		@Action(description = "Use numeric types")
+		public void useNumbers(double amount, int count) {
+		}
+
+		@Action(description = "Use enum type")
+		public void usePriority(Priority priority) {
+		}
+
+		@Action(description = "Use enum array")
+		public void usePriorityArray(Priority[] priorities) {
+		}
+
+		enum Priority {
+			HIGH, MEDIUM, LOW
 		}
 	}
 }

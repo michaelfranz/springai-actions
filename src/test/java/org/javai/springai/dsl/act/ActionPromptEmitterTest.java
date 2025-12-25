@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.Locale;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
@@ -58,6 +59,21 @@ class ActionPromptEmitterTest {
 		assertThat(prompt).contains("(PA bundleIds \"<bundleIds item1>\" \"<bundleIds item2>\")");
 	}
 
+	@Test
+	void emitsSxlPromptWithAllowedValuesAndRegexConstraints() {
+		ActionRegistry registry = new ActionRegistry();
+		registry.registerActions(new ConstrainedActions());
+
+		String prompt = ActionPromptEmitter.emit(registry, ActionPromptEmitter.Mode.SXL,
+				spec -> spec.id().equals("constrainedAction"));
+
+		assertThat(prompt).contains("constrainedAction");
+		// Allowed values for enum parameter should be surfaced
+		assertThat(prompt).contains("allowed values").contains("HIGH").contains("MEDIUM").contains("LOW");
+		// Regex constraint should be surfaced
+		assertThat(prompt).contains("regex").contains("^A[0-9]{3}$");
+	}
+
 	private static class SampleActions {
 		@Action(description = "Run a query")
 		public void runQuery(Query query, @ActionParam(description = "note to include") String note) {
@@ -73,6 +89,25 @@ class ActionPromptEmitterTest {
 	private static class ListActions {
 		@Action(description = "Process bundle ids")
 		public void processBundleIds(List<String> bundleIds) {
+		}
+	}
+
+	private static class ConstrainedActions {
+		@Action(description = "Constrained action")
+		public void constrainedAction(
+				@ActionParam(description = "priority", allowedValues = { "HIGH", "MEDIUM", "LOW" }) Priority priority,
+				@ActionParam(description = "code", allowedRegex = "^A[0-9]{3}$") String code,
+				@ActionParam(description = "note") String note
+		) {
+		}
+	}
+
+	private enum Priority {
+		HIGH, MEDIUM, LOW;
+
+		@Override
+		public String toString() {
+			return name().toUpperCase(Locale.ROOT);
 		}
 	}
 }
