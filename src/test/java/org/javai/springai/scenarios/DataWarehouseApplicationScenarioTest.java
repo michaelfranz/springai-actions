@@ -16,6 +16,8 @@ import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.Planner;
+import org.javai.springai.dsl.prompt.InMemorySqlCatalog;
+import org.javai.springai.dsl.prompt.SqlCatalogContextContributor;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,7 @@ public class DataWarehouseApplicationScenarioTest {
 	DefaultPlanExecutor executor;
 	ConversationManager conversationManager;
 	DataWarehouseActions dataWarehouseActions;
+	ChatClient chatClient;
 
 
 	@BeforeEach
@@ -50,7 +53,7 @@ public class DataWarehouseApplicationScenarioTest {
 				.temperature(0.1)
 				.topP(1.0)
 				.build();
-		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
+		chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
 				.defaultOptions(Objects.requireNonNull(options))
 				.build();
 
@@ -84,8 +87,38 @@ public class DataWarehouseApplicationScenarioTest {
 
 	@Test
 	void selectWithDatabaseObjectConstraintsTest() {
-		String request = "execute a select and sum all displacement values from the elasticity table for bundle A12345 and display the result";
-		ConversationTurnResult turn = conversationManager.converse(request, "constrained-select-session");
+		InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+				.addTable("fct_orders", "Fact table for orders", "fact")
+				.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
+						new String[] { "fk:dim_customer.id" }, null)
+				.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
+						new String[] { "fk:dim_date.id" }, null)
+				.addColumn("fct_orders", "order_value", "Order amount", "double",
+						new String[] { "measure" }, null)
+				.addTable("dim_customer", "Customer dimension", "dimension")
+				.addColumn("dim_customer", "id", "PK", "string",
+						new String[] { "pk" }, new String[] { "unique" })
+				.addColumn("dim_customer", "customer_name", "Customer name", "string",
+						new String[] { "attribute" }, null)
+				.addTable("dim_date", "Date dimension", "dimension")
+				.addColumn("dim_date", "id", "PK", "string",
+						new String[] { "pk" }, new String[] { "unique" })
+				.addColumn("dim_date", "date", "Calendar date", "date",
+						new String[] { "attribute" }, null);
+
+		Planner catalogAwarePlanner = Planner.builder()
+				.withChatClient(chatClient)
+				.addActions(dataWarehouseActions)
+				.addDslContextContributor(new SqlCatalogContextContributor(catalog))
+				.addDslContext("sxl-sql", catalog)
+				.build();
+		ConversationManager catalogConversationManager = new ConversationManager(
+				catalogAwarePlanner,
+				resolver,
+				new InMemoryConversationStateStore());
+
+		String request = "execute a select and sum all orders' values for the customer who's name is 'Mike' in the last 30 days";
+		ConversationTurnResult turn = catalogConversationManager.converse(request, "constrained-select-session");
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
 		assertThat(resolvedPlan).isNotNull();
 		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
