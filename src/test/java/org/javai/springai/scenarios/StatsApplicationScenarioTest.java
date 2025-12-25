@@ -157,7 +157,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 		ConversationTurnResult turn = conversationManager.converse(request, "pending-session");
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
 		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(turn.pendingParams()).isNotEmpty();
 		assertThat(turn.pendingParams().stream().map(PlanStep.PendingParam::name))
 				.anyMatch(name -> name.equals("bundleId") || name.equals("domainEntity"));
@@ -172,7 +172,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				.converse("export a control chart to excel for displacement values", sessionId);
 		ResolvedPlan firstResolved = firstTurn.resolvedPlan();
 		assertThat(firstResolved).isNotNull();
-		assertThat(firstResolved.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(firstResolved.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(firstTurn.pendingParams()).isNotEmpty();
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
@@ -219,7 +219,7 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				control chart. Don't try to create or compute a control chart. Just provide the parameters.""")
 		public void displayControlChart(
 				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
-				@ActionParam(description = "Bundle ID") String bundleId) {
+				@ActionParam(description = "Bundle ID", allowedRegex = "[A-Z0-9]+") String bundleId) {
 			displayControlChartInvoked.set(true);
 		}
 
@@ -227,8 +227,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				Use the user's input to derive the parameters necessary for the application to compute and export a
 				control chart to Excel. Don't try to create or compute a control chart. Just provide the parameters.""")
 		public void exportControlChartToExcel(
-				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
-				@ActionParam(description = "Bundle ID") String bundleId) {
+				@ActionParam(description = "The measurement concept to be charted", allowedValues = {"force", "displacement"}) String measurementConcept,
+				@ActionParam(description = "Bundle ID", allowedRegex = "[A-Z0-9]+") String bundleId) {
 			exportControlChartToExcelInvoked.set(true);
 		}
 
@@ -236,8 +236,8 @@ public class StatsApplicationScenarioTest implements ScenarioPlanSupplier {
 				Use the user's input to derive the parameters necessary for the application to evaluate SPC readiness.
 				 Don't try to compute SPC readiness. Just provide the parameters.""")
 		public void evaluateSpcReadiness(
-				@ActionParam(description = "The measurement concept to be charted e.g. force, displacement") String measurementConcept,
-				@ActionParam(description = "Bundle ID") String bundleId) {
+				@ActionParam(description = "The measurement concept to be charted", allowedValues = {"force", "displacement"}) String measurementConcept,
+				@ActionParam(description = "Bundle ID", allowedRegex = "[A-Z0-9]+") String bundleId) {
 			evaluateSpcReadinessInvoked.set(true);
 		}
 
