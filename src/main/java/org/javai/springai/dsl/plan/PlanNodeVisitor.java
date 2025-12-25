@@ -101,18 +101,27 @@ public class PlanNodeVisitor implements SxlNodeVisitor<Plan> {
 				String paramName = extractIdentifier(item.args().getFirst(), "PA name must be an identifier");
 				// capture name->value map for provided params
 				List<SxlNode> valueNodes = item.args().subList(1, item.args().size());
-				if (valueNodes.stream().anyMatch(v -> !v.isLiteral())) {
-					throw new IllegalStateException("PA values must be literals");
+				List<Object> resolvedValues = new ArrayList<>();
+				for (SxlNode valueNode : valueNodes) {
+					if (valueNode.isLiteral()) {
+						resolvedValues.add(valueNode.literalValue());
+						continue;
+					}
+					if ("EMBED".equals(valueNode.symbol())) {
+						Object[] embedded = EmbedResolverUtil.resolveEmbeddedAsArray(valueNode, embeddedResolver);
+						for (Object emb : embedded) {
+							resolvedValues.add(emb);
+						}
+						continue;
+					}
+					throw new IllegalStateException("PA values must be literals or EMBED nodes");
 				}
-				if (valueNodes.size() == 1) {
-					String literal = valueNodes.getFirst().literalValue();
-					providedParams.put(paramName, literal);
+
+				if (resolvedValues.size() == 1) {
+					providedParams.put(paramName, resolvedValues.getFirst());
 				}
 				else {
-					List<String> values = valueNodes.stream()
-							.map(SxlNode::literalValue)
-							.toList();
-					providedParams.put(paramName, values);
+					providedParams.put(paramName, List.copyOf(resolvedValues));
 				}
 				continue;
 			}

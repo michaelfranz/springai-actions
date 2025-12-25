@@ -19,24 +19,28 @@ import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
+import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
 import org.javai.springai.dsl.conversation.ConversationState;
-import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.PlanVerifier;
 import org.javai.springai.dsl.exec.ResolvedArgument;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
-import org.javai.springai.dsl.prompt.DslGrammarSource;
 import org.javai.springai.dsl.prompt.DslContextContributor;
-import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
+import org.javai.springai.dsl.prompt.DslGrammarSource;
 import org.javai.springai.dsl.prompt.DslGuidanceProvider;
+import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
+import org.javai.springai.sxl.DefaultValidatorRegistry;
+import org.javai.springai.sxl.DslParsingStrategy;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
 import org.javai.springai.sxl.SxlTokenizer;
+import org.javai.springai.sxl.UniversalParsingStrategy;
+import org.javai.springai.sxl.ValidatorRegistry;
 import org.javai.springai.sxl.grammar.SxlGrammar;
 import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
 import org.slf4j.Logger;
@@ -58,6 +62,7 @@ public final class Planner {
 	private final Map<String, Object> dslContext;
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
+	private final ValidatorRegistry validatorRegistry;
 
 	private Planner(Builder builder) {
 		this.chatClient = builder.chatClient;
@@ -68,6 +73,7 @@ public final class Planner {
 		this.dslContext = Map.copyOf(builder.dslContext);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
+		this.validatorRegistry = buildValidatorRegistry(this.grammars);
 	}
 
 	public static Builder builder() {
@@ -283,13 +289,29 @@ public final class Planner {
 				.findFirst()
 				.orElse(null);
 
-		SxlParser parser = planGrammar != null ? new SxlParser(tokens, planGrammar) : new SxlParser(tokens);
+		var strategy = planGrammar != null
+				? new DslParsingStrategy(planGrammar, this.validatorRegistry)
+				: new UniversalParsingStrategy();
+		SxlParser parser = new SxlParser(tokens, strategy);
 		List<SxlNode> nodes = parser.parse();
 		if (nodes.isEmpty()) {
 			throw new IllegalStateException("LLM returned no parseable plan nodes");
 		}
 		SxlNode planNode = nodes.getFirst();
 		return Plan.of(planNode);
+	}
+
+	private static ValidatorRegistry buildValidatorRegistry(List<SxlGrammar> grammars) {
+		DefaultValidatorRegistry registry = new DefaultValidatorRegistry();
+		if (grammars != null) {
+			for (SxlGrammar grammar : grammars) {
+				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null
+						&& !grammar.dsl().id().isBlank()) {
+					registry.addGrammar(grammar.dsl().id(), grammar);
+				}
+			}
+		}
+		return registry;
 	}
 
 	private ExecutablePlan toExecutablePlan(ResolvedPlan resolvedPlan) {

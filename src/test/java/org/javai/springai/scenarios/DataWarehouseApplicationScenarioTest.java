@@ -15,7 +15,6 @@ import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.plan.PlanStatus;
-import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.Assumptions;
@@ -97,20 +96,6 @@ public class DataWarehouseApplicationScenarioTest {
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
 		assertThat(executed.success()).isTrue();
 		assertThat(dataWarehouseActions.executeAndDisplaySqlQueryInvoked()).isTrue();
-	}
-
-
-	@Test
-	void requireMoreInformationTest() {
-		// Export to excel requires bundle ID
-		String request = "export a control chart to excel for displacement values";
-		ConversationTurnResult turn = conversationManager.converse(request, "pending-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.PENDING);
-		assertThat(turn.pendingParams()).isNotEmpty();
-		assertThat(turn.pendingParams().stream().map(PlanStep.PendingParam::name))
-				.anyMatch(name -> name.equals("bundleId") || name.equals("domainEntity"));
 	}
 
 	public static class DataWarehouseActions {

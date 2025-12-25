@@ -192,6 +192,24 @@ class PlanNodeVisitorTest {
 	}
 
 	@Test
+	void generatePlanWithEmbedParameterValue() {
+		String planText = """
+				(P "Embed param plan"
+				  (PS displaySqlQuery
+				    (PA query (EMBED sxl-sql (Q (S 1))))
+				  )
+				)
+				""";
+		SxlNode planNode = parse(planText);
+		Plan plan = PlanNodeVisitor.generate(planNode);
+
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep.ActionStep step = (PlanStep.ActionStep) plan.planSteps().getFirst();
+		assertThat(step.actionArguments()).hasSize(1);
+		assertThat(step.actionArguments()[0]).isInstanceOf(Query.class);
+	}
+
+	@Test
 	void generatePlanWithPendingParameters() {
 		String planText = """
 				(P "Export requires missing info"
