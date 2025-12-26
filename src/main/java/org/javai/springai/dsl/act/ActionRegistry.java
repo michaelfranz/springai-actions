@@ -1,6 +1,5 @@
 package org.javai.springai.dsl.act;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
@@ -11,7 +10,6 @@ import java.util.Map;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.bind.TypeFactoryRegistry;
-import org.springframework.ai.tool.annotation.Tool;
 
 public final class ActionRegistry {
 
@@ -20,14 +18,11 @@ public final class ActionRegistry {
 	public void registerActions(Object bean) {
 		for (Method method : bean.getClass().getMethods()) {
 			Action action = method.getAnnotation(Action.class);
-			Tool tool = method.getAnnotation(Tool.class);
-			if (action == null && tool == null) continue;
+			if (action == null) continue;
 
-			String id = createActionId(method, tool);
+			String id = createActionId(bean, method);
 			List<ActionParameterDescriptor> actionParameterDefinitions = createActionParameterDefinitions(bean, method);
-			String description = action != null
-					? createActionDescription(action, method.getName())
-					: createToolDescription(tool, method.getName());
+			String description = createActionDescription(action, method.getName());
 
 			if (entries.containsKey(id)) {
 				throw new IllegalStateException("Duplicate action definition: " + id);
@@ -99,13 +94,6 @@ public final class ActionRegistry {
 				: "Action to " + nameBreakdown(name);
 	}
 
-	private static String createToolDescription(Tool tool, String name) {
-		if (tool != null && tool.description() != null && !tool.description().isBlank()) {
-			return tool.description();
-		}
-		return "Tool to " + nameBreakdown(name);
-	}
-
 	private static String nameBreakdown(String name) {
 		// Split method name based on camelCase / PascalCase / acronym boundaries
 		// e.g. "getTableName" -> "get table name", "HTTPServerURL" -> "http server url"
@@ -124,23 +112,7 @@ public final class ActionRegistry {
 		return withAcronymSplit.toLowerCase();
 	}
 
-	private static String createActionId(Method method, Tool tool) {
-		if (tool != null && tool.name() != null && !tool.name().isBlank()) {
-			return tool.name();
-		}
-		// Some Spring AI versions also offer value(); prefer it if present
-		if (tool != null) {
-			try {
-				Method valueMethod = tool.annotationType().getMethod("value");
-				Object value = valueMethod.invoke(tool);
-				if (value instanceof String s && !s.isBlank()) {
-					return s;
-				}
-			}
-			catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
-				// fall back to method name
-			}
-		}
+	private static String createActionId(Object bean, Method method) {
 		return method.getName();
 	}
 
