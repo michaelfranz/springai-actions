@@ -58,7 +58,7 @@ public class StatsApplicationScenarioTest {
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
-				.addActions(statsActions)
+				.actions(statsActions)
 				.build();
 		resolver = new DefaultPlanResolver();
 		executor = new DefaultPlanExecutor();

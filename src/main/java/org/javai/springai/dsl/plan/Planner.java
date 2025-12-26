@@ -58,6 +58,7 @@ public final class Planner {
 	private final List<SxlGrammar> grammars;
 	private final List<String> promptContributions;
 	private final CollectedActions collectedActions;
+	private final Object[] toolSources;
 	private final List<DslContextContributor> dslContributors;
 	private final Map<String, Object> dslContext;
 	private final boolean capturePromptByDefault;
@@ -69,6 +70,7 @@ public final class Planner {
 		this.grammars = List.copyOf(builder.grammars);
 		this.promptContributions = List.copyOf(builder.promptContributions);
 		this.collectedActions = collectActions(builder.actionSources);
+		this.toolSources = builder.toolSources;
 		this.dslContributors = List.copyOf(builder.dslContributors);
 		this.dslContext = Map.copyOf(builder.dslContext);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
@@ -260,6 +262,7 @@ public final class Planner {
 		Objects.requireNonNull(preview, "preview must not be null");
 		Objects.requireNonNull(chatClient, "chatClient must not be null when invoking model");
 		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
+		request.tools(toolSources);
 		preview.systemMessages().forEach(request::system);
 		request.user(Objects.requireNonNull(preview.renderedUser()));
 		return request.call().content();
@@ -346,6 +349,7 @@ public final class Planner {
 		private final List<SxlGrammar> grammars = new ArrayList<>();
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
+		private Object[] toolSources;
 		private final List<DslContextContributor> dslContributors = new ArrayList<>();
 		private final Map<String, Object> dslContext = new HashMap<>();
 		private boolean capturePromptByDefault;
@@ -378,7 +382,7 @@ public final class Planner {
 			return this;
 		}
 
-		public Builder addActions(Object... actions) {
+		public Builder actions(Object... actions) {
 			if (actions != null) {
 				for (Object action : actions) {
 					if (action != null) {
@@ -386,6 +390,11 @@ public final class Planner {
 					}
 				}
 			}
+			return this;
+		}
+
+		public Builder tools(Object... tools) {
+			toolSources = tools;
 			return this;
 		}
 

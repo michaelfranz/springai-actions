@@ -29,7 +29,7 @@ class PlannerTest {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
-				.addActions(new DemoActions())
+				.actions(new DemoActions())
 				.enablePromptCapture()
 				.build();
 
@@ -49,7 +49,7 @@ class PlannerTest {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
-				.addActions(new DemoActions())
+				.actions(new DemoActions())
 				.enablePromptCapture()
 				.build();
 
@@ -75,7 +75,7 @@ class PlannerTest {
 	void dryRunReturnsEmptyPlanAndPreview() {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
-				.addActions(new DemoActions())
+				.actions(new DemoActions())
 				.build();
 
 		PlanFormulationResult result = planner.formulatePlan("dry run request", PlannerOptions.dryRunOptions());
@@ -98,7 +98,7 @@ class PlannerTest {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
-				.addActions(new DemoActions())
+				.actions(new DemoActions())
 				.build();
 
 		PlanFormulationResult result = planner.formulatePlan("irrelevant input", PlannerOptions.defaults());
@@ -133,7 +133,7 @@ class PlannerTest {
 
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
-				.addActions(new QueryActions())
+				.actions(new QueryActions())
 				.addDslContextContributor(new SqlCatalogContextContributor(catalog))
 				.addDslContext("sxl-sql", catalog)
 				.enablePromptCapture()

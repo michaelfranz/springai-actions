@@ -16,7 +16,7 @@ class PromptPreviewCaptureTest {
 	@Test
 	void capturePromptPreviewForAggregateOrderValue() {
 		Planner planner = Planner.builder()
-				.addActions(new DataWarehouseApplicationScenarioTest.DataWarehouseActions())
+				.actions(new DataWarehouseApplicationScenarioTest.DataWarehouseActions())
 				.build();
 
 		PromptPreview preview = planner.preview("calculate the total order value for Mike in January 2024");

@@ -62,7 +62,7 @@ public class DataWarehouseApplicationScenarioTest {
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
-				.addActions(dataWarehouseActions)
+				.actions(dataWarehouseActions)
 				.build();
 		resolver = new DefaultPlanResolver();
 		executor = new DefaultPlanExecutor();
@@ -109,7 +109,7 @@ public class DataWarehouseApplicationScenarioTest {
 
 		Planner catalogAwarePlanner = Planner.builder()
 				.withChatClient(chatClient)
-				.addActions(dataWarehouseActions)
+				.actions(dataWarehouseActions)
 				.addDslContextContributor(new SqlCatalogContextContributor(catalog))
 				.addDslContext("sxl-sql", catalog)
 				.build();

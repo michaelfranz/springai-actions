@@ -17,7 +17,7 @@ class PlannerMetaInfGrammarBootstrapTest {
 		TypeFactoryRegistry.register("sxl-test", TestDslType.class, new TestDslTypeFactory());
 
 		Planner planner = Planner.builder()
-				.addActions(new TestActions())
+				.actions(new TestActions())
 				.build();
 
 		PromptPreview preview = planner.preview("hello");
