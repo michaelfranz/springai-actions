@@ -12,14 +12,15 @@ public record ActionEntry(
 		List<ActionParameterDescriptor> parameters,
 		String example,
 		Object bean,
-		Method method
+		Method method,
+		String contextKey
 ) {
 	public ActionDescriptor descriptor() {
 		return new ActionDescriptor(id, description, parameters, example);
 	}
 
 	public ActionBinding binding() {
-		return new ActionBinding(id, description, bean, method, parameters);
+		return new ActionBinding(id, description, bean, method, parameters, contextKey);
 	}
 }
 

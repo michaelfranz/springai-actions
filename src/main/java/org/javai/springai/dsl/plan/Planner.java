@@ -25,7 +25,6 @@ import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.PlanVerifier;
-import org.javai.springai.dsl.exec.ResolvedArgument;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.prompt.DslContextContributor;
@@ -70,7 +69,7 @@ public final class Planner {
 		this.grammars = List.copyOf(builder.grammars);
 		this.promptContributions = List.copyOf(builder.promptContributions);
 		this.collectedActions = collectActions(builder.actionSources);
-		this.toolSources = builder.toolSources;
+		this.toolSources = builder.toolSources != null ? builder.toolSources : new Object[0];
 		this.dslContributors = List.copyOf(builder.dslContributors);
 		this.dslContext = Map.copyOf(builder.dslContext);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
@@ -258,6 +257,7 @@ public final class Planner {
 		return new PlanFormulationResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
 	}
 
+	@SuppressWarnings("null")
 	private String invokeModel(PromptPreview preview) {
 		Objects.requireNonNull(preview, "preview must not be null");
 		Objects.requireNonNull(chatClient, "chatClient must not be null when invoking model");
@@ -330,8 +330,23 @@ public final class Planner {
 	private ExecutableAction toExecutableAction(ResolvedStep.ActionStep actionStep) {
 		return ctx -> {
 			try {
-				Object[] args = actionStep.arguments().stream().map(ResolvedArgument::value).toArray();
-				Object result = actionStep.binding().method().invoke(actionStep.binding().bean(), args);
+				var binding = actionStep.binding();
+				var method = binding.method();
+				var params = method.getParameters();
+				Object[] args = new Object[params.length];
+				int argIdx = 0;
+				for (int i = 0; i < params.length; i++) {
+					if (params[i].getType() == ActionContext.class) {
+						args[i] = ctx;
+					}
+					else {
+						args[i] = actionStep.arguments().get(argIdx++).value();
+					}
+				}
+				Object result = method.invoke(binding.bean(), args);
+				if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
+					ctx.put(binding.contextKey(), result);
+				}
 				return new ActionResult.Success(result);
 			}
 			catch (InvocationTargetException ex) {

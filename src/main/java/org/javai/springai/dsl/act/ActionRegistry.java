@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.api.Action;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.bind.TypeFactoryRegistry;
 
@@ -27,13 +28,18 @@ public final class ActionRegistry {
 			if (entries.containsKey(id)) {
 				throw new IllegalStateException("Duplicate action definition: " + id);
 			}
-			entries.put(id, new ActionEntry(id, description, actionParameterDefinitions, null, bean, method));
+			String contextKey = action.contextKey();
+			entries.put(id, new ActionEntry(id, description, actionParameterDefinitions, null, bean, method, contextKey));
 		}
 	}
 
 	private static List<ActionParameterDescriptor> createActionParameterDefinitions(Object bean, Method method) {
 		List<ActionParameterDescriptor> actionParameterDefinitions = new ArrayList<>();
 		for (Parameter parameter : method.getParameters()) {
+			if (parameter.getType() == ActionContext.class) {
+				// Injected at execution time; not exposed to LLM
+				continue;
+			}
 			actionParameterDefinitions.add(createActionParameterDefinition(parameter));
 		}
 		return actionParameterDefinitions;
