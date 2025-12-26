@@ -2,11 +2,14 @@ package org.javai.springai.actions.api;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ActionContext {
 	private final Map<String, Object> data = new ConcurrentHashMap<>();
+	private final AtomicReference<Boolean> frozen = new AtomicReference<>(false);
 
 	public void put(String key, Object value) {
+		ensureMutable();
 		data.put(key, value);
 	}
 
@@ -42,5 +45,23 @@ public class ActionContext {
 			throw new IllegalStateException("No value for context key: " + key);
 		}
 		return data.get(key);
+	}
+
+	/**
+	 * Freeze the context to prevent further mutation (thread-safety / hand-off).
+	 * Subsequent put attempts will throw.
+	 */
+	public void freeze() {
+		frozen.set(true);
+	}
+
+	public boolean isFrozen() {
+		return Boolean.TRUE.equals(frozen.get());
+	}
+
+	private void ensureMutable() {
+		if (isFrozen()) {
+			throw new IllegalStateException("ActionContext is frozen and cannot be modified");
+		}
 	}
 }

@@ -5,7 +5,7 @@ import org.javai.springai.actions.api.ActionContext;
 
 public class DefaultPlanExecutor implements PlanExecutor {
 
-	private ActionContext preexistingContext;
+	private final ActionContext preexistingContext;
 
 	public DefaultPlanExecutor() {
 		this(null);

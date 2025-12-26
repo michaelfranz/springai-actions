@@ -3,6 +3,7 @@ package org.javai.springai.dsl.exec;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.dsl.act.ActionBinding;
 
 /**
@@ -11,11 +12,14 @@ import org.javai.springai.dsl.act.ActionBinding;
  */
 public class DefaultPlanExecutor implements PlanExecutor {
 
-	@Override
 	public PlanExecutionResult execute(ResolvedPlan plan) {
+		return execute(plan, new ActionContext());
+	}
+
+	public PlanExecutionResult execute(ResolvedPlan plan, ActionContext context) {
 		if (plan == null) {
 			return new PlanExecutionResult(false, List.of(
-					new StepExecutionResult(null, false, null, null, "Plan is null")));
+					new StepExecutionResult(null, false, null, null, "Plan is null")), context);
 		}
 		if (plan.status() != org.javai.springai.dsl.plan.PlanStatus.READY) {
 			throw new IllegalStateException("ResolvedPlan is not READY; status=" + plan.status());
@@ -33,7 +37,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			}
 
 			if (step instanceof ResolvedStep.ActionStep actionStep) {
-				StepExecutionResult result = executeActionStep(actionStep);
+				StepExecutionResult result = executeActionStep(actionStep, context);
 				results.add(result);
 				if (!result.success()) {
 					success = false;
@@ -42,10 +46,10 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			}
 		}
 
-		return new PlanExecutionResult(success, results);
+		return new PlanExecutionResult(success, results, context);
 	}
 
-	private StepExecutionResult executeActionStep(ResolvedStep.ActionStep step) {
+	private StepExecutionResult executeActionStep(ResolvedStep.ActionStep step, ActionContext context) {
 		ActionBinding binding = step.binding();
 		if (binding == null || binding.method() == null || binding.bean() == null) {
 			return new StepExecutionResult(null, false, null, null, "Action binding is incomplete");
@@ -56,6 +60,9 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		try {
 			method.setAccessible(true);
 			Object returnValue = method.invoke(target, step.arguments().stream().map(ResolvedArgument::value).toArray());
+			if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
+				context.put(binding.contextKey(), returnValue);
+			}
 			return new StepExecutionResult(actionId, true, returnValue, null, null);
 		}
 		catch (Exception ex) {
