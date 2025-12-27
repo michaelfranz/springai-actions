@@ -3,8 +3,12 @@ package org.javai.springai.dsl.exec;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.dsl.act.ActionBinding;
+import org.javai.springai.dsl.instrument.InvocationEmitter;
+import org.javai.springai.dsl.instrument.InvocationEventType;
+import org.javai.springai.dsl.instrument.InvocationKind;
 import org.javai.springai.dsl.plan.PlanStatus;
 
 /**
@@ -12,6 +16,16 @@ import org.javai.springai.dsl.plan.PlanStatus;
  * via reflection and fails fast on the first error step or invocation failure.
  */
 public class DefaultPlanExecutor implements PlanExecutor {
+
+	private final InvocationEmitter emitter;
+
+	public DefaultPlanExecutor() {
+		this(null);
+	}
+
+	public DefaultPlanExecutor(InvocationEmitter emitter) {
+		this.emitter = emitter;
+	}
 
 	public PlanExecutionResult execute(ResolvedPlan plan) {
 		return execute(plan, new ActionContext());
@@ -58,7 +72,15 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		String actionId = binding.id();
 		Method method = binding.method();
 		Object target = binding.bean();
+		String invocationId = emitter != null ? emitter.nextInvocationId() : null;
+		long start = System.nanoTime();
 		try {
+			if (emitter != null) {
+				emitter.emit(InvocationKind.ACTION, InvocationEventType.REQUESTED, actionId, invocationId, null, null,
+						Map.of("actionId", actionId));
+				emitter.emit(InvocationKind.ACTION, InvocationEventType.STARTED, actionId, invocationId, null, null,
+						Map.of("actionId", actionId));
+			}
 			method.setAccessible(true);
 			var params = method.getParameters();
 			Object[] invokeArgs = new Object[params.length];
@@ -83,9 +105,19 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
 				context.put(binding.contextKey(), returnValue);
 			}
+			if (emitter != null) {
+				long durationMs = (System.nanoTime() - start) / 1_000_000;
+				emitter.emit(InvocationKind.ACTION, InvocationEventType.SUCCEEDED, actionId, invocationId, null, durationMs,
+						Map.of("actionId", actionId, "contextKey", binding.contextKey()));
+			}
 			return new StepExecutionResult(actionId, true, returnValue, null, null);
 		}
 		catch (Exception ex) {
+			if (emitter != null) {
+				long durationMs = (System.nanoTime() - start) / 1_000_000;
+				emitter.emit(InvocationKind.ACTION, InvocationEventType.FAILED, actionId, invocationId, null, durationMs,
+						Map.of("actionId", actionId, "error", ex.getMessage()));
+			}
 			return new StepExecutionResult(actionId, false, null, ex, "Execution failed: " + ex.getMessage());
 		}
 	}

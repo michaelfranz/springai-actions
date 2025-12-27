@@ -1,6 +1,9 @@
 package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,6 +18,17 @@ import org.javai.springai.dsl.exec.DefaultPlanResolver;
 import org.javai.springai.dsl.exec.PlanExecutionResult;
 import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.ResolvedPlan;
+import org.javai.springai.dsl.instrument.AugmentedPayload;
+import org.javai.springai.dsl.instrument.InMemoryTokenStore;
+import org.javai.springai.dsl.instrument.InvocationEmitter;
+import org.javai.springai.dsl.instrument.InvocationEvent;
+import org.javai.springai.dsl.instrument.InvocationEventType;
+import org.javai.springai.dsl.instrument.InvocationKind;
+import org.javai.springai.dsl.instrument.InvocationListener;
+import org.javai.springai.dsl.instrument.InvocationSupport;
+import org.javai.springai.dsl.instrument.PayloadAugmentor;
+import org.javai.springai.dsl.instrument.PiiTokenizingAugmentor;
+import org.javai.springai.dsl.instrument.TokenStore;
 import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.Planner;
 import org.junit.jupiter.api.Assumptions;
@@ -37,6 +51,9 @@ public class ProtocolNotebookScenarioTest {
 	ConversationManager conversationManager;
 	ProtocolNotebookActions protocolNotebookActions;
 	ProtocolCatalogTool protocolCatalogTool;
+	TestInvocationListener invocationListener;
+	TokenStore tokenStore;
+	InvocationEmitter emitter;
 
 	@BeforeEach
 	void setUp() {
@@ -56,7 +73,11 @@ public class ProtocolNotebookScenarioTest {
 				.build();
 
 		protocolNotebookActions = new ProtocolNotebookActions();
-		protocolCatalogTool = new ProtocolCatalogTool();
+		invocationListener = new TestInvocationListener();
+		tokenStore = new InMemoryTokenStore();
+		PayloadAugmentor augmentor = new PiiTokenizingAugmentor(tokenStore);
+		emitter = InvocationEmitter.of("protocol-notebook-session", invocationListener);
+		protocolCatalogTool = new ProtocolCatalogTool(emitter, augmentor);
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
@@ -64,7 +85,7 @@ public class ProtocolNotebookScenarioTest {
 				.actions(protocolNotebookActions)
 				.build();
 		resolver = new DefaultPlanResolver();
-		executor = new DefaultPlanExecutor();
+		executor = new DefaultPlanExecutor(emitter);
 		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
 	}
 
@@ -86,6 +107,14 @@ public class ProtocolNotebookScenarioTest {
 		assertThat(executed.success()).isTrue();
 		assertThat(protocolNotebookActions.invoked()).isTrue();
 		assertThat(protocolCatalogTool.listInvoked()).isTrue();
+
+		assertThat(invocationListener.events).isNotEmpty();
+		assertThat(invocationListener.events.stream().map(InvocationEvent::kind).distinct().toList())
+				.contains(InvocationKind.TOOL, InvocationKind.ACTION);
+		assertThat(invocationListener.events.stream().map(InvocationEvent::type).toList())
+				.contains(InvocationEventType.REQUESTED, InvocationEventType.SUCCEEDED);
+		assertThat(protocolCatalogTool.lastMetadata()).isNotNull();
+		assertThat(protocolCatalogTool.lastMetadata()).containsKey("piiTokens");
 
 		var ctx = executed.context();
 		assertThat(ctx).isNotNull();
@@ -226,12 +255,24 @@ public class ProtocolNotebookScenarioTest {
 		private final AtomicBoolean getInvoked = new AtomicBoolean(false);
 		private String lastPath;
 		private String lastContent;
+		private Map<String, Object> lastMetadata = Map.of();
+		private final InvocationEmitter emitter;
+		private final PayloadAugmentor augmentor;
+
+		public ProtocolCatalogTool(InvocationEmitter emitter, PayloadAugmentor augmentor) {
+			this.emitter = Objects.requireNonNull(emitter);
+			this.augmentor = Objects.requireNonNull(augmentor);
+		}
 
 		@Tool(name = "listProtocols", description = """
 				List available statistical quality protocols with their file paths and short descriptions so the model
 				can choose the most appropriate one or report that none apply.""")
 		public ProtocolCatalog listProtocols() {
 			listInvoked.set(true);
+			try (var scope = InvocationSupport.start(emitter, InvocationKind.TOOL, "listProtocols")) {
+				scope.succeed(Map.of("count", 3));
+				emit(InvocationEventType.RESULT_FORWARDED, "listProtocols", scope.invocationId(), Map.of("count", 3));
+			}
 			return new ProtocolCatalog(new ProtocolEntry[] {
 					new ProtocolEntry("/protocols/fdx-2024-standard.md",
 							"FDX 2024 standard protocol for SPC readiness, normality check, control limits"),
@@ -245,14 +286,23 @@ public class ProtocolNotebookScenarioTest {
 			getInvoked.set(true);
 			lastPath = path;
 			String resourcePath = path.startsWith("/") ? path : "/" + path;
-			try (var stream = ProtocolCatalogTool.class.getResourceAsStream(resourcePath)) {
-				if (stream == null) {
-					return "Protocol not found: " + path;
+			try (var scope = InvocationSupport.start(emitter, InvocationKind.TOOL, "getProtocol")) {
+				try (var stream = ProtocolCatalogTool.class.getResourceAsStream(resourcePath)) {
+					if (stream == null) {
+						scope.fail("not found");
+						return "Protocol not found: " + path;
+					}
+					String raw = new String(stream.readAllBytes()) + "\n\nContact: qa@example.com";
+					AugmentedPayload augmented = augmentor.augment("getProtocol", new AugmentedPayload(raw, Map.of("path", path)));
+					lastContent = augmented.content();
+					lastMetadata = augmented.metadata();
+					scope.succeed(Map.of("bytes", raw.length()));
+					emit(InvocationEventType.RESULT_FORWARDED, "getProtocol", scope.invocationId(), augmented.metadata());
+					return lastContent;
+				} catch (Exception ex) {
+					scope.fail(ex.getMessage());
+					return "Error reading protocol " + path + ": " + ex.getMessage();
 				}
-				lastContent = new String(stream.readAllBytes());
-				return lastContent;
-			} catch (Exception ex) {
-				return "Error reading protocol " + path + ": " + ex.getMessage();
 			}
 		}
 
@@ -270,6 +320,14 @@ public class ProtocolNotebookScenarioTest {
 
 		String lastContent() {
 			return lastContent;
+		}
+
+		Map<String, Object> lastMetadata() {
+			return lastMetadata;
+		}
+
+		private void emit(InvocationEventType type, String name, String invocationId, Map<String, Object> attributes) {
+			emitter.emit(InvocationKind.TOOL, type, name, invocationId, null, null, attributes);
 		}
 	}
 
@@ -293,5 +351,16 @@ public class ProtocolNotebookScenarioTest {
 	}
 
 	public record Notebook(String content) {}
+
+	static final class TestInvocationListener implements InvocationListener {
+		private final List<InvocationEvent> events = new ArrayList<>();
+
+		@Override
+		public void onEvent(InvocationEvent event) {
+			if (event != null) {
+				events.add(event);
+			}
+		}
+	}
 }
 
