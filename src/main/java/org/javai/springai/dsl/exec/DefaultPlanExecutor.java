@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.dsl.act.ActionBinding;
+import org.javai.springai.dsl.plan.PlanStatus;
 
 /**
  * Default sequential executor for resolved plans. Executes {@link ResolvedStep.ActionStep}
@@ -21,7 +22,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			return new PlanExecutionResult(false, List.of(
 					new StepExecutionResult(null, false, null, null, "Plan is null")), context);
 		}
-		if (plan.status() != org.javai.springai.dsl.plan.PlanStatus.READY) {
+		if (plan.status() != PlanStatus.READY) {
 			throw new IllegalStateException("ResolvedPlan is not READY; status=" + plan.status());
 		}
 
@@ -59,7 +60,26 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		Object target = binding.bean();
 		try {
 			method.setAccessible(true);
-			Object returnValue = method.invoke(target, step.arguments().stream().map(ResolvedArgument::value).toArray());
+			var params = method.getParameters();
+			Object[] invokeArgs = new Object[params.length];
+			int argIdx = 0;
+			for (int i = 0; i < params.length; i++) {
+				if (params[i].getType() == ActionContext.class) {
+					invokeArgs[i] = context;
+				}
+				else {
+					if (argIdx >= step.arguments().size()) {
+						return new StepExecutionResult(actionId, false, null, null,
+								"Argument count mismatch for action " + actionId);
+					}
+					invokeArgs[i] = step.arguments().get(argIdx++).value();
+				}
+			}
+			if (argIdx != step.arguments().size()) {
+				return new StepExecutionResult(actionId, false, null, null,
+						"Argument count mismatch for action " + actionId);
+			}
+			Object returnValue = method.invoke(target, invokeArgs);
 			if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
 				context.put(binding.contextKey(), returnValue);
 			}

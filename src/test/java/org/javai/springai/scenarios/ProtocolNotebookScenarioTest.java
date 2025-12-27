@@ -82,6 +82,7 @@ public class ProtocolNotebookScenarioTest {
 		assertThat(resolvedPlan).isNotNull();
 		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		executed.steps().forEach(step -> System.out.println(step.toString()));
 		assertThat(executed.success()).isTrue();
 		assertThat(protocolNotebookActions.invoked()).isTrue();
 		assertThat(protocolCatalogTool.listInvoked()).isTrue();
