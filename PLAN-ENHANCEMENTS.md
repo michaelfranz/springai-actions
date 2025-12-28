@@ -7,25 +7,28 @@ This document captures gaps and proposed steps to evolve the framework and domai
 1) ✅ Tool & action observability + payload augmentation  
    - Unified invocation events (tools + actions), PII tokenizing augmentor, manual emit helper; demonstrated in `ProtocolNotebookScenarioTest`.
 
-2) Prompt/persona shaping  
+2) ✅ Prompt/persona shaping  
    - Provide a structured way to supply assistant persona and scenario-specific guidance (beyond ad hoc prompt contributions).  
    - Ensure persona can be composed with DSL guidance and tool descriptions.
+   - Implemented via `PersonaSpec` builder with name, role, principles, constraints, and styleGuidance.
 
-3) Validation/guardrails  
+3) ✅ Validation/guardrails  
    - Introduce structured validators for action inputs (beyond regex/allowedValues).  
    - Return rich, user-presentable reasons for rejection; consider a validation result type.
+   - Implemented via `ValidatorRegistry`, `ComplexDslValidator`, and grammar-based validation.
 
-4) Idempotency/dedupe  
-   - Add support to mark actions as idempotent or dedupe-able; provide a helper to suppress duplicate “add” steps in a plan/conversation.
+4) ⊘ Idempotency/dedupe  
+   - Add support to mark actions as idempotent or dedupe-able; provide a helper to suppress duplicate "add" steps in a plan/conversation.
+   - **Decision: Deferred.** Not necessary for core framework; domain-specific optimization for shopping scenarios.
 
-5) Session/context lifecycle  
+5) 🔄 Session/context lifecycle (IN PROGRESS)  
    - Standardize start/end lifecycle hooks; document freeze semantics.  
    - Add optional context persistence/restore API and namespacing for multi-session/tenant.
 
-6) Observability  
+6) ⏳ Observability  
    - Add structured logging/metrics around plan resolution, tool usage, action execution, and context mutations.
 
-7) Error handling & partial failures  
+7) ⏳ Error handling & partial failures  
    - Provide patterns for partial success and recoverable errors (surface back to planning or user); avoid fail-fast when desirable.
 
 ## Shopping-domain gaps and steps
