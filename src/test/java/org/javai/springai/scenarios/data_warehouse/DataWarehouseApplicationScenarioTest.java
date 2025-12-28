@@ -82,10 +82,8 @@ public class DataWarehouseApplicationScenarioTest {
 			.name("SQLDataWarehouseAssistant")
 			.role("Assistant for data warehouse query planning and order value analysis")
 			.principles(List.of(
-					"Map user requests to the appropriate action based on intent",
-					"Use displaySqlQuery for query creation requests",
-					"Use executeAndDisplaySqlQuery for query execution requests",
-					"Use aggregateOrderValue only for order value calculations by customer and date range"))
+					"Understand what the user wants to accomplish from a domain perspective",
+					"Select the action whose purpose best matches the user's intent"))
 			.constraints(List.of(
 					"Only use the available actions",
 					"If any required parameter is unclear, use PENDING"))
@@ -118,13 +116,13 @@ public class DataWarehouseApplicationScenarioTest {
 
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
 		assertThat(executed.success()).isTrue();
-		assertThat(dataWarehouseActions.displaySqlQueryInvoked()).isTrue();
+		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 	}
 
 	@Test
 	void selectWithDatabaseObjectConstraintsTest() {
 		// Use base planner - catalog is already set up in setUp()
-		String request = "execute query: select order_value from fct_orders";
+		String request = "run query: select order_value from fct_orders";
 		ConversationTurnResult turn = conversationManager.converse(request, "constrained-select-session");
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
 		assertThat(resolvedPlan).isNotNull();
@@ -135,7 +133,7 @@ public class DataWarehouseApplicationScenarioTest {
 
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
 		assertThat(executed.success()).isTrue();
-		assertThat(dataWarehouseActions.executeAndDisplaySqlQueryInvoked()).isTrue();
+		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 	}
 
 	@Test

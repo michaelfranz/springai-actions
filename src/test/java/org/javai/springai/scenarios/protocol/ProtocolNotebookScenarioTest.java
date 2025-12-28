@@ -74,15 +74,12 @@ public class ProtocolNotebookScenarioTest {
 				.name("ProtocolNotebookDesigner")
 				.role("Planner for quality assurance notebook creation based on FDX statistical protocols")
 				.principles(List.of(
-						"Create a plan that invokes actions corresponding to each test section in the selected protocol.",
-						"Verify the protocol selection using available tools before proceeding with the plan.",
-						"Ensure the plan does not omit any test specified in the protocol."))
+						"ALWAYS call getProtocol to read the full protocol content before creating a plan.",
+						"Match each protocol step to the action whose description best matches.",
+						"Actions with 'Legacy' in the name are ONLY for the Legacy FDX v1 protocol."))
 				.constraints(List.of(
 						"Do not invent protocols or bundle IDs; use available tools to resolve ambiguities.",
-						"Do not add actions to the plan for tests not present in the selected protocol.",
-						"Do not include actions for which the protocol does not have a corresponding test."))
-				.styleGuidance(List.of(
-						"Ensure plan actions map directly to protocol test names."))
+						"Do NOT include legacy or experimental actions when following FDX 2024 standard protocol."))
 				.build();
 
 		planner = Planner.builder()
@@ -98,8 +95,6 @@ public class ProtocolNotebookScenarioTest {
 
 	@Test
 	void generatesProtocolNotebookPlan() {
-		System.err.println("********!!!!!!!!!!!");
-
 		String request = """
 				Follow the standard FDX quality protocol for bushing displacement
 				using bundle A12345. Produce a Marimo notebook with interactive
@@ -109,6 +104,7 @@ public class ProtocolNotebookScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "protocol-notebook-session");
 
 		assertThat(protocolCatalogTool.listInvoked()).isTrue(); // A tool call was made
+		assertThat(protocolCatalogTool.getInvoked()).isTrue(); // Protocol content was retrieved
 		assertThat(protocolNotebookActions.invoked()).isFalse(); // Actions not called at this point
 
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
@@ -144,10 +140,10 @@ public class ProtocolNotebookScenarioTest {
 		assertThat(content).doesNotContain(
 				"## Normality spot-check",
 				"## Minimal SPC readiness checklist",
-				"## Provisional control limits",
+				"## Provisional thresholds",
 				"## Lab-only data filter",
 				"## Experimental distribution fit and residual analysis",
-				"## Exploratory control limits and lab-only variance chart"
+				"## Exploratory variance chart"
 		);
 	}
 }

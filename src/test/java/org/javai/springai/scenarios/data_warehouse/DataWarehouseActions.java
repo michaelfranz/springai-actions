@@ -14,31 +14,21 @@ public class DataWarehouseActions {
 	private final AtomicBoolean aggregateOrderValueInvoked = new AtomicBoolean(false);
 	private OrderValueQuery lastOrderValueQuery;
 
-	@Action(description = """
-			Display a SQL query WITHOUT executing it.
-			Use ONLY when user says: create, show, build, display, make.
-			DO NOT use for: execute, run, get.""")
-	public void displaySqlQuery(
-			@ActionParam(description = "Must be (EMBED sxl-sql (Q ...))", 
-				examples = {"(EMBED sxl-sql (Q (F dim_customer c) (S c.customer_name)))"}) Query query) {
+	@Action(description = "Show a SQL query as text without executing it against the database.")
+	public void showSqlQuery(
+			@ActionParam(description = "The SQL query to show") Query query) {
 		displaySqlQueryInvoked.set(true);
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
-	@Action(description = """
-			Execute a SQL query and return results.
-			Use ONLY when user says: execute, run, get, fetch.
-			DO NOT use for: create, show, build, display.""")
-	public void executeAndDisplaySqlQuery(
-			@ActionParam(description = "Must be (EMBED sxl-sql (Q ...))",
-				examples = {"(EMBED sxl-sql (Q (F fct_orders o) (S o.order_value)))"}) Query query) {
+	@Action(description = "Run a SQL query against the database and return actual data rows.")
+	public void runSqlQuery(
+			@ActionParam(description = "The SQL query to run") Query query) {
 		executeAndDisplaySqlQueryInvoked.set(true);
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
-	@Action(description = """
-			Calculate total order value for a customer over a date range.
-			Use when user asks for order value aggregation by customer and date period.""")
+	@Action(description = "Calculate total order value for a customer over a date range.")
 	public void aggregateOrderValue(
 			@ActionParam(description = "Order value query with customer name and date period",
 				examples = {"{\"customer_name\": \"Mike\", \"period\": {\"start\": \"2024-01-01\", \"end\": \"2024-01-31\"}}"})
@@ -52,11 +42,11 @@ public class DataWarehouseActions {
 	}
 
 
-	public boolean displaySqlQueryInvoked() {
+	public boolean showSqlQueryInvoked() {
 		return displaySqlQueryInvoked.get();
 	}
 
-	public boolean executeAndDisplaySqlQueryInvoked() {
+	public boolean runSqlQueryInvoked() {
 		return executeAndDisplaySqlQueryInvoked.get();
 	}
 
@@ -68,4 +58,3 @@ public class DataWarehouseActions {
 		return lastOrderValueQuery;
 	}
 }
-

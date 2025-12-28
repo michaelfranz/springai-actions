@@ -33,7 +33,7 @@ public class ProtocolNotebookActions {
 		getOrCreateBuilder(context).addMarkdown("## SPC readiness");
 	}
 
-	@Action(description = "Add control chart to notebook.")
+	@Action(description = "Add control chart with control limits to notebook. Use for FDX 2024 standard protocol.")
 	public void addSpcControlChart(
 			@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
 			@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
@@ -60,13 +60,13 @@ public class ProtocolNotebookActions {
 		getOrCreateBuilder(context).addMarkdown("## Minimal SPC readiness checklist");
 	}
 
-	@Action(description = "Add provisional control limits from legacy protocol to notebook.")
-	public void addLegacyProvisionalControlLimits(
+	@Action(description = "Add legacy provisional thresholds to notebook. For Legacy FDX v1 protocol only.")
+	public void addLegacyProvisionalThresholds(
 			@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
 			@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
 			@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 			ActionContext context) {
-		getOrCreateBuilder(context).addMarkdown("## Provisional control limits");
+		getOrCreateBuilder(context).addMarkdown("## Provisional thresholds");
 	}
 
 	@Action(description = "Add lab-only data filter from experimental protocol to notebook.")
@@ -87,16 +87,16 @@ public class ProtocolNotebookActions {
 		getOrCreateBuilder(context).addMarkdown("## Experimental distribution fit and residual analysis");
 	}
 
-	@Action(description = "Add exploratory control limits and lab-only variance chart to notebook.")
-	public void addExperimentalControlLimits(
+	@Action(description = "Add exploratory lab-only variance chart to notebook. For Experimental protocol only.")
+	public void addExperimentalVarianceChart(
 			@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
 			@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
 			@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 			ActionContext context) {
-		getOrCreateBuilder(context).addMarkdown("## Exploratory control limits and lab-only variance chart");
+		getOrCreateBuilder(context).addMarkdown("## Exploratory variance chart");
 	}
 
-	@Action(description = "Write the notebook to a file.")
+	@Action(description = "Finalize and write the notebook to a file. Call this as the last step after all tests are added.")
 	public void writeNotebook(ActionContext context) {
 		NotebookBuilder builder =
 				Optional.ofNullable(context.get("notebookBuilder", NotebookBuilder.class))

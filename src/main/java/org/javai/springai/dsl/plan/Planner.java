@@ -221,8 +221,10 @@ public final class Planner {
 			
 			CRITICAL RULES:
 			1. ALWAYS wrap action with (PS ...): (PS action-id (PA ...))
-			2. SQL queries MUST use EMBED with Q as root:
-			   (PA query (EMBED sxl-sql (Q (F table alias) (S column))))
+			2. SQL queries MUST use EMBED with Q as root AND include table alias:
+			   (PA query (EMBED sxl-sql (Q (F table_name t) (S t.column))))
+			   WRONG: (F fct_orders) - missing alias
+			   RIGHT: (F fct_orders o) - has alias 'o'
 			3. JSON parameters use quoted strings:
 			   (PA data "{...}")
 			

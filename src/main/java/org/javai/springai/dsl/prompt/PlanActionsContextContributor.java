@@ -30,15 +30,19 @@ public final class PlanActionsContextContributor implements DslContextContributo
 			return Optional.empty();
 		}
 		
-		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS:\n");
+		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS (select the action that best matches what the user wants to accomplish):\n");
 		for (ActionDescriptor descriptor : descriptors) {
 			actions.append("- ").append(descriptor.id()).append(": ").append(descriptor.description()).append("\n");
-			// Include parameter examples to show expected format
+			// Include parameter format guidance
 			if (descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()) {
 				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
+					// Show explicit examples if provided
 					if (param.examples() != null && param.examples().length > 0) {
 						String example = param.examples()[0];
 						actions.append("  Parameter '").append(param.name()).append("' example: ").append(example).append("\n");
+					} else if (param.dslId() != null && !param.dslId().isBlank()) {
+						// Show DSL format guidance for DSL-typed parameters
+						actions.append("  Parameter '").append(param.name()).append("' format: (EMBED ").append(param.dslId()).append(" <").append(param.dslId()).append("-expression>)\n");
 					}
 				}
 			}

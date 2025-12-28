@@ -251,16 +251,12 @@ public final class SystemPromptBuilder {
 			// Add parameters with examples
 			for (ActionParameterDescriptor param : action.actionParameterSpecs()) {
 				example.append(" (PA ").append(param.name());
-				if (param.examples() != null && param.examples().length > 0) {
-					String exampleValue = param.examples()[0];
-					// S-expressions (starting with '(') should not be quoted
-					if (exampleValue.trim().startsWith("(")) {
-						example.append(" ").append(exampleValue);
-					} else {
-						example.append(" \"").append(exampleValue).append("\"");
-					}
+				String exampleValue = getExampleValue(param);
+				// S-expressions (starting with '(') should not be quoted
+				if (exampleValue.trim().startsWith("(")) {
+					example.append(" ").append(exampleValue);
 				} else {
-					example.append(" \"<").append(param.name()).append(">\"");
+					example.append(" \"").append(exampleValue).append("\"");
 				}
 				example.append(")");
 			}
@@ -269,5 +265,30 @@ public final class SystemPromptBuilder {
 		
 		example.append(")\n");
 		return example.toString();
+	}
+
+	/**
+	 * Get an example value for a parameter. Uses explicit examples if provided,
+	 * otherwise generates an automatic example for DSL-typed parameters.
+	 */
+	private static String getExampleValue(ActionParameterDescriptor param) {
+		// Use explicit example if provided
+		if (param.examples() != null && param.examples().length > 0) {
+			return param.examples()[0];
+		}
+		
+		// Generate automatic example for DSL-typed parameters
+		String dslId = param.dslId();
+		if (dslId != null && !dslId.isBlank()) {
+			if ("sxl-sql".equalsIgnoreCase(dslId)) {
+				// Generate a canonical SQL DSL example
+				return "(EMBED sxl-sql (Q (F table_name t) (S t.column_name)))";
+			}
+			// Generic embedded DSL example
+			return "(EMBED " + dslId + " (<" + param.name() + ">))";
+		}
+		
+		// Fallback placeholder
+		return "<" + param.name() + ">";
 	}
 }
