@@ -212,34 +212,42 @@ public final class Planner {
 		return buildPromptPreview(nonNullRequest, Objects.requireNonNull(safeDescriptors), null);
 	}
 
-	private static final String PLANNING_DIRECTIVE = """
-			FINAL FORMAT GUARDRAIL - READ CAREFULLY:
+	private static final String PLANNING_DIRECTIVE_TEMPLATE = """
+			🔴 OUTPUT FORMAT - FOLLOW EXACTLY:
 			
-			Your response MUST be a valid S-expression plan with this exact structure:
-			(P "description" (PS action-id (PA param-name "value") ...) ...)
+			Emit ONLY an S-expression plan. No prose. No SQL. No explanation. Just the plan.
 			
-			CRITICAL: The action-id MUST be one of these EXACT names (no variations):
-			- addNormalityTest (requires: component, measurement, bundleId)
-			- addSpcReadinessTest (requires: component, measurement, bundleId)
-			- addSpcControlChart (requires: component, measurement, bundleId)
-			- addLegacyNormalitySpotCheck (requires: component, measurement, bundleId)
-			- addLegacySpcReadinessChecklist (requires: component, measurement, bundleId)
-			- addLegacyProvisionalControlLimits (requires: component, measurement, bundleId)
-			- addExperimentalLabOnlyFilter (requires: component, measurement, bundleId)
-			- addExperimentalDistributionFit (requires: component, measurement, bundleId)
-			- addExperimentalControlLimits (requires: component, measurement, bundleId)
-			- writeNotebook (requires: NO parameters)
+			Structure: (P "description" (PS action-id (PA param-name value)))
 			
-			PARAMETER NAMES (use EXACTLY as shown):
-			- component (examples: "bushing", "piston")
-			- measurement (examples: "displacement", "force")
-			- bundleId (examples: "A12345", "B6789")
+			CRITICAL RULES:
+			1. ALWAYS wrap action with (PS ...): (PS action-id (PA ...))
+			2. SQL queries MUST use EMBED with Q as root:
+			   (PA query (EMBED sxl-sql (Q (F table alias) (S column))))
+			3. JSON parameters use quoted strings:
+			   (PA data "{...}")
 			
-			DO NOT invent action names or parameter names.
-			DO NOT use keyword arguments (no colons like :param_name).
-			DO NOT use symbols other than P, PS, PA, PENDING, ERROR, EMBED.
-			
-			Emit NOTHING else before or after the plan.""";
+			Available actions:
+			%s
+			STOP after the closing parenthesis. Emit nothing else.""";
+
+	private static String buildPlanningDirective(List<ActionDescriptor> actionDescriptors) {
+		StringBuilder actionsList = new StringBuilder();
+		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
+			for (ActionDescriptor descriptor : actionDescriptors) {
+				String actionId = descriptor.id();
+				String params = descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()
+						? String.format("(requires: %s)", 
+							descriptor.actionParameterSpecs().stream()
+								.map(p -> p.name())
+								.toList()
+								.toString()
+								.replaceAll("[\\[\\]]", ""))
+						: "(no parameters)";
+				actionsList.append(String.format("- %s %s%n", actionId, params));
+			}
+		}
+		return String.format(PLANNING_DIRECTIVE_TEMPLATE, actionsList.toString());
+	}
 
 
 
@@ -272,7 +280,8 @@ public final class Planner {
 		ConversationPromptBuilder.buildRetryAddendum(state).ifPresent(systemMessages::add);
 
 		// Planning directive: placed LAST, immediately before user message, for maximum salience
-		systemMessages.add(PLANNING_DIRECTIVE);
+		// Generate dynamically based on actual actions registered for this planner
+		systemMessages.add(buildPlanningDirective(actionDescriptors));
 
 		List<String> userMessages = List.of(requestText);
 		List<String> grammarIds = grammars.stream()

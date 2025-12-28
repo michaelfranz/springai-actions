@@ -1,13 +1,8 @@
-package org.javai.springai.scenarios;
+package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
-import org.javai.springai.actions.api.Action;
-import org.javai.springai.actions.api.ActionContext;
-import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.conversation.ConversationManager;
 import org.javai.springai.dsl.conversation.ConversationTurnResult;
 import org.javai.springai.dsl.conversation.InMemoryConversationStateStore;
@@ -28,7 +23,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.tool.annotation.Tool;
 
 public class ShoppingApplicationScenarioTest {
 
@@ -196,118 +190,180 @@ public class ShoppingApplicationScenarioTest {
 		assertThat(shoppingActions.addItemInvoked()).isTrue();
 	}
 
-	public static class ShoppingActions {
-		private final AtomicBoolean startSessionInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean presentOffersInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean addItemInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean addPartySnacksInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean computeTotalInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean checkoutInvoked = new AtomicBoolean(false);
-		private final AtomicBoolean requestFeedbackInvoked = new AtomicBoolean(false);
-		private AddItemRequest lastAddItem;
-		private final Map<String, Integer> basket = new HashMap<>();
+	@Test
+	void viewBasketSummaryTest() {
+		String sessionId = "basket-view-session";
 
-		@Action(description = """
-				Start or reset a shopping session and basket.""")
-		public void startSession(ActionContext context) {
-			startSessionInvoked.set(true);
-			basket.clear();
-			context.put("basket", basket);
-		}
+		// Turn 1: Start session
+		ConversationTurnResult startTurn = conversationManager
+				.converse("I want to start shopping", sessionId);
+		executor.execute(startTurn.resolvedPlan());
 
-		@Action(description = "Present current special offers to the shopper.")
-		public void presentOffers() {
-			presentOffersInvoked.set(true);
-		}
+		// Turn 2: Add an item
+		ConversationTurnResult addTurn = conversationManager
+				.converse("add 3 bottles of Coke Zero", sessionId);
+		executor.execute(addTurn.resolvedPlan());
 
-		@Action(description = """
-				Add a product and quantity to the current basket.""")
-		public void addItem(
-				@ActionParam(description = "Product name") String product,
-				@ActionParam(description = "Quantity", allowedRegex = "[0-9]+") int quantity) {
-			addItemInvoked.set(true);
-			lastAddItem = new AddItemRequest(product, quantity);
-			basket.merge(product, quantity, (existing, add) -> Integer.valueOf(existing + add));
-		}
+		// Turn 3: View basket
+		ConversationTurnResult viewTurn = conversationManager
+				.converse("show me my basket", sessionId);
+		ResolvedPlan viewPlan = viewTurn.resolvedPlan();
 
-		@Action(description = """
-				Add snacks for a party of a given size (e.g., crisps and nuts).""")
-		public void addPartySnacks(
-				@ActionParam(description = "Party size", allowedRegex = "[0-9]+") int partySize) {
-			addPartySnacksInvoked.set(true);
-			basket.merge("crisps (party)", partySize, (existing, add) -> Integer.valueOf(existing + add));
-			basket.merge("nuts (party)", partySize, (existing, add) -> Integer.valueOf(existing + add));
-		}
+		assertThat(viewPlan).isNotNull();
+		assertThat(viewPlan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(viewPlan.steps()).hasSize(1);
+		assertThat(viewPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
 
-		@Action(description = """
-				Compute or retrieve the basket total.""")
-		public void computeTotal() {
-			computeTotalInvoked.set(true);
-		}
-
-		@Action(description = """
-				Checkout the basket and end the shopping session.""")
-		public void checkoutBasket() {
-			checkoutInvoked.set(true);
-		}
-
-		@Action(description = "Request end-of-session feedback from the shopper.")
-		public void requestFeedback() {
-			requestFeedbackInvoked.set(true);
-		}
-
-		boolean startSessionInvoked() {
-			return startSessionInvoked.get();
-		}
-
-		boolean presentOffersInvoked() {
-			return presentOffersInvoked.get();
-		}
-
-		boolean addItemInvoked() {
-			return addItemInvoked.get();
-		}
-
-		boolean addPartySnacksInvoked() {
-			return addPartySnacksInvoked.get();
-		}
-
-		boolean computeTotalInvoked() {
-			return computeTotalInvoked.get();
-		}
-
-		boolean checkoutInvoked() {
-			return checkoutInvoked.get();
-		}
-
-		boolean requestFeedbackInvoked() {
-			return requestFeedbackInvoked.get();
-		}
-
-		AddItemRequest lastAddItem() {
-			return lastAddItem;
-		}
-
-		public record AddItemRequest(String product, int quantity) {
-		}
+		PlanExecutionResult executed = executor.execute(viewPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(shoppingActions.viewBasketInvoked()).isTrue();
+		assertThat(shoppingActions.getBasketState()).containsEntry("Coke Zero", 3);
 	}
 
-	public static class SpecialOfferTool {
-		private final AtomicBoolean listInvoked = new AtomicBoolean(false);
+	@Test
+	void removeItemFromBasketTest() {
+		String sessionId = "remove-item-session";
 
-		@Tool(name = "listSpecialOffers", description = "List current special offers and discounts.")
-		public String listSpecialOffers() {
-			listInvoked.set(true);
-			return """
-					Today's offers:
-					- 10% off Coca Cola (regular)
-					- 10% off Coke Zero
-					- 5% off mixed nuts (party size)
-					""";
-		}
+		// Turn 1: Start session
+		ConversationTurnResult startTurn = conversationManager
+				.converse("start shopping", sessionId);
+		executor.execute(startTurn.resolvedPlan());
 
-		boolean listInvoked() {
-			return listInvoked.get();
-		}
+		// Turn 2: Add item
+		ConversationTurnResult addTurn = conversationManager
+				.converse("add 2 bottles of Coke Zero", sessionId);
+		executor.execute(addTurn.resolvedPlan());
+
+		// Turn 3: Remove the item
+		ConversationTurnResult removeTurn = conversationManager
+				.converse("remove Coke Zero from my basket", sessionId);
+		ResolvedPlan removePlan = removeTurn.resolvedPlan();
+
+		assertThat(removePlan).isNotNull();
+		assertThat(removePlan.status()).isEqualTo(PlanStatus.READY);
+		PlanExecutionResult executed = executor.execute(removePlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(shoppingActions.removeItemInvoked()).isTrue();
+		assertThat(shoppingActions.getBasketState()).doesNotContainKey("Coke Zero");
+	}
+
+	@Test
+	void basketPersistenceAcrossMultipleTurnsTest() {
+		String sessionId = "persistence-session";
+
+		// Turn 1: Start
+		ConversationTurnResult turn1 = conversationManager
+				.converse("start shopping", sessionId);
+		executor.execute(turn1.resolvedPlan());
+
+		// Turn 2: Add first item
+		ConversationTurnResult turn2 = conversationManager
+				.converse("add 2 bottles of Coke Zero", sessionId);
+		executor.execute(turn2.resolvedPlan());
+
+		// Turn 3: Add second item (different session context check)
+		ConversationTurnResult turn3 = conversationManager
+				.converse("add crisps and nuts for 5 people", sessionId);
+		executor.execute(turn3.resolvedPlan());
+
+		// Turn 4: View basket - should have BOTH items
+		ConversationTurnResult turn4 = conversationManager
+				.converse("what's in my basket", sessionId);
+		executor.execute(turn4.resolvedPlan());
+
+		Map<String, Integer> basket = shoppingActions.getBasketState();
+		assertThat(basket).containsEntry("Coke Zero", 2);
+		assertThat(basket).containsEntry("crisps (party)", 5);
+		assertThat(basket).containsEntry("nuts (party)", 5);
+	}
+
+	@Test
+	void checkoutWithConfirmationTest() {
+		String sessionId = "checkout-session";
+
+		// Turn 1: Start
+		ConversationTurnResult turn1 = conversationManager
+				.converse("start shopping", sessionId);
+		executor.execute(turn1.resolvedPlan());
+
+		// Turn 2: Add item
+		ConversationTurnResult turn2 = conversationManager
+				.converse("add 3 bottles of Coke Zero", sessionId);
+		executor.execute(turn2.resolvedPlan());
+
+		// Turn 3: Compute total
+		ConversationTurnResult turn3 = conversationManager
+				.converse("what's the total", sessionId);
+		executor.execute(turn3.resolvedPlan());
+		assertThat(shoppingActions.computeTotalInvoked()).isTrue();
+
+		// Turn 4: Checkout
+		ConversationTurnResult turn4 = conversationManager
+				.converse("I'm ready to checkout", sessionId);
+		ResolvedPlan checkoutPlan = turn4.resolvedPlan();
+
+		assertThat(checkoutPlan).isNotNull();
+		assertThat(checkoutPlan.status()).isEqualTo(PlanStatus.READY);
+		PlanExecutionResult executed = executor.execute(checkoutPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(shoppingActions.checkoutInvoked()).isTrue();
+	}
+
+	@Test
+	void outOfStockItemTest() {
+		String sessionId = "outofstock-session";
+
+		// Turn 1: Start
+		ConversationTurnResult turn1 = conversationManager
+				.converse("start shopping", sessionId);
+		executor.execute(turn1.resolvedPlan());
+
+		// Turn 2: Try to add out-of-stock item (UnavailableProduct is not in inventory)
+		ConversationTurnResult turn2 = conversationManager
+				.converse("add 10 bottles of UnavailableProduct", sessionId);
+		ResolvedPlan plan2 = turn2.resolvedPlan();
+
+		// System should either:
+		// - Reject with ERROR status, OR
+		// - Ask for clarification (PENDING) with helpful message
+		assertThat(plan2).isNotNull();
+		assertThat(plan2.status()).isIn(PlanStatus.ERROR, PlanStatus.PENDING);
+	}
+
+	@Test
+	void completeSessionWithFeedbackTest() {
+		String sessionId = "feedback-session";
+
+		// Turn 1: Start
+		ConversationTurnResult turn1 = conversationManager
+				.converse("help me shop for a dinner party", sessionId);
+		executor.execute(turn1.resolvedPlan());
+
+		// Turn 2: Add items
+		ConversationTurnResult turn2 = conversationManager
+				.converse("add crisps and nuts for 8 people", sessionId);
+		executor.execute(turn2.resolvedPlan());
+
+		// Turn 3: View basket
+		ConversationTurnResult turn3 = conversationManager
+				.converse("show me what I have", sessionId);
+		executor.execute(turn3.resolvedPlan());
+
+		// Turn 4: Checkout
+		ConversationTurnResult turn4 = conversationManager
+				.converse("let's checkout", sessionId);
+		executor.execute(turn4.resolvedPlan());
+		assertThat(shoppingActions.checkoutInvoked()).isTrue();
+
+		// Turn 5: Request feedback
+		ConversationTurnResult turn5 = conversationManager
+				.converse("how was your experience", sessionId);
+		ResolvedPlan feedbackPlan = turn5.resolvedPlan();
+
+		assertThat(feedbackPlan).isNotNull();
+		PlanExecutionResult executed = executor.execute(feedbackPlan);
+		assertThat(executed.success()).isTrue();
+		assertThat(shoppingActions.requestFeedbackInvoked()).isTrue();
 	}
 }
+

@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios;
+package org.javai.springai.scenarios.stats_app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;

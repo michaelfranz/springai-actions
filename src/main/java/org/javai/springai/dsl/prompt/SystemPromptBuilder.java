@@ -102,6 +102,10 @@ public final class SystemPromptBuilder {
 		}
 
 		final List<DslContextContributor> ctxContributors = contributors;
+		
+		// Generate example plan to insert after sxl-plan section (keeps format examples salient)
+		String examplePlan = generateExamplePlan(selectedDescriptors);
+		
 		String dslSection = dslGuidance.stream()
 				.map(g -> {
 					StringBuilder section = new StringBuilder("DSL " + g.dslId() + ":\n" + g.text());
@@ -110,17 +114,15 @@ public final class SystemPromptBuilder {
 							contributor.contribute(ctx).ifPresent(text -> section.append("\n\n").append(text));
 						}
 					}
+					// Insert EXAMPLE PLAN right after sxl-plan (before other DSLs like sxl-sql)
+					if ("sxl-plan".equals(g.dslId()) && !examplePlan.isBlank()) {
+						section.append("\n\n").append(examplePlan);
+					}
 					return section.toString();
 				})
 				.collect(Collectors.joining("\n\n"));
 		
 		String systemPrompt = "DSL GUIDANCE:\n" + dslSection;
-		
-		// Generate example plan if actions have example values defined
-		String examplePlan = generateExamplePlan(selectedDescriptors);
-		if (!examplePlan.isBlank()) {
-			systemPrompt = systemPrompt + "\n\n" + examplePlan;
-		}
 		
 		return systemPrompt;
 	}
@@ -250,7 +252,13 @@ public final class SystemPromptBuilder {
 			for (ActionParameterDescriptor param : action.actionParameterSpecs()) {
 				example.append(" (PA ").append(param.name());
 				if (param.examples() != null && param.examples().length > 0) {
-					example.append(" \"").append(param.examples()[0]).append("\"");
+					String exampleValue = param.examples()[0];
+					// S-expressions (starting with '(') should not be quoted
+					if (exampleValue.trim().startsWith("(")) {
+						example.append(" ").append(exampleValue);
+					} else {
+						example.append(" \"").append(exampleValue).append("\"");
+					}
 				} else {
 					example.append(" \"<").append(param.name()).append(">\"");
 				}

@@ -3,7 +3,7 @@ package org.javai.springai.dsl.prompt;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.javai.springai.dsl.plan.Planner;
 import org.javai.springai.dsl.plan.PromptPreview;
-import org.javai.springai.scenarios.DataWarehouseApplicationScenarioTest;
+import org.javai.springai.scenarios.data_warehouse.DataWarehouseActions;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -16,7 +16,7 @@ class PromptPreviewCaptureTest {
 	@Test
 	void capturePromptPreviewForAggregateOrderValue() {
 		Planner planner = Planner.builder()
-				.actions(new DataWarehouseApplicationScenarioTest.DataWarehouseActions())
+				.actions(new DataWarehouseActions())
 				.build();
 
 		PromptPreview preview = planner.preview("calculate the total order value for Mike in January 2024");
