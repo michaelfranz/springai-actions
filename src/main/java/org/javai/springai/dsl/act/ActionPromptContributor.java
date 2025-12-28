@@ -50,9 +50,8 @@ public final class ActionPromptContributor {
 	}
 
 	private static String emitSxl(List<ActionDescriptor> specs, List<ActionBinding> bindings) {
-		Map<String, String> schemaByActionId = bindings.stream()
-				.collect(Collectors.toMap(ActionBinding::id, ActionPromptContributor::generateSchemaSafely));
-
+		// For SXL mode, emit only the action specs without JSON schemas (which are noise)
+		// The example plan generation will provide concrete examples
 		return specs.stream()
 				.map(descriptor -> {
 					String base = descriptor.toSxl();
@@ -68,10 +67,6 @@ public final class ActionPromptContributor {
 					}
 					sb.append("\nExample: ").append(example.trim());
 					sb.append("\nPending Example: ").append(pendingExample.trim());
-					String schema = schemaByActionId.get(descriptor.id());
-					if (schema != null && !schema.isBlank()) {
-						sb.append("\nJSON Schema: ").append(schema);
-					}
 					return sb.toString();
 				})
 				.collect(Collectors.joining("\n\n"));

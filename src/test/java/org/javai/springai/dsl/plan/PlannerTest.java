@@ -54,9 +54,10 @@ class PlannerTest {
 				.build();
 
 		PromptPreview preview = planner.preview("do something");
-		assertThat(preview.systemMessages()).hasSize(2);
+		// Should have DSL guidance + prompt contributions
+		assertThat(preview.systemMessages()).hasSizeGreaterThanOrEqualTo(2);
 
-		String system = normalize(preview.systemMessages().get(0));
+		String system = normalize(preview.systemMessages().getFirst());
 
 		// Should combine DSL guidance + grammar summary + action catalog.
 		assertThat(system).contains("DSL GUIDANCE");
@@ -64,7 +65,7 @@ class PlannerTest {
 		assertThat(system).contains("PLAN DSL root"); // guidance from llm_specs
 		assertThat(system).contains("P") // grammar summary includes symbol names
 				.contains("PS");
-		assertThat(system).contains("ACTIONS");
+		assertThat(system).contains("AVAILABLE ACTIONS");
 		assertThat(system).contains("demoAction");
 
 		assertThat(normalize(preview.systemMessages().get(1)))

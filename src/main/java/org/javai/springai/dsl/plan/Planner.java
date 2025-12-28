@@ -30,6 +30,7 @@ import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.prompt.DslContextContributor;
 import org.javai.springai.dsl.prompt.DslGrammarSource;
 import org.javai.springai.dsl.prompt.DslGuidanceProvider;
+import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.DefaultValidatorRegistry;
@@ -51,7 +52,6 @@ import org.springframework.lang.NonNull;
  * Fluent planner API that wraps Spring AI's ChatClient and surfaces prompt previews.
  */
 public final class Planner {
-
 	private static final Logger logger = LoggerFactory.getLogger(Planner.class);
 	private final ChatClient chatClient;
 	private final List<SxlGrammar> grammars;
@@ -63,6 +63,7 @@ public final class Planner {
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
 	private final ValidatorRegistry validatorRegistry;
+	private final PersonaSpec persona;
 
 	private Planner(Builder builder) {
 		this.chatClient = builder.chatClient;
@@ -75,6 +76,7 @@ public final class Planner {
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
 		this.validatorRegistry = buildValidatorRegistry(this.grammars);
+		this.persona = builder.persona;
 	}
 
 	public static Builder builder() {
@@ -158,9 +160,14 @@ public final class Planner {
 		catch (SxlParseException e) {
 			// Surface a structured error plan instead of throwing, so callers can present
 			// the issue without crashing the conversation.
+			String snippet = response != null ? response : "<null>";
+			if (snippet.length() > 800) {
+				snippet = snippet.substring(0, 800) + "...";
+			}
+			String reason = "Failed to parse plan: " + e.getMessage() + " | raw response: " + snippet;
 			Plan errorPlan = new Plan(
 					response,
-					List.of(new PlanStep.ErrorStep("Failed to parse plan: " + e.getMessage()))
+					List.of(new PlanStep.ErrorStep(reason))
 			);
 			maybeFirePromptHook(preview, effective);
 			return new PlanFormulationResult(response, errorPlan, preview, false, actionContext.registry());
@@ -205,6 +212,38 @@ public final class Planner {
 		return buildPromptPreview(nonNullRequest, Objects.requireNonNull(safeDescriptors), null);
 	}
 
+	private static final String PLANNING_DIRECTIVE = """
+			FINAL FORMAT GUARDRAIL - READ CAREFULLY:
+			
+			Your response MUST be a valid S-expression plan with this exact structure:
+			(P "description" (PS action-id (PA param-name "value") ...) ...)
+			
+			CRITICAL: The action-id MUST be one of these EXACT names (no variations):
+			- addNormalityTest (requires: component, measurement, bundleId)
+			- addSpcReadinessTest (requires: component, measurement, bundleId)
+			- addSpcControlChart (requires: component, measurement, bundleId)
+			- addLegacyNormalitySpotCheck (requires: component, measurement, bundleId)
+			- addLegacySpcReadinessChecklist (requires: component, measurement, bundleId)
+			- addLegacyProvisionalControlLimits (requires: component, measurement, bundleId)
+			- addExperimentalLabOnlyFilter (requires: component, measurement, bundleId)
+			- addExperimentalDistributionFit (requires: component, measurement, bundleId)
+			- addExperimentalControlLimits (requires: component, measurement, bundleId)
+			- writeNotebook (requires: NO parameters)
+			
+			PARAMETER NAMES (use EXACTLY as shown):
+			- component (examples: "bushing", "piston")
+			- measurement (examples: "displacement", "force")
+			- bundleId (examples: "A12345", "B6789")
+			
+			DO NOT invent action names or parameter names.
+			DO NOT use keyword arguments (no colons like :param_name).
+			DO NOT use symbols other than P, PS, PA, PENDING, ERROR, EMBED.
+			
+			Emit NOTHING else before or after the plan.""";
+
+
+
+
 	private PromptPreview buildPromptPreview(@NonNull String requestText,
 			@NonNull List<ActionDescriptor> actionDescriptors,
 			ConversationState state) {
@@ -223,10 +262,17 @@ public final class Planner {
 		);
 		systemMessages.add(systemPrompt);
 
+		if (this.persona != null) {
+			systemMessages.add(renderPersona(this.persona));
+		}
+
 		systemMessages.addAll(promptContributions);
 
 		// Conversation-aware retry addendum
 		ConversationPromptBuilder.buildRetryAddendum(state).ifPresent(systemMessages::add);
+
+		// Planning directive: placed LAST, immediately before user message, for maximum salience
+		systemMessages.add(PLANNING_DIRECTIVE);
 
 		List<String> userMessages = List.of(requestText);
 		List<String> grammarIds = grammars.stream()
@@ -265,7 +311,13 @@ public final class Planner {
 		request.tools(toolSources);
 		preview.systemMessages().forEach(request::system);
 		request.user(Objects.requireNonNull(preview.renderedUser()));
-		return request.call().content();
+		String sys = String.join("\n---\n", preview.systemMessages());
+		var response = request.call();
+		String content = response.content();
+		logger.info("System messages:\n{}", sys);
+		logger.info("User message:\n{}", preview.renderedUser());
+		logger.info("LLM response:\n{}", content);
+		return content;
 	}
 
 	private void fireHook(PromptPreview preview) {
@@ -369,6 +421,7 @@ public final class Planner {
 		private final Map<String, Object> dslContext = new HashMap<>();
 		private boolean capturePromptByDefault;
 		private Consumer<PromptPreview> promptHook;
+		private PersonaSpec persona;
 
 		private Builder() {
 		}
@@ -424,6 +477,11 @@ public final class Planner {
 			if (dslId != null && !dslId.isBlank() && context != null) {
 				this.dslContext.put(dslId, context);
 			}
+			return this;
+		}
+
+		public Builder persona(PersonaSpec persona) {
+			this.persona = persona;
 			return this;
 		}
 
@@ -547,6 +605,38 @@ public final class Planner {
 			}
 			return guidance.trim();
 		}
+	}
+
+	private static String renderPersona(PersonaSpec persona) {
+		StringBuilder sb = new StringBuilder("PERSONA:\n");
+		if (persona.role() != null && !persona.role().isBlank()) {
+			sb.append("Role: ").append(persona.role().trim()).append("\n");
+		}
+		if (persona.principles() != null && !persona.principles().isEmpty()) {
+			sb.append("Principles:\n");
+			for (String p : persona.principles()) {
+				if (p != null && !p.isBlank()) {
+					sb.append("- ").append(p.trim()).append("\n");
+				}
+			}
+		}
+		if (persona.constraints() != null && !persona.constraints().isEmpty()) {
+			sb.append("Constraints:\n");
+			for (String c : persona.constraints()) {
+				if (c != null && !c.isBlank()) {
+					sb.append("- ").append(c.trim()).append("\n");
+				}
+			}
+		}
+		if (persona.styleGuidance() != null && !persona.styleGuidance().isEmpty()) {
+			sb.append("Style:\n");
+			for (String s : persona.styleGuidance()) {
+				if (s != null && !s.isBlank()) {
+					sb.append("- ").append(s.trim()).append("\n");
+				}
+			}
+		}
+		return sb.toString().trim();
 	}
 }
 

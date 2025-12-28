@@ -29,4 +29,10 @@ public @interface ActionParam {
 	 * Whether value matching (allowedValues/regex) should be case-insensitive.
 	 */
 	boolean caseInsensitive() default false;
+
+	/**
+	 * Example values for this parameter. Used for generating example plans in system prompts.
+	 * If provided, the first example will be used in auto-generated plan examples.
+	 */
+	String[] examples() default {};
 }

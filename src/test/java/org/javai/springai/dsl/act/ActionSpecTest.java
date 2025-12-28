@@ -18,7 +18,8 @@ class ActionSpecTest {
 				"sxl-sql",
 				new String[0],
 				"",
-				false
+				false,
+				new String[0]
 		);
 		ActionParameterDescriptor plain = new ActionParameterDescriptor(
 				"note",
@@ -28,7 +29,8 @@ class ActionSpecTest {
 				null,
 				new String[0],
 				"",
-				false
+				false,
+				new String[0]
 		);
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",
@@ -56,7 +58,8 @@ class ActionSpecTest {
 				"sxl-sql",
 				new String[0],
 				"",
-				false
+				false,
+				new String[0]
 		);
 		ActionParameterDescriptor withoutDsl = new ActionParameterDescriptor(
 				"note",
@@ -66,7 +69,8 @@ class ActionSpecTest {
 				null,
 				new String[0],
 				"",
-				false
+				false,
+				new String[0]
 		);
 		ActionDescriptor spec = new ActionDescriptor(
 				"fetchOrders",

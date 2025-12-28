@@ -39,3 +39,13 @@ app:
   tuning-example:
     enabled: false
 
+logging:
+  level:
+    org:
+      springframework:
+        boot:
+          autoconfigure: DEBUG
+      javai:
+        springai:
+          actions: INFO
+

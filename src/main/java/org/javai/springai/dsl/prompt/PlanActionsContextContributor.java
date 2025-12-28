@@ -1,8 +1,8 @@
 package org.javai.springai.dsl.prompt;
 
+import java.util.List;
 import java.util.Optional;
-import org.javai.springai.dsl.act.ActionDescriptorFilter;
-import org.javai.springai.dsl.act.ActionPromptContributor;
+import org.javai.springai.dsl.act.ActionDescriptor;
 
 /**
  * Default contributor that appends the action catalog after the PLAN DSL guidance.
@@ -16,17 +16,26 @@ public final class PlanActionsContextContributor implements DslContextContributo
 
 	@Override
 	public Optional<String> contribute(SystemPromptContext context) {
+		// For SXL mode, provide a minimal action list (just IDs and descriptions, no JSON schemas)
+		// to give the LLM context about available actions without bloating the prompt
 		if (context == null || context.registry() == null) {
 			return Optional.empty();
 		}
-		String actions = ActionPromptContributor.emit(
-				context.registry(),
-				ActionPromptContributor.Mode.SXL,
-				context.filter() != null ? context.filter() : ActionDescriptorFilter.ALL);
-		if (actions == null || actions.isBlank()) {
+		
+		List<ActionDescriptor> descriptors = context.registry().getActionDescriptors().stream()
+				.filter(d -> context.filter() == null || context.filter().include(d))
+				.toList();
+		
+		if (descriptors.isEmpty()) {
 			return Optional.empty();
 		}
-		return Optional.of("ACTIONS:\n" + actions);
+		
+		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS:\n");
+		for (ActionDescriptor descriptor : descriptors) {
+			actions.append("- ").append(descriptor.id()).append(": ").append(descriptor.description()).append("\n");
+		}
+		
+		return Optional.of(actions.toString());
 	}
 }
 

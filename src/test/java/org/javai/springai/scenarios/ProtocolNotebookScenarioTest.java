@@ -31,6 +31,7 @@ import org.javai.springai.dsl.instrument.PiiTokenizingAugmentor;
 import org.javai.springai.dsl.instrument.TokenStore;
 import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.Planner;
+import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,11 +66,8 @@ public class ProtocolNotebookScenarioTest {
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
 		OpenAiChatOptions options = OpenAiChatOptions.builder()
 				.model("gpt-4.1-mini")
-				.temperature(0.1)
+				.temperature(0.0)
 				.topP(1.0)
-				.build();
-		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
 				.build();
 
 		protocolNotebookActions = new ProtocolNotebookActions();
@@ -78,6 +76,25 @@ public class ProtocolNotebookScenarioTest {
 		PayloadAugmentor augmentor = new PiiTokenizingAugmentor(tokenStore);
 		emitter = InvocationEmitter.of("protocol-notebook-session", invocationListener);
 		protocolCatalogTool = new ProtocolCatalogTool(emitter, augmentor);
+
+		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
+				.defaultOptions(Objects.requireNonNull(options))
+				.build();
+
+		PersonaSpec notebookDesignerPersona = PersonaSpec.builder()
+				.name("ProtocolNotebookDesigner")
+				.role("Planner for quality assurance notebook creation based on FDX statistical protocols")
+				.principles(List.of(
+						"Create a plan that invokes actions corresponding to each test section in the selected protocol.",
+						"Verify the protocol selection using available tools before proceeding with the plan.",
+						"Ensure the plan does not omit any test specified in the protocol."))
+				.constraints(List.of(
+						"Do not invent protocols or bundle IDs; use available tools to resolve ambiguities.",
+						"Do not add actions to the plan for tests not present in the selected protocol.",
+						"Do not include actions for which the protocol does not have a corresponding test."))
+				.styleGuidance(List.of(
+						"Ensure plan actions map directly to protocol test names."))
+				.build();
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
@@ -98,18 +115,23 @@ public class ProtocolNotebookScenarioTest {
 				""";
 
 		ConversationTurnResult turn = conversationManager.converse(request, "protocol-notebook-session");
+
+		assertThat(protocolCatalogTool.listInvoked()).isTrue(); // A tool call was made
+		assertThat(protocolNotebookActions.invoked()).isFalse(); // Actions not called at this point
+
 		ResolvedPlan resolvedPlan = turn.resolvedPlan();
 
+		resolvedPlan.steps().forEach(step -> System.out.println(step.toString()));
 		assertThat(resolvedPlan).isNotNull();
 		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
 		executed.steps().forEach(step -> System.out.println(step.toString()));
 		assertThat(executed.success()).isTrue();
-		assertThat(protocolNotebookActions.invoked()).isTrue();
-		assertThat(protocolCatalogTool.listInvoked()).isTrue();
+		assertThat(protocolNotebookActions.invoked()).isTrue(); // Now an action was called
 
 		assertThat(invocationListener.events).isNotEmpty();
 		assertThat(invocationListener.events.stream().map(InvocationEvent::kind).distinct().toList())
+				.contains(InvocationKind.ACTION)  // TEMPORARILY: Only checking ACTION events, not TOOL events
 				.contains(InvocationKind.TOOL, InvocationKind.ACTION);
 		assertThat(invocationListener.events.stream().map(InvocationEvent::type).toList())
 				.contains(InvocationEventType.REQUESTED, InvocationEventType.SUCCEEDED);
@@ -142,81 +164,81 @@ public class ProtocolNotebookScenarioTest {
 
 		@Action(description = "Add normality test to notebook.")
 		public void addNormalityTest(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Normality test");
 		}
 
 		@Action(description = "Add statistical readiness to notebook.")
 		public void addSpcReadinessTest(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## SPC readiness");
 		}
 
 		@Action(description = "Add control chart to notebook.")
 		public void addSpcControlChart(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Control chart");
 		}
 
 		@Action(description = "Add normality spot-check from legacy protocol to notebook.")
 		public void addLegacyNormalitySpotCheck(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Normality spot-check");
 		}
 
 		@Action(description = "Add minimal SPC readiness checklist from legacy protocol to notebook.")
 		public void addLegacySpcReadinessChecklist(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Minimal SPC readiness checklist");
 		}
 
 		@Action(description = "Add provisional control limits from legacy protocol to notebook.")
 		public void addLegacyProvisionalControlLimits(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Provisional control limits");
 		}
 
 		@Action(description = "Add lab-only data filter from experimental protocol to notebook.")
 		public void addExperimentalLabOnlyFilter(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Lab-only data filter");
 		}
 
 		@Action(description = "Add experimental distribution fit and residual analysis to notebook.")
 		public void addExperimentalDistributionFit(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Experimental distribution fit and residual analysis");
 		}
 
 		@Action(description = "Add exploratory control limits and lab-only variance chart to notebook.")
 		public void addExperimentalControlLimits(
-				@ActionParam(description = "The type of component e.g. bushing, piston") String component,
-				@ActionParam(description = "The type of measurement e.g. displacement, force") String measurement,
-				@ActionParam(description = "The ID of the data bundle containing the measurements") String bundleId,
+				@ActionParam(description = "The type of component", examples = { "bushing", "piston" }) String component,
+				@ActionParam(description = "The type of measurement", examples = { "displacement", "force" }) String measurement,
+				@ActionParam(description = "The ID of the data bundle containing the measurements", examples = { "A12345", "B6789" }) String bundleId,
 				ActionContext context) {
 			getOrCreateBuilder(context).addMarkdown("## Exploratory control limits and lab-only variance chart");
 		}
@@ -240,8 +262,7 @@ public class ProtocolNotebookScenarioTest {
 			NotebookBuilder builder;
 			if (context.contains("notebookBuilder")) {
 				builder = context.get("notebookBuilder", NotebookBuilder.class);
-			}
-			else {
+			} else {
 				builder = new NotebookBuilder();
 				context.put("notebookBuilder", builder);
 			}
@@ -253,11 +274,11 @@ public class ProtocolNotebookScenarioTest {
 	public static class ProtocolCatalogTool {
 		private final AtomicBoolean listInvoked = new AtomicBoolean(false);
 		private final AtomicBoolean getInvoked = new AtomicBoolean(false);
+		private final InvocationEmitter emitter;
+		private final PayloadAugmentor augmentor;
 		private String lastPath;
 		private String lastContent;
 		private Map<String, Object> lastMetadata = Map.of();
-		private final InvocationEmitter emitter;
-		private final PayloadAugmentor augmentor;
 
 		public ProtocolCatalogTool(InvocationEmitter emitter, PayloadAugmentor augmentor) {
 			this.emitter = Objects.requireNonNull(emitter);
@@ -350,7 +371,8 @@ public class ProtocolNotebookScenarioTest {
 		}
 	}
 
-	public record Notebook(String content) {}
+	public record Notebook(String content) {
+	}
 
 	static final class TestInvocationListener implements InvocationListener {
 		private final List<InvocationEvent> events = new ArrayList<>();

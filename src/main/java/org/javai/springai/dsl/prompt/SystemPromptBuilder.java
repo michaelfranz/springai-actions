@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
+import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionPromptContributor;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.sxl.grammar.SxlGrammarJsonSchemaEmitter;
@@ -112,7 +113,16 @@ public final class SystemPromptBuilder {
 					return section.toString();
 				})
 				.collect(Collectors.joining("\n\n"));
-		return "DSL GUIDANCE:\n" + dslSection;
+		
+		String systemPrompt = "DSL GUIDANCE:\n" + dslSection;
+		
+		// Generate example plan if actions have example values defined
+		String examplePlan = generateExamplePlan(selectedDescriptors);
+		if (!examplePlan.isBlank()) {
+			systemPrompt = systemPrompt + "\n\n" + examplePlan;
+		}
+		
+		return systemPrompt;
 	}
 
 	private static Set<String> collectDslIds(ActionRegistry registry, ActionDescriptorFilter filter, DslGuidanceProvider guidanceProvider) {
@@ -215,4 +225,41 @@ public final class SystemPromptBuilder {
 	}
 
 	private record GuidanceEntry(String dslId, String text) {}
+
+	/**
+	 * Generate an example S-expression plan from action descriptors with example values.
+	 * Takes the first 2-3 actions and the first example from each parameter to build a
+	 * concrete plan structure for the LLM to follow.
+	 */
+	private static String generateExamplePlan(List<ActionDescriptor> descriptors) {
+		// Generate example plan showing actual available actions with their parameters
+		if (descriptors.isEmpty()) {
+			return "";
+		}
+		
+		StringBuilder example = new StringBuilder("EXAMPLE PLAN (showing structure):\n");
+		example.append("(P \"Example plan\"\n");
+		
+		// Use first 2-3 actions as examples to keep it concise
+		int count = Math.min(3, descriptors.size());
+		for (int i = 0; i < count; i++) {
+			ActionDescriptor action = descriptors.get(i);
+			example.append("  (PS ").append(action.id());
+			
+			// Add parameters with examples
+			for (ActionParameterDescriptor param : action.actionParameterSpecs()) {
+				example.append(" (PA ").append(param.name());
+				if (param.examples() != null && param.examples().length > 0) {
+					example.append(" \"").append(param.examples()[0]).append("\"");
+				} else {
+					example.append(" \"<").append(param.name()).append(">\"");
+				}
+				example.append(")");
+			}
+			example.append(")\n");
+		}
+		
+		example.append(")\n");
+		return example.toString();
+	}
 }

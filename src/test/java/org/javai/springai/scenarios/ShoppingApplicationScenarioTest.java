@@ -1,9 +1,9 @@
 package org.javai.springai.scenarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.Objects;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
@@ -20,6 +20,7 @@ import org.javai.springai.dsl.exec.ResolvedStep;
 import org.javai.springai.dsl.plan.PlanStatus;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.dsl.plan.Planner;
+import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,8 +63,27 @@ public class ShoppingApplicationScenarioTest {
 		shoppingActions = new ShoppingActions();
 		specialOfferTool = new SpecialOfferTool();
 
+		PersonaSpec persona = PersonaSpec.builder()
+				.name("shopping-assistant")
+				.role("Helpful shopping assistant with access to inventory and offers")
+				.principles(java.util.List.of(
+						"Confirm missing quantities before adding items.",
+						"Surface relevant special offers before checkout.",
+						"Keep responses concise and action-focused."
+				))
+				.constraints(java.util.List.of(
+						"Do not invent products or prices; use provided tools/actions.",
+						"Do not commit checkout without user confirmation."
+				))
+				.styleGuidance(java.util.List.of(
+						"Friendly but brief tone.",
+						"Summarize basket changes clearly."
+				))
+				.build();
+
 		planner = Planner.builder()
 				.withChatClient(chatClient)
+				.persona(persona)
 				.tools(specialOfferTool)
 				.actions(shoppingActions)
 				.build();

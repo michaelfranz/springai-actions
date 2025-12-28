@@ -11,6 +11,7 @@ package org.javai.springai.dsl.act;
  * @param allowedValues optional list of whitelisted values (may be derived from enums)
  * @param allowedRegex optional regex constraint
  * @param caseInsensitive whether allowed value matching is case-insensitive
+ * @param examples optional array of example values for this parameter
  */
 public record ActionParameterDescriptor(
 		String name,
@@ -20,7 +21,8 @@ public record ActionParameterDescriptor(
 		String dslId,
 		String[] allowedValues,
 		String allowedRegex,
-		boolean caseInsensitive
+		boolean caseInsensitive,
+		String[] examples
 ) {
 	public String toSxl() {
 		StringBuilder sb = new StringBuilder();

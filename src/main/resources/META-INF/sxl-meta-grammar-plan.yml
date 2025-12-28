@@ -243,6 +243,7 @@ llm_specs:
     preamble: true
     postamble: false
     guidance: |
+      RESPOND ONLY WITH A VALID S-EXPRESSION PLAN USING THIS DSL. DO NOT RETURN PROSE, MARKDOWN, HEADINGS, OR NARRATION.
       PLAN DSL root: (P ["description"] (PS action-id <step-items>)...).
       step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use the PA symbol: (PA name value...). Values are usually quoted strings, but may also be an embedded DSL payload when structured input is needed, e.g., (PA query (EMBED sxl-sql (...))). For list/array parameters, repeat literal values inside the same PA: (PA bundleIds "A12345" "A3145" "B4323"). Pending items use (PENDING name "what is needed") when a required/invalid/unclear value is missing; do not emit empty strings. Embeds use (EMBED <dsl-id> <payload>).
       Errors are separate steps at plan level: (ERROR "..."). Do NOT put ERROR inside PS. Do NOT invent wrapper nodes. Always include the DSL id in EMBED.
@@ -256,6 +257,7 @@ llm_specs:
       style: strict
       max_examples: 2
       guidance: |
+        RESPOND ONLY WITH A VALID S-EXPRESSION PLAN USING THIS DSL. DO NOT RETURN PROSE, MARKDOWN, HEADINGS, OR NARRATION.
         PLAN DSL: Root is (P ["description"] steps...). Each step: (PS action-id <step-items>).
         step-items: zero or more parameter/EMBED/PENDING nodes. Parameters use (PA name "value"); for list/array parameters repeat literal values in the same PA: (PA bundleIds "A12345" "A3145" "B4323"); embeds use (EMBED <dsl-id> <payload>); missing/invalid/unclear required params use (PENDING name "what is needed")—never emit empty strings.
         Errors are separate steps: (ERROR "..."). Return exactly one sxl-plan rooted at (P …); only PS or ERROR steps; action-id must come from the catalog; if params are missing, prefer inline PENDING over inventing values; no other symbols.

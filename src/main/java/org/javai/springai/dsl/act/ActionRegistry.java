@@ -51,6 +51,7 @@ public final class ActionRegistry {
 		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
 		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
 		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
+		String[] examples = annotation != null ? annotation.examples() : new String[0];
 		return new ActionParameterDescriptor(
 				parameter.getName(),
 				parameter.getType().getName(),
@@ -59,7 +60,8 @@ public final class ActionRegistry {
 				dslId,
 				derivedAllowedValues,
 				allowedRegex,
-				caseInsensitive
+				caseInsensitive,
+				examples
 		);
 	}
 
