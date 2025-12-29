@@ -1,7 +1,5 @@
 package org.javai.springai.dsl.bind;
 
-import org.javai.springai.dsl.plan.Plan;
-import org.javai.springai.dsl.plan.PlanTypeFactory;
 import org.javai.springai.dsl.sql.Query;
 import org.javai.springai.dsl.sql.SqlTypeFactory;
 
@@ -17,8 +15,7 @@ public final class TypeFactoryBootstrap {
 	}
 
 	public static void registerBuiltIns() {
-		TypeFactoryRegistry.register("sxl-plan", Plan.class, new PlanTypeFactory());
 		TypeFactoryRegistry.register("sxl-sql", Query.class, new SqlTypeFactory());
-		TypeFactoryRegistry.requireRegistered("sxl-plan", "sxl-sql");
+		TypeFactoryRegistry.requireRegistered("sxl-sql");
 	}
 }

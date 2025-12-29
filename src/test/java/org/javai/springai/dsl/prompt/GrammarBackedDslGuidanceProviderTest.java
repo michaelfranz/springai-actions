@@ -48,20 +48,6 @@ class GrammarBackedDslGuidanceProviderTest {
 		}
 
 		@Test
-		@DisplayName("Should load single Plan grammar from resource")
-		void shouldLoadSinglePlanGrammar() {
-			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("META-INF/sxl-meta-grammar-plan.yml"),
-					classLoader
-			);
-
-			Optional<SxlGrammar> planGrammar = provider.grammarFor("sxl-plan");
-
-			assertThat(planGrammar).isPresent();
-			assertThat(planGrammar.get().dsl().id()).isEqualTo("sxl-plan");
-		}
-
-		@Test
 		@DisplayName("Should load single Universal grammar from resource")
 		void shouldLoadSingleUniversalGrammar() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
@@ -81,14 +67,12 @@ class GrammarBackedDslGuidanceProviderTest {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
 			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
 			assertThat(provider.grammarFor("sxl-universal")).isPresent();
 		}
 
@@ -101,14 +85,6 @@ class GrammarBackedDslGuidanceProviderTest {
 			))
 					.isInstanceOf(IllegalArgumentException.class)
 					.hasMessageContaining("Resource not found");
-		}
-
-		@Test
-		@DisplayName("Should load empty grammar list")
-		void shouldLoadEmptyGrammarListIgnored() {
-			// Instead of invalid grammar test, test something that actually fails
-			// The sxl-meta-grammar.yml is not a valid DSL-specific grammar
-			// but let's skip this as it requires more understanding of what makes it "invalid"
 		}
 
 		@Test
@@ -160,11 +136,11 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should return model-specific guidance when model specified")
 		void shouldReturnModelSpecificGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("META-INF/sxl-meta-grammar-plan.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
-			Optional<String> guidance = provider.guidanceFor("sxl-plan", "openai", "gpt-4.1");
+			Optional<String> guidance = provider.guidanceFor("sxl-sql", "openai", "gpt-4.1");
 
 			assertThat(guidance).isPresent();
 			assertThat(guidance.get()).isNotEmpty();
@@ -202,13 +178,13 @@ class GrammarBackedDslGuidanceProviderTest {
 		@DisplayName("Should prioritize guidance correctly: model > provider > default")
 		void shouldPrioritizeGuidanceCorrectly() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of("META-INF/sxl-meta-grammar-plan.yml"),
+					List.of("META-INF/sxl-meta-grammar-sql.yml"),
 					classLoader
 			);
 
-			Optional<String> defaultGuidance = provider.guidanceFor("sxl-plan", null, null);
-			Optional<String> providerGuidance = provider.guidanceFor("sxl-plan", "openai", null);
-			Optional<String> modelGuidance = provider.guidanceFor("sxl-plan", "openai", "gpt-4.1");
+			Optional<String> defaultGuidance = provider.guidanceFor("sxl-sql", null, null);
+			Optional<String> providerGuidance = provider.guidanceFor("sxl-sql", "openai", null);
+			Optional<String> modelGuidance = provider.guidanceFor("sxl-sql", "openai", "gpt-4.1");
 
 			assertThat(defaultGuidance).isPresent();
 			assertThat(providerGuidance).isPresent();
@@ -263,18 +239,15 @@ class GrammarBackedDslGuidanceProviderTest {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
 			Optional<String> sqlGuidance = provider.guidanceFor("sxl-sql", null, null);
-			Optional<String> planGuidance = provider.guidanceFor("sxl-plan", null, null);
 			Optional<String> universalGuidance = provider.guidanceFor("sxl-universal", null, null);
 
 			assertThat(sqlGuidance).isPresent();
-			assertThat(planGuidance).isPresent();
 			assertThat(universalGuidance).isPresent();
 
 			// Universal guidance should be available
@@ -330,18 +303,18 @@ class GrammarBackedDslGuidanceProviderTest {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
 			Optional<SxlGrammar> sqlGrammar = provider.grammarFor("sxl-sql");
-			Optional<SxlGrammar> planGrammar = provider.grammarFor("sxl-plan");
+			Optional<SxlGrammar> universalGrammar = provider.grammarFor("sxl-universal");
 
 			assertThat(sqlGrammar).isPresent();
-			assertThat(planGrammar).isPresent();
+			assertThat(universalGrammar).isPresent();
 			assertThat(sqlGrammar.get().dsl().id()).isEqualTo("sxl-sql");
-			assertThat(planGrammar.get().dsl().id()).isEqualTo("sxl-plan");
+			assertThat(universalGrammar.get().dsl().id()).isEqualTo("sxl-universal");
 		}
 	}
 
@@ -350,27 +323,27 @@ class GrammarBackedDslGuidanceProviderTest {
 	class GrammarLoadingOrderTests {
 
 		@Test
-		@DisplayName("Should preserve load order when loading SQL then Plan")
-		void shouldPreserveOrderSqlThenPlan() {
+		@DisplayName("Should preserve load order when loading SQL then Universal")
+		void shouldPreserveOrderSqlThenUniversal() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
 			// Both grammars should be available
 			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
+			assertThat(provider.grammarFor("sxl-universal")).isPresent();
 		}
 
 		@Test
-		@DisplayName("Should preserve load order when loading Plan then SQL")
-		void shouldPreserveOrderPlanThenSql() {
+		@DisplayName("Should preserve load order when loading Universal then SQL")
+		void shouldPreserveOrderUniversalThenSql() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
-							"META-INF/sxl-meta-grammar-plan.yml",
+							"META-INF/sxl-meta-grammar-universal.yml",
 							"META-INF/sxl-meta-grammar-sql.yml"
 					),
 					classLoader
@@ -378,43 +351,7 @@ class GrammarBackedDslGuidanceProviderTest {
 
 			// Both grammars should be available
 			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
-		}
-
-		@Test
-		@DisplayName("Should preserve load order when loading SQL, Plan, then Universal")
-		void shouldPreserveOrderSqlPlanUniversal() {
-			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of(
-							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
-							"META-INF/sxl-meta-grammar-universal.yml"
-					),
-					classLoader
-			);
-
-			// All grammars should be available
-			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
 			assertThat(provider.grammarFor("sxl-universal")).isPresent();
-		}
-
-		@Test
-		@DisplayName("Should preserve load order when loading Universal first")
-		void shouldPreserveOrderUniversalFirst() {
-			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
-					List.of(
-							"META-INF/sxl-meta-grammar-universal.yml",
-							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml"
-					),
-					classLoader
-			);
-
-			// All grammars should be available
-			assertThat(provider.grammarFor("sxl-universal")).isPresent();
-			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
 		}
 
 		@Test
@@ -422,7 +359,6 @@ class GrammarBackedDslGuidanceProviderTest {
 		void shouldBeDeterministicWithSameLoadOrder() {
 			List<String> resourceOrder = List.of(
 					"META-INF/sxl-meta-grammar-sql.yml",
-					"META-INF/sxl-meta-grammar-plan.yml",
 					"META-INF/sxl-meta-grammar-universal.yml"
 			);
 
@@ -454,18 +390,18 @@ class GrammarBackedDslGuidanceProviderTest {
 					classLoader
 			);
 
-			// Load SQL with Plan
-			GrammarBackedDslGuidanceProvider providerSqlAndPlan = new GrammarBackedDslGuidanceProvider(
+			// Load SQL with Universal
+			GrammarBackedDslGuidanceProvider providerSqlAndUniversal = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
 			// SQL guidance should be the same in both cases
 			Optional<String> guidanceSqlOnly = providerSqlOnly.guidanceFor("sxl-sql", "openai", null);
-			Optional<String> guidanceSqlInContext = providerSqlAndPlan.guidanceFor("sxl-sql", "openai", null);
+			Optional<String> guidanceSqlInContext = providerSqlAndUniversal.guidanceFor("sxl-sql", "openai", null);
 
 			assertThat(guidanceSqlOnly).isPresent();
 			assertThat(guidanceSqlInContext).isPresent();
@@ -478,7 +414,6 @@ class GrammarBackedDslGuidanceProviderTest {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
@@ -486,38 +421,33 @@ class GrammarBackedDslGuidanceProviderTest {
 
 			// Access grammars in different orders
 			SxlGrammar sqlGrammar1 = provider.grammarFor("sxl-sql").orElseThrow();
-			SxlGrammar planGrammar1 = provider.grammarFor("sxl-plan").orElseThrow();
 			SxlGrammar universalGrammar1 = provider.grammarFor("sxl-universal").orElseThrow();
 
 			// Access again in reverse order
 			SxlGrammar universalGrammar2 = provider.grammarFor("sxl-universal").orElseThrow();
-			SxlGrammar planGrammar2 = provider.grammarFor("sxl-plan").orElseThrow();
 			SxlGrammar sqlGrammar2 = provider.grammarFor("sxl-sql").orElseThrow();
 
 			// All should be the same objects
 			assertThat(sqlGrammar1).isSameAs(sqlGrammar2);
-			assertThat(planGrammar1).isSameAs(planGrammar2);
 			assertThat(universalGrammar1).isSameAs(universalGrammar2);
 		}
 
 		@Test
 		@DisplayName("Each DSL grammar remains independent despite load order")
 		void shouldMaintainDslIndependenceRegardlessOfLoadOrder() {
-			// Order 1: SQL -> Plan -> Universal
+			// Order 1: SQL -> Universal
 			GrammarBackedDslGuidanceProvider provider1 = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
-			// Order 2: Universal -> Plan -> SQL
+			// Order 2: Universal -> SQL
 			GrammarBackedDslGuidanceProvider provider2 = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-universal.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-sql.yml"
 					),
 					classLoader
@@ -527,11 +457,6 @@ class GrammarBackedDslGuidanceProviderTest {
 			String sqlGuidance1 = provider1.guidanceFor("sxl-sql", null, null).orElseThrow();
 			String sqlGuidance2 = provider2.guidanceFor("sxl-sql", null, null).orElseThrow();
 			assertThat(sqlGuidance1).isEqualTo(sqlGuidance2);
-
-			// Plan guidance should be identical regardless of load order
-			String planGuidance1 = provider1.guidanceFor("sxl-plan", null, null).orElseThrow();
-			String planGuidance2 = provider2.guidanceFor("sxl-plan", null, null).orElseThrow();
-			assertThat(planGuidance1).isEqualTo(planGuidance2);
 
 			// Universal guidance should be identical regardless of load order
 			String universalGuidance1 = provider1.guidanceFor("sxl-universal", null, null).orElseThrow();
@@ -561,12 +486,12 @@ class GrammarBackedDslGuidanceProviderTest {
 		}
 
 		@Test
-		@DisplayName("Scenario: Load SQL and Plan grammars, then use guidance for each")
-		void scenarioLoadSqlAndPlanThenUseGuidance() {
+		@DisplayName("Scenario: Load SQL and Universal grammars, then use guidance for each")
+		void scenarioLoadSqlAndUniversalThenUseGuidance() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml"
+							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
@@ -575,36 +500,32 @@ class GrammarBackedDslGuidanceProviderTest {
 			Optional<String> sqlGuidance = provider.guidanceFor("sxl-sql", "openai", null);
 			assertThat(sqlGuidance).isPresent();
 
-			// Plan guidance
-			Optional<String> planGuidance = provider.guidanceFor("sxl-plan", "openai", null);
-			assertThat(planGuidance).isPresent();
+			// Universal guidance
+			Optional<String> universalGuidance = provider.guidanceFor("sxl-universal", "openai", null);
+			assertThat(universalGuidance).isPresent();
 
 			// Both should be different (domain-specific)
-			assertThat(sqlGuidance.get()).isNotEqualTo(planGuidance.get());
+			assertThat(sqlGuidance.get()).isNotEqualTo(universalGuidance.get());
 		}
 
 		@Test
-		@DisplayName("Scenario: Load all three grammars (SQL, Plan, Universal)")
-		void scenarioLoadAllThreeGrammars() {
+		@DisplayName("Scenario: Load both grammars (SQL, Universal)")
+		void scenarioLoadBothGrammars() {
 			GrammarBackedDslGuidanceProvider provider = new GrammarBackedDslGuidanceProvider(
 					List.of(
 							"META-INF/sxl-meta-grammar-sql.yml",
-							"META-INF/sxl-meta-grammar-plan.yml",
 							"META-INF/sxl-meta-grammar-universal.yml"
 					),
 					classLoader
 			);
 
-			// All grammars should be available
+			// Both grammars should be available
 			assertThat(provider.grammarFor("sxl-sql")).isPresent();
-			assertThat(provider.grammarFor("sxl-plan")).isPresent();
 			assertThat(provider.grammarFor("sxl-universal")).isPresent();
 
 			// All guidance should be available
 			assertThat(provider.guidanceFor("sxl-sql", null, null)).isPresent();
-			assertThat(provider.guidanceFor("sxl-plan", null, null)).isPresent();
 			assertThat(provider.guidanceFor("sxl-universal", null, null)).isPresent();
 		}
 	}
 }
-

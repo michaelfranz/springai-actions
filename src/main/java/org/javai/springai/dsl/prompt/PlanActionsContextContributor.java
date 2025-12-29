@@ -6,14 +6,15 @@ import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
 
 /**
- * Default contributor that appends the action catalog after the PLAN DSL guidance.
+ * Default contributor that appends the action catalog to the system prompt.
  * Generates JSON-oriented format guidance since plans use JSON structure.
  */
 public final class PlanActionsContextContributor implements DslContextContributor {
 
 	@Override
 	public String dslId() {
-		return "sxl-plan";
+		// No DSL - plans use JSON, not S-expressions
+		return null;
 	}
 
 	@Override

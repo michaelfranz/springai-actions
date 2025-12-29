@@ -19,12 +19,8 @@ class SxlGrammarPromptGeneratorTest {
 	private static final String SQL_DSL_DESCRIPTION = "S-expression language for expressing SQL SELECT queries";
 	private static final String SQL_DSL_ID = "sxl-sql";
 
-	private static final String PLAN_DSL_DESCRIPTION = "S-expression language for expressing execution plans with steps";
-	private static final String PLAN_DSL_ID = "sxl-plan";
-
 	private SxlGrammarParser parser;
 	private SxlGrammar sqlGrammar;
-	private SxlGrammar planGrammar;
 	private SxlGrammar universalGrammar;
 	private SxlGrammarPromptGenerator generator;
 
@@ -38,12 +34,6 @@ class SxlGrammarPromptGeneratorTest {
 				.getResourceAsStream("META-INF/sxl-meta-grammar-sql.yml");
 		assertThat(sqlStream).isNotNull();
 		sqlGrammar = parser.parse(sqlStream);
-
-		// Load Plan grammar from resources
-		InputStream planStream = getClass().getClassLoader()
-				.getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml");
-		assertThat(planStream).isNotNull();
-		planGrammar = parser.parse(planStream);
 
 		// Load Universal grammar from resources
 		InputStream universalStream = getClass().getClassLoader()
@@ -119,15 +109,6 @@ class SxlGrammarPromptGeneratorTest {
 		// 10. The prompt should be well-structured and readable
 		assertThat(prompt).isNotBlank();
 		assertThat(prompt.length()).isGreaterThan(100); // Should be substantial
-
-		// 11. The prompt should NOT include:
-		// - Universal s-expression syntax rules (those are separate)
-		// - Meta-grammar version (internal detail)
-		// - LLM specs configuration (handled separately)
-		// - Embedding configuration details (unless relevant to DSL structure)
-
-		// Verify the prompt is structured in a logical way
-		// It should have clear sections for different aspects of the grammar
 	}
 
 	@Test
@@ -303,34 +284,6 @@ class SxlGrammarPromptGeneratorTest {
 	}
 
 	@Test
-	void planDslPrompt() {
-		String prompt = generator.generate(planGrammar);
-
-		assertThat(prompt)
-				.contains(PLAN_DSL_ID)
-				.contains(PLAN_DSL_DESCRIPTION)
-				.contains("=== SYMBOL DEFINITIONS ===")
-				.contains("=== LITERAL DEFINITIONS ===")
-				.contains("=== IDENTIFIER RULES ===")
-				.contains("=== RESERVED SYMBOLS ===")
-				.contains("=== EMBEDDING CONFIGURATION ===")
-				.contains("=== GLOBAL CONSTRAINTS ===");
-
-		// Do not include version lines.
-		assertThat(prompt).doesNotContain("Version:");
-		// Do not include unused separators.
-		assertThat(prompt).doesNotContain("---");
-
-		// No boilerplate placeholders should appear.
-		assertThat(prompt)
-				.doesNotContain("No symbols defined.")
-				.doesNotContain("No literal definitions.")
-				.doesNotContain("No reserved symbols.")
-				.doesNotContain("Embedding not configured.")
-				.doesNotContain("No global constraints.");
-	}
-
-	@Test
 	void sqlDslPrompt() {
 		String prompt = generator.generate(sqlGrammar);
 
@@ -382,23 +335,6 @@ class SxlGrammarPromptGeneratorTest {
 	}
 
 	@Test
-	@DisplayName("should generate and save Plan grammar golden file")
-	void shouldGeneratePlanGoldenFile() {
-		// This test verifies that the golden file generator works correctly
-		// and creates the golden file in the expected location
-		String prompt = generator.generate(planGrammar);
-
-		// Verify the prompt is substantial (contains actual content)
-		assertThat(prompt).isNotEmpty();
-		assertThat(prompt.length()).isGreaterThan(500); // Should be substantial
-
-		// Verify key sections are present
-		assertThat(prompt).contains(PLAN_DSL_ID);
-		assertThat(prompt).contains(PLAN_DSL_DESCRIPTION);
-		assertThat(prompt).contains("SYMBOL DEFINITIONS");
-	}
-
-	@Test
 	@DisplayName("Golden files should be readable for documentation purposes")
 	void goldenFilesShouldBeReadable() {
 		// This test documents the purpose of golden files
@@ -406,33 +342,24 @@ class SxlGrammarPromptGeneratorTest {
 		// that developers can review to understand what system prompts look like
 
 		String sqlPrompt = generator.generate(sqlGrammar);
-		String planPrompt = generator.generate(planGrammar);
 
-		// Both prompts should be well-formatted and human-readable
+		// Prompts should be well-formatted and human-readable
 		assertThat(sqlPrompt).doesNotContain("\u0000"); // No null bytes
-		assertThat(planPrompt).doesNotContain("\u0000");
 
 		// Should have proper line breaks for readability
 		assertThat(sqlPrompt).contains("\n");
-		assertThat(planPrompt).contains("\n");
 	}
 
 	@Test
 	@DisplayName("Golden files document all grammar features")
 	void goldenFilesDocumentAllGrammarFeatures() {
 		String sqlPrompt = generator.generate(sqlGrammar);
-		String planPrompt = generator.generate(planGrammar);
 
 		// SQL grammar should document at least these features:
 		assertThat(sqlPrompt)
 				.contains("Q") // Query
 				.contains("S") // Select
 				.contains("F"); // From
-
-		// Plan grammar should document at least these features:
-		assertThat(planPrompt)
-				.contains("P") // Plan
-				.contains("PS"); // PlanStep
 	}
 
 	@Test
@@ -464,4 +391,3 @@ class SxlGrammarPromptGeneratorTest {
 		assertThat(prompt).isNotBlank();
 	}
 }
-

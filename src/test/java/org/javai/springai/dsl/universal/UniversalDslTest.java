@@ -29,7 +29,6 @@ class UniversalDslTest {
 
 	private SxlGrammar universalGrammar;
 	private SxlGrammar sqlGrammar;
-	private SxlGrammar planGrammar;
 	private DefaultValidatorRegistry registry;
 
 	@BeforeEach
@@ -39,15 +38,13 @@ class UniversalDslTest {
 		// Load universal grammar from resources
 		universalGrammar = loadGrammar("META-INF/sxl-meta-grammar-universal.yml", parser);
 
-		// Load SQL and Plan grammars for embedding tests
+		// Load SQL grammar for embedding tests
 		sqlGrammar = loadGrammar("META-INF/sxl-meta-grammar-sql.yml", parser);
-		planGrammar = loadGrammar("META-INF/sxl-meta-grammar-plan.yml", parser);
 
 		// Create registry with all grammars
 		registry = new DefaultValidatorRegistry();
 		registry.addGrammar("sxl-universal", universalGrammar);
 		registry.addGrammar("sxl-sql", sqlGrammar);
-		registry.addGrammar("sxl-plan", planGrammar);
 	}
 
 	private SxlGrammar loadGrammar(String resourceName, SxlGrammarParser parser) {
@@ -105,62 +102,18 @@ class UniversalDslTest {
 		}
 
 		@Test
-		@DisplayName("Should parse EMBED with sxl-plan DSL")
-		void shouldParseEmbedWithPlanDsl() {
-			String input = """
-				(EMBED sxl-plan
-				  (P "Find all completed orders"
-				    (PS queryOrders (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-				  )
-				)
-				""";
+		@DisplayName("Should parse multiple SQL queries")
+		void shouldParseMultipleSqlQueries() {
+			String input1 = "(EMBED sxl-sql (Q (F orders o) (S (AS o.id id))))";
+			String input2 = "(EMBED sxl-sql (Q (F products p) (S (AS p.name name))))";
 
-			List<SxlNode> nodes = parseAndValidate(input);
+			List<SxlNode> nodes1 = parseAndValidate(input1);
+			List<SxlNode> nodes2 = parseAndValidate(input2);
 
-			assertThat(nodes).hasSize(1);
-			SxlNode embed = nodes.getFirst();
-			assertThat(embed.symbol()).isEqualTo("EMBED");
-			assertThat(embed.args()).hasSize(2);
-			// Second arg is the plan payload
-			SxlNode payload = embed.args().get(1);
-			assertThat(payload.symbol()).isEqualTo("P");
-		}
-
-		@Test
-		@DisplayName("Should embed SQL query inside Plan step")
-		void shouldEmbedSqlQueryInsidePlanStep() {
-			String input = """
-				(EMBED sxl-plan
-				  (P "Execute a query"
-				    (PS runQuery (EMBED sxl-sql (Q (F fact_sales f) (S (AS f.id id)))))
-				  )
-				)
-				""";
-
-			List<SxlNode> nodes = parseAndValidate(input);
-
-			assertThat(nodes).hasSize(1);
-			SxlNode embed = nodes.getFirst();
-			assertThat(embed.symbol()).isEqualTo("EMBED");
-
-			// Navigate to the Plan step to verify nested EMBED
-			SxlNode plan = embed.args().get(1);
-			assertThat(plan.symbol()).isEqualTo("P");
-			assertThat(plan.args()).isNotEmpty();
-
-			// Find the PS (step) node
-			SxlNode planStep = plan.args().stream()
-				.filter(node -> "PS".equals(node.symbol()))
-				.findFirst()
-				.orElseThrow(() -> new AssertionError("PS symbol not found"));
-
-			// Verify the nested EMBED sxl-sql
-			assertThat(planStep.args()).hasSize(2);
-			SxlNode nestedEmbed = planStep.args().get(1);
-			assertThat(nestedEmbed.symbol()).isEqualTo("EMBED");
-			// The second arg of nested EMBED should be the SQL query
-			SxlNode nestedPayload = nestedEmbed.args().get(1);
-			assertThat(nestedPayload.symbol()).isEqualTo("Q");
+			assertThat(nodes1).hasSize(1);
+			assertThat(nodes2).hasSize(1);
+			assertThat(nodes1.getFirst().symbol()).isEqualTo("EMBED");
+			assertThat(nodes2.getFirst().symbol()).isEqualTo("EMBED");
 		}
 
 		@Test
@@ -203,7 +156,7 @@ class UniversalDslTest {
 		@Test
 		@DisplayName("Should accept various valid DSL IDs")
 		void shouldAcceptValidDslIds() {
-			String[] validDslIds = { "sxl-sql", "sxl-plan", "sxl-universal", "my-custom-dsl" };
+			String[] validDslIds = { "sxl-sql", "sxl-universal", "my-custom-dsl" };
 
 			for (String dslId : validDslIds) {
 				String input = String.format("""
@@ -222,36 +175,27 @@ class UniversalDslTest {
 	}
 
 	@Nested
-	@DisplayName("EMBED with Multiple Levels of Nesting")
-	class EmbedNestingTests {
+	@DisplayName("EMBED with Multiple Queries")
+	class EmbedMultipleQueriesTests {
 
 		@Test
-		@DisplayName("Should support two levels of EMBED nesting")
-		void shouldSupportTwoLevelsOfEmbedNesting() {
-			String input = """
-				(EMBED sxl-plan
-				  (P "Multi-level embedding"
-				    (PS step1 (EMBED sxl-sql (Q (F t1 x) (S (AS x.id id)))))
-				    (PS step2 (EMBED sxl-sql (Q (F t2 y) (S (AS y.value val)))))
-				  )
-				)
-				""";
+		@DisplayName("Should parse multiple EMBEDs sequentially")
+		void shouldParseMultipleEmbedsSequentially() {
+			String input = "(EMBED sxl-sql (Q (F t1 x) (S (AS x.id id))))";
 
 			List<SxlNode> nodes = parseAndValidate(input);
 
 			assertThat(nodes).hasSize(1);
-			SxlNode topLevelEmbed = nodes.getFirst();
-			assertThat(topLevelEmbed.symbol()).isEqualTo("EMBED");
+			SxlNode embed = nodes.getFirst();
+			assertThat(embed.symbol()).isEqualTo("EMBED");
 		}
 
 		@Test
-		@DisplayName("Should reject invalid nested EMBED (missing inner EMBED wrapper)")
-		void shouldParseValidNestedStructure() {
+		@DisplayName("Should parse SQL with complex clauses")
+		void shouldParseSqlWithComplexClauses() {
 			String input = """
-				(EMBED sxl-plan
-				  (P "Test"
-				    (PS step (EMBED sxl-sql (Q (F orders o) (S (AS o.id id)))))
-				  )
+				(EMBED sxl-sql
+				  (Q (F orders o) (S (AS o.id id) (AS o.amount amount)) (W (GT o.amount 100)))
 				)
 				""";
 
@@ -299,4 +243,3 @@ class UniversalDslTest {
 		}
 	}
 }
-

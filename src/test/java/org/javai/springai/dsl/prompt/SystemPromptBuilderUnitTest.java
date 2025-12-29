@@ -21,17 +21,19 @@ class SystemPromptBuilderUnitTest {
 		TypeFactoryBootstrap.registerBuiltIns();
 		registry = new ActionRegistry();
 		guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("META-INF/sxl-meta-grammar-universal.yml", "META-INF/sxl-meta-grammar-plan.yml", "META-INF/sxl-meta-grammar-sql.yml"),
+				List.of("META-INF/sxl-meta-grammar-universal.yml", "META-INF/sxl-meta-grammar-sql.yml"),
 				getClass().getClassLoader());
 	}
 
 	@Test
-	void includesPlanDslGuidanceByDefault() {
+	void planActionsDoNotRequireSxlPlanGuidance() {
+		// Plans now use JSON format, not S-expressions
 		registry.registerActions(new PlanOnlyActions());
 
 		String prompt = SystemPromptBuilder.build(registry, ad -> true, guidanceProvider, SystemPromptBuilder.Mode.SXL);
 
-		assertThat(prompt).contains("DSL sxl-plan:");
+		// Plan no longer has dslId, so no sxl-plan guidance
+		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).doesNotContain("DSL sxl-sql:");
 	}
 
@@ -41,7 +43,7 @@ class SystemPromptBuilderUnitTest {
 
 		String prompt = SystemPromptBuilder.build(registry, ad -> true, guidanceProvider, SystemPromptBuilder.Mode.SXL);
 
-		// sxl-plan is no longer auto-included since we use JSON for plans
+		// Only SQL guidance included for Query parameters
 		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
@@ -56,7 +58,6 @@ class SystemPromptBuilderUnitTest {
 				guidanceProvider,
 				SystemPromptBuilder.Mode.SXL);
 
-		// sxl-plan is no longer auto-included since we use JSON for plans
 		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
@@ -72,15 +73,13 @@ class SystemPromptBuilderUnitTest {
 				SystemPromptBuilder.Mode.SXL
 		);
 
-		// sxl-plan is no longer auto-included since we use JSON for plans
 		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
 
 	@Test
-	void ordersGuidanceUniversalThenPlanThenOthersAlphabetically() {
-		// Register both action types to get both sxl-plan and sxl-sql
-		registry.registerActions(new PlanOnlyActions());
+	void ordersGuidanceUniversalThenSqlAlphabetically() {
+		// Register SQL actions to get sxl-sql guidance
 		registry.registerActions(new SqlActions());
 
 		String prompt = SystemPromptBuilder.build(
@@ -91,12 +90,10 @@ class SystemPromptBuilderUnitTest {
 		);
 
 		int idxUniversal = prompt.indexOf("DSL sxl-universal:");
-		int idxPlan = prompt.indexOf("DSL sxl-plan:");
 		int idxSql = prompt.indexOf("DSL sxl-sql:");
 
 		assertThat(idxUniversal).isNotNegative();
-		assertThat(idxPlan).isGreaterThan(idxUniversal);
-		assertThat(idxSql).isGreaterThan(idxPlan);
+		assertThat(idxSql).isGreaterThan(idxUniversal);
 	}
 
 	private static class PlanOnlyActions {
@@ -113,4 +110,3 @@ class SystemPromptBuilderUnitTest {
 		}
 	}
 }
-

@@ -13,11 +13,11 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldLoadGrammarFromResource() {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		SxlGrammar grammar = registry.registerResource("META-INF/sxl-meta-grammar-plan.yml", getClass().getClassLoader());
+		SxlGrammar grammar = registry.registerResource("META-INF/sxl-meta-grammar-sql.yml", getClass().getClassLoader());
 
 		assertThat(grammar).isNotNull();
-		assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
-		assertThat(registry.grammarFor("sxl-plan")).contains(grammar);
+		assertThat(grammar.dsl().id()).isEqualTo("sxl-sql");
+		assertThat(registry.grammarFor("sxl-sql")).contains(grammar);
 	}
 
 	@Test
@@ -33,13 +33,13 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldRegisterFromPath() throws Exception {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("META-INF/sxl-meta-grammar-plan.yml"));
+		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("META-INF/sxl-meta-grammar-sql.yml"));
 		Path path = Path.of(resource.toURI());
 
 		SxlGrammar grammar = registry.registerPath(path);
 
-		assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
-		assertThat(registry.grammarFor("sxl-plan")).contains(grammar);
+		assertThat(grammar.dsl().id()).isEqualTo("sxl-sql");
+		assertThat(registry.grammarFor("sxl-sql")).contains(grammar);
 	}
 
 	@Test

@@ -39,7 +39,6 @@ import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.DefaultValidatorRegistry;
-import org.javai.springai.sxl.DslParsingStrategy;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
@@ -433,22 +432,14 @@ public final class Planner {
 
 	/**
 	 * Fallback S-expression parsing for backwards compatibility.
+	 * Uses universal parsing strategy since we no longer have a dedicated plan grammar.
 	 */
 	private Plan parseSxlPlan(String response) {
 		try {
 			SxlTokenizer tokenizer = new SxlTokenizer(response);
 			var tokens = tokenizer.tokenize();
 
-			// Prefer plan grammar if provided
-			SxlGrammar planGrammar = grammars.stream()
-					.filter(g -> g.dsl() != null && "sxl-plan".equals(g.dsl().id()))
-					.findFirst()
-					.orElse(null);
-
-			var strategy = planGrammar != null
-					? new DslParsingStrategy(planGrammar, this.validatorRegistry)
-					: new UniversalParsingStrategy();
-			SxlParser parser = new SxlParser(tokens, strategy);
+			SxlParser parser = new SxlParser(tokens, new UniversalParsingStrategy());
 			List<SxlNode> nodes = parser.parse();
 			if (nodes.isEmpty()) {
 				throw new PlanParseException("LLM returned no parseable plan nodes");
@@ -617,9 +608,9 @@ public final class Planner {
 			TypeFactoryBootstrap.registerBuiltIns();
 
 			// Auto-discover grammars: explicit additions win, then defaults/meta-inf.
+			// Note: Plan DSL was removed - plans now use JSON format.
 			SxlGrammarRegistry registry = SxlGrammarRegistry.create();
 			registry.registerUniversal(Planner.class.getClassLoader());
-			registry.registerResource("META-INF/sxl-meta-grammar-plan.yml");
 			registry.registerResource("META-INF/sxl-meta-grammar-sql.yml");
 			registry.registerMetaInfGrammars(Planner.class.getClassLoader());
 
@@ -639,7 +630,7 @@ public final class Planner {
 
 			// Ensure plan actions contributor is present
 			boolean hasPlanContributor = this.dslContributors.stream()
-					.anyMatch(c -> c != null && "sxl-plan".equals(c.dslId()));
+					.anyMatch(c -> c instanceof PlanActionsContextContributor);
 			if (!hasPlanContributor) {
 				this.dslContributors.add(new PlanActionsContextContributor());
 			}

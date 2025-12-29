@@ -68,7 +68,7 @@ class TypeFactoryRegistryTest {
 
 	@Test
 	void requireRegisteredThrowsWhenMissing() {
-		assertThatThrownBy(() -> TypeFactoryRegistry.requireRegistered("sxl-plan"))
+		assertThatThrownBy(() -> TypeFactoryRegistry.requireRegistered("sxl-nonexistent"))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("not registered");
 	}
@@ -77,7 +77,6 @@ class TypeFactoryRegistryTest {
 	void bootstrapRegistersBuiltIns() {
 		TypeFactoryBootstrap.registerBuiltIns();
 
-		assertThat(TypeFactoryRegistry.getFactory("sxl-plan", Plan.class)).isPresent();
 		assertThat(TypeFactoryRegistry.getFactory("sxl-sql", Query.class)).isPresent();
 	}
 
