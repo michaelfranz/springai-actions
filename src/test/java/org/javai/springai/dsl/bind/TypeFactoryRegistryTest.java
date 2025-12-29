@@ -2,9 +2,7 @@ package org.javai.springai.dsl.bind;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.util.Optional;
-import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.sql.Query;
 import org.javai.springai.sxl.SxlNode;
 import org.junit.jupiter.api.AfterEach;
@@ -77,6 +75,7 @@ class TypeFactoryRegistryTest {
 	void bootstrapRegistersBuiltIns() {
 		TypeFactoryBootstrap.registerBuiltIns();
 
+		// Only SQL is registered as built-in; plans now use JSON format
 		assertThat(TypeFactoryRegistry.getFactory("sxl-sql", Query.class)).isPresent();
 	}
 

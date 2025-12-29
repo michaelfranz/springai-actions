@@ -2,7 +2,6 @@ package org.javai.springai.sxl.grammar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -13,11 +12,11 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldLoadGrammarFromResource() {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		SxlGrammar grammar = registry.registerResource("META-INF/sxl-meta-grammar-sql.yml", getClass().getClassLoader());
+		SxlGrammar grammar = registry.registerResource("META-INF/sxl-meta-grammar-plan.yml", getClass().getClassLoader());
 
 		assertThat(grammar).isNotNull();
-		assertThat(grammar.dsl().id()).isEqualTo("sxl-sql");
-		assertThat(registry.grammarFor("sxl-sql")).contains(grammar);
+		assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
+		assertThat(registry.grammarFor("sxl-plan")).contains(grammar);
 	}
 
 	@Test
@@ -33,13 +32,13 @@ class SxlGrammarRegistryTest {
 	@Test
 	void shouldRegisterFromPath() throws Exception {
 		SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("META-INF/sxl-meta-grammar-sql.yml"));
+		URL resource = Objects.requireNonNull(getClass().getClassLoader().getResource("META-INF/sxl-meta-grammar-plan.yml"));
 		Path path = Path.of(resource.toURI());
 
 		SxlGrammar grammar = registry.registerPath(path);
 
-		assertThat(grammar.dsl().id()).isEqualTo("sxl-sql");
-		assertThat(registry.grammarFor("sxl-sql")).contains(grammar);
+		assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
+		assertThat(registry.grammarFor("sxl-plan")).contains(grammar);
 	}
 
 	@Test

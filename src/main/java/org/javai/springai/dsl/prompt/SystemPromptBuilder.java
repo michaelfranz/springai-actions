@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionDescriptor;
@@ -119,10 +120,25 @@ public final class SystemPromptBuilder {
 				})
 				.collect(Collectors.joining("\n\n"));
 		
-		// Build system prompt: DSL guidance + example plan
+		// Collect contributions from contributors with null dslId (e.g., action catalog)
+		// These are included directly without associating with a specific DSL
+		String standaloneContributions = ctxContributors.stream()
+				.filter(c -> c != null && c.dslId() == null)
+				.map(c -> c.contribute(ctx))
+				.filter(Optional::isPresent)
+				.map(Optional::get)
+				.collect(Collectors.joining("\n\n"));
+
+		// Build system prompt: DSL guidance + standalone contributions + example plan
 		StringBuilder systemPrompt = new StringBuilder();
 		if (!dslSection.isBlank()) {
 			systemPrompt.append("DSL GUIDANCE:\n").append(dslSection);
+		}
+		if (!standaloneContributions.isBlank()) {
+			if (!systemPrompt.isEmpty()) {
+				systemPrompt.append("\n\n");
+			}
+			systemPrompt.append(standaloneContributions);
 		}
 		if (!examplePlan.isBlank()) {
 			if (!systemPrompt.isEmpty()) {
@@ -146,9 +162,11 @@ public final class SystemPromptBuilder {
 				}
 			});
 		}
-		// Include universal DSL if available (provides general S-expression guidance for SQL etc.)
-		// Note: Plan DSL is no longer auto-included since we use JSON for plans
-		if (guidanceProvider instanceof DslGrammarSource source) {
+		// Only include universal DSL guidance if there are actual S-expression DSLs being used
+		// (e.g., sxl-sql). Skip sxl-plan since plans now use JSON format.
+		boolean hasSExpressionDsls = ids.stream()
+				.anyMatch(id -> id.startsWith("sxl-") && !"sxl-plan".equals(id));
+		if (hasSExpressionDsls && guidanceProvider instanceof DslGrammarSource source) {
 			if (source.grammarFor("sxl-universal").isPresent()) {
 				ids.add("sxl-universal");
 			}
@@ -263,7 +281,7 @@ public final class SystemPromptBuilder {
 				example.append("\n");
 				for (int j = 0; j < params.size(); j++) {
 					ActionParameterDescriptor param = params.get(j);
-					String exampleValue = getExampleValue(param);
+				String exampleValue = getExampleValue(param);
 					example.append("        \"").append(param.name()).append("\": ").append(exampleValue);
 					if (j < params.size() - 1) {
 						example.append(",");
@@ -276,9 +294,9 @@ public final class SystemPromptBuilder {
 			example.append("    }");
 			if (i < count - 1) {
 				example.append(",");
-			}
+				}
 			example.append("\n");
-		}
+			}
 		
 		example.append("  ]\n");
 		example.append("}\n");

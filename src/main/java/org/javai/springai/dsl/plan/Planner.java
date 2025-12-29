@@ -39,6 +39,7 @@ import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
 import org.javai.springai.sxl.DefaultValidatorRegistry;
+import org.javai.springai.sxl.DslParsingStrategy;
 import org.javai.springai.sxl.SxlNode;
 import org.javai.springai.sxl.SxlParseException;
 import org.javai.springai.sxl.SxlParser;
@@ -241,7 +242,7 @@ public final class Planner {
 			2. Complex types (objects) → use JSON objects matching the parameter's structure
 			3. Query parameters (marked S-expression) → embed as string: "(Q (F table t) ...)"
 			
-			Available actions:
+			Available actions identified by actionId:
 			%s
 			
 			STOP after the closing brace. Emit nothing else.""";
@@ -432,20 +433,28 @@ public final class Planner {
 
 	/**
 	 * Fallback S-expression parsing for backwards compatibility.
-	 * Uses universal parsing strategy since we no longer have a dedicated plan grammar.
 	 */
 	private Plan parseSxlPlan(String response) {
 		try {
-			SxlTokenizer tokenizer = new SxlTokenizer(response);
-			var tokens = tokenizer.tokenize();
+		SxlTokenizer tokenizer = new SxlTokenizer(response);
+		var tokens = tokenizer.tokenize();
 
-			SxlParser parser = new SxlParser(tokens, new UniversalParsingStrategy());
-			List<SxlNode> nodes = parser.parse();
-			if (nodes.isEmpty()) {
+		// Prefer plan grammar if provided
+		SxlGrammar planGrammar = grammars.stream()
+				.filter(g -> g.dsl() != null && "sxl-plan".equals(g.dsl().id()))
+				.findFirst()
+				.orElse(null);
+
+		var strategy = planGrammar != null
+				? new DslParsingStrategy(planGrammar, this.validatorRegistry)
+				: new UniversalParsingStrategy();
+		SxlParser parser = new SxlParser(tokens, strategy);
+		List<SxlNode> nodes = parser.parse();
+		if (nodes.isEmpty()) {
 				throw new PlanParseException("LLM returned no parseable plan nodes");
-			}
-			SxlNode planNode = nodes.getFirst();
-			return Plan.of(planNode);
+		}
+		SxlNode planNode = nodes.getFirst();
+		return Plan.of(planNode);
 		} catch (SxlParseException e) {
 			throw new PlanParseException("Failed to parse S-expression plan: " + e.getMessage(), e);
 		}
@@ -604,11 +613,11 @@ public final class Planner {
 		}
 
 		public Planner build() {
-			// Ensure built-in DSL type mappings exist (plan/sql)
+			// Ensure built-in DSL type mappings exist (sql)
 			TypeFactoryBootstrap.registerBuiltIns();
 
 			// Auto-discover grammars: explicit additions win, then defaults/meta-inf.
-			// Note: Plan DSL was removed - plans now use JSON format.
+			// Note: Plan grammar is no longer registered since plans use JSON format.
 			SxlGrammarRegistry registry = SxlGrammarRegistry.create();
 			registry.registerUniversal(Planner.class.getClassLoader());
 			registry.registerResource("META-INF/sxl-meta-grammar-sql.yml");
@@ -628,7 +637,7 @@ public final class Planner {
 			this.grammars.clear();
 			this.grammars.addAll(merged.values());
 
-			// Ensure plan actions contributor is present
+			// Ensure plan actions contributor is present (provides action catalog)
 			boolean hasPlanContributor = this.dslContributors.stream()
 					.anyMatch(c -> c instanceof PlanActionsContextContributor);
 			if (!hasPlanContributor) {

@@ -61,7 +61,7 @@ llm_specs:
       - Emit concise, canonical S-expressions only.
       - No extra whitespace or prose outside the S-expression structure.
       - Always include the DSL id when using EMBED: (EMBED <dsl-id> <payload>).
-      - DSL ids are lowercase with hyphens (e.g., sxl-sql, sxl-plan).
+      - DSL ids are lowercase with hyphens (e.g., sxl-sql).
       - Required parameters must be present and non-empty; empty strings are invalid and will fail validation. Do not emit placeholder empty values.
 
   # ----------------------------------------------------------

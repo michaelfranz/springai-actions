@@ -1,12 +1,10 @@
 package org.javai.springai.dsl.prompt;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
-import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,14 +24,13 @@ class SystemPromptBuilderUnitTest {
 	}
 
 	@Test
-	void planActionsDoNotRequireSxlPlanGuidance() {
-		// Plans now use JSON format, not S-expressions
-		registry.registerActions(new PlanOnlyActions());
+	void noDslGuidanceWhenNoSExpressionParams() {
+		// Actions with simple params (no S-expression types) should not include DSL guidance
+		registry.registerActions(new SimpleActions());
 
 		String prompt = SystemPromptBuilder.build(registry, ad -> true, guidanceProvider, SystemPromptBuilder.Mode.SXL);
 
-		// Plan no longer has dslId, so no sxl-plan guidance
-		assertThat(prompt).doesNotContain("DSL sxl-plan:");
+		assertThat(prompt).doesNotContain("DSL GUIDANCE:");
 		assertThat(prompt).doesNotContain("DSL sxl-sql:");
 	}
 
@@ -43,9 +40,8 @@ class SystemPromptBuilderUnitTest {
 
 		String prompt = SystemPromptBuilder.build(registry, ad -> true, guidanceProvider, SystemPromptBuilder.Mode.SXL);
 
-		// Only SQL guidance included for Query parameters
-		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
+		assertThat(prompt).contains("DSL sxl-universal:");
 	}
 
 	@Test
@@ -58,8 +54,8 @@ class SystemPromptBuilderUnitTest {
 				guidanceProvider,
 				SystemPromptBuilder.Mode.SXL);
 
-		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
+		assertThat(prompt).contains("DSL sxl-universal:");
 	}
 
 	@Test
@@ -73,13 +69,12 @@ class SystemPromptBuilderUnitTest {
 				SystemPromptBuilder.Mode.SXL
 		);
 
-		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
+		assertThat(prompt).contains("DSL sxl-universal:");
 	}
 
 	@Test
-	void ordersGuidanceUniversalThenSqlAlphabetically() {
-		// Register SQL actions to get sxl-sql guidance
+	void ordersGuidanceUniversalBeforeSql() {
 		registry.registerActions(new SqlActions());
 
 		String prompt = SystemPromptBuilder.build(
@@ -96,9 +91,9 @@ class SystemPromptBuilderUnitTest {
 		assertThat(idxSql).isGreaterThan(idxUniversal);
 	}
 
-	private static class PlanOnlyActions {
-		@Action(description = "Do something with plan")
-		public void planAction(Plan plan) {
+	private static class SimpleActions {
+		@Action(description = "Do something simple")
+		public void simpleAction(String message) {
 			// no-op
 		}
 	}
@@ -110,3 +105,4 @@ class SystemPromptBuilderUnitTest {
 		}
 	}
 }
+

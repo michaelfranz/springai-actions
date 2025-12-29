@@ -27,7 +27,10 @@ class SystemPromptCasesTest {
 	void setup() throws Exception {
 		TypeFactoryBootstrap.registerBuiltIns();
 		guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("META-INF/sxl-meta-grammar-sql.yml"),
+				List.of(
+						"META-INF/sxl-meta-grammar-sql.yml",
+						"META-INF/sxl-meta-grammar-plan.yml"
+				),
 				getClass().getClassLoader()
 		);
 		outputDir = Path.of("build", "prompt-samples");

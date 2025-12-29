@@ -4,12 +4,11 @@ import static java.util.Arrays.stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Supplier;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
+import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +27,7 @@ class SystemPromptFootprintTest {
 	void setup() {
 		TypeFactoryBootstrap.registerBuiltIns();
 		guidanceProvider = new GrammarBackedDslGuidanceProvider(
-				List.of("META-INF/sxl-meta-grammar-sql.yml"),
+				List.of("META-INF/sxl-meta-grammar-sql.yml", "META-INF/sxl-meta-grammar-plan.yml"),
 				getClass().getClassLoader());
 	}
 

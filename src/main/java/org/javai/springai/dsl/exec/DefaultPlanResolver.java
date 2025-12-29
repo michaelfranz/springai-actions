@@ -258,7 +258,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		// Handle S-expressions for non-SExpressionType targets
 		if (raw instanceof SxlNode node && !SExpressionType.class.isAssignableFrom(targetType)) {
 			return sxlNodeToJsonStructure(node);
-		}
+			}
 		
 		return raw;
 	}

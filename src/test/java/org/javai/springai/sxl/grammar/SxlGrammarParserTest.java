@@ -1063,6 +1063,28 @@ class SxlGrammarParserTest {
 	class RealGrammarFileTests {
 
 		@Test
+		@DisplayName("should parse META-INF/sxl-meta-grammar-plan.yml")
+		void shouldParsePlanGrammar() {
+			InputStream stream = getClass().getClassLoader()
+				.getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml");
+			assertThat(stream).isNotNull();
+
+			SxlGrammar grammar = parser.parse(stream);
+
+			assertThat(grammar).isNotNull();
+			assertThat(grammar.metaGrammarVersion()).isEqualTo("1.2");
+			assertThat(grammar.dsl().id()).isEqualTo("sxl-plan");
+			assertThat(grammar.symbols()).isNotEmpty();
+			assertThat(grammar.literals()).isNotNull();
+			assertThat(grammar.identifier()).isNotNull();
+			assertThat(grammar.reservedSymbols()).isNotEmpty();
+			assertThat(grammar.embedding()).isNotNull();
+			assertThat(grammar.constraints()).isNotEmpty();
+			assertThat(grammar.llmSpecs()).isNotNull();
+			assertThat(grammar.llmSpecs().defaults().guidance()).isNotBlank();
+		}
+
+		@Test
 		@DisplayName("should parse META-INF/sxl-meta-grammar-sql.yml")
 		void shouldParseSqlGrammar() {
 			InputStream stream = getClass().getClassLoader()

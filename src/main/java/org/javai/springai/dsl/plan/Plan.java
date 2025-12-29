@@ -5,14 +5,15 @@ import org.javai.springai.sxl.SxlNode;
 
 /**
  * A typed version of plan that an application can work with.
- * Plans are now JSON-based, not S-expression-based.
+ * Plans now use JSON format, not S-expressions.
+ * 
  * @param assistantMessage a model-generated message to accompany the plan
  * @param planSteps are the steps of the plan
  */
 public record Plan(String assistantMessage, List<PlanStep> planSteps) {
 
 	/**
-	 * Create a Plan from an S-expression node (for backwards compatibility with S-expression fallback parsing).
+	 * Create a Plan from an S-expression node (for backwards compatibility/fallback parsing).
 	 */
 	public static Plan of(SxlNode planNode) {
 		return PlanNodeVisitor.generate(planNode);

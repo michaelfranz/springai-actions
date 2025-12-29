@@ -8,6 +8,8 @@ import org.javai.springai.dsl.sql.SqlTypeFactory;
  *
  * Applications should invoke {@link #registerBuiltIns()} during startup to ensure
  * all default DSLs are available, rather than relying on static initializers.
+ * 
+ * Note: Plan DSL is no longer registered since plans now use JSON format.
  */
 public final class TypeFactoryBootstrap {
 

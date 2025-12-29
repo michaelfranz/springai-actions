@@ -5,6 +5,9 @@ import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.prompt.InMemorySqlCatalog;
 import org.javai.springai.dsl.prompt.SqlCatalogContextContributor;
 import org.javai.springai.dsl.sql.Query;
+import org.javai.springai.sxl.grammar.SxlGrammar;
+import org.javai.springai.sxl.grammar.SxlGrammarParser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
@@ -12,9 +15,19 @@ import org.springframework.ai.chat.client.ChatClient;
 @SuppressWarnings("NullAway")
 class PlannerTest {
 
+	private SxlGrammar planGrammar;
+
+	@BeforeEach
+	void setup() {
+		SxlGrammarParser parser = new SxlGrammarParser();
+		planGrammar = parser.parse(
+				PlannerTest.class.getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml"));
+	}
+
 	@Test
 	void previewIncludesActionsInJsonFormat() {
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
@@ -22,16 +35,19 @@ class PlannerTest {
 
 		PromptPreview preview = planner.preview("do something");
 
-		// Actions are included (JSON plans reference action catalog)
+		// Actions are included (JSON plans still reference action catalog)
 		assertThat(preview.systemMessages())
 				.anySatisfy(msg -> assertThat(msg).contains("demoAction"));
 		assertThat(preview.userMessages()).contains("do something");
+		// Grammar is still registered for fallback parsing
+		assertThat(preview.grammarIds()).contains("sxl-plan");
 		assertThat(preview.actionNames()).contains("demoAction");
 	}
 
 	@Test
 	void systemPromptUsesJsonPlanFormat() {
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
@@ -53,6 +69,7 @@ class PlannerTest {
 	@Test
 	void dryRunReturnsEmptyPlanAndPreview() {
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.actions(new DemoActions())
 				.build();
 
@@ -74,6 +91,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn("{{{"); // malformed JSON
 
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -107,6 +125,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(jsonResponse);
 
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -144,6 +163,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(markdownResponse);
 
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -170,6 +190,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(sxlResponse);
 
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -206,6 +227,7 @@ class PlannerTest {
 						new String[] { "attribute" }, null);
 
 		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
 				.actions(new QueryActions())
 				.addDslContextContributor(new SqlCatalogContextContributor(catalog))
 				.addDslContext("sxl-sql", catalog)
@@ -241,3 +263,4 @@ class PlannerTest {
 		return text == null ? "" : text.replaceAll("\\s+", " ").trim();
 	}
 }
+
