@@ -9,6 +9,7 @@ import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanStep;
+import org.javai.springai.sxl.SxlNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -198,6 +199,97 @@ class DefaultPlanResolverTest {
 		assertThat(query.customer_name()).isEqualTo("Mike");
 		assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
 		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
+	}
+
+	@Test
+	void convertsSxlNodeToRecordWithNestedPeriod() {
+		// S-expression: (customer_name "Mike" period (start "2024-01-01" end "2024-01-31"))
+		SxlNode periodNode = SxlNode.symbol("period", List.of(
+				SxlNode.symbol("start"), SxlNode.literal("2024-01-01"),
+				SxlNode.symbol("end"), SxlNode.literal("2024-01-31")
+		));
+		SxlNode payload = SxlNode.symbol("orderValueQuery", List.of(
+				SxlNode.symbol("customer_name"), SxlNode.literal("Mike"),
+				SxlNode.symbol("period"), periodNode
+		));
+
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "useOrderValue", new Object[] { payload }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(step.arguments()).hasSize(1);
+		assertThat(step.arguments().getFirst().value()).isInstanceOf(SampleActions.OrderValueQuery.class);
+
+		SampleActions.OrderValueQuery query = (SampleActions.OrderValueQuery) step.arguments().getFirst().value();
+		assertThat(query.customer_name()).isEqualTo("Mike");
+		assertThat(query.period()).isNotNull();
+		assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
+		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
+	}
+
+	@Test
+	void convertsSqlStyleSxlNodeToRecord() {
+		// This test captures the actual LLM response pattern where the LLM returned:
+		// (EMBED sxl-sql (Q (F fct_orders o) (S (AND (= o.customer_name "Mike") ...))))
+		// for a parameter that expects OrderValueQuery (not a DSL type).
+		//
+		// The conversion should:
+		// 1. Detect this is an S-expression for a non-SExpressionType parameter
+		// 2. Convert it to JSON structure
+		// 3. Attempt to map to OrderValueQuery
+		//
+		// Since the SQL AST structure doesn't match OrderValueQuery fields,
+		// this documents the current behavior when there's a structural mismatch.
+
+		// Build: (EMBED sxl-sql (Q (F fct_orders o) (S (AND (= o.customer_name "Mike")
+		//                                                   (>= o.order_date "2024-01-01")
+		//                                                   (<= o.order_date "2024-01-31")))))
+		SxlNode eqCustomer = SxlNode.symbol("=", List.of(
+				SxlNode.symbol("o.customer_name"),
+				SxlNode.literal("Mike")
+		));
+		SxlNode geStart = SxlNode.symbol(">=", List.of(
+				SxlNode.symbol("o.order_date"),
+				SxlNode.literal("2024-01-01")
+		));
+		SxlNode leEnd = SxlNode.symbol("<=", List.of(
+				SxlNode.symbol("o.order_date"),
+				SxlNode.literal("2024-01-31")
+		));
+		SxlNode andNode = SxlNode.symbol("AND", List.of(eqCustomer, geStart, leEnd));
+		SxlNode sNode = SxlNode.symbol("S", List.of(andNode));
+		SxlNode fNode = SxlNode.symbol("F", List.of(
+				SxlNode.symbol("fct_orders"),
+				SxlNode.symbol("o")
+		));
+		SxlNode qNode = SxlNode.symbol("Q", List.of(fNode, sNode));
+		SxlNode embedNode = SxlNode.symbol("EMBED", List.of(
+				SxlNode.symbol("sxl-sql"),
+				qNode
+		));
+
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "useOrderValue", new Object[] { embedNode }))
+		);
+
+		// The conversion will happen, but the structure won't match OrderValueQuery
+		// (customer_name, period) - so this will result in an error
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		
+		// Document current behavior: structural mismatch results in ERROR
+		// This is expected - the SQL AST structure cannot map to OrderValueQuery
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.ERROR);
+		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
+		
+		// The error message should indicate the conversion/mapping failure
+		ResolvedStep.ErrorStep errorStep = (ResolvedStep.ErrorStep) result.steps().getFirst();
+		assertThat(errorStep.reason()).contains("Failed to convert");
 	}
 
 	private static class SampleActions {
