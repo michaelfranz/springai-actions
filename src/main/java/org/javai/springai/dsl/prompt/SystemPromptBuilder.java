@@ -229,66 +229,107 @@ public final class SystemPromptBuilder {
 	private record GuidanceEntry(String dslId, String text) {}
 
 	/**
-	 * Generate an example S-expression plan from action descriptors with example values.
+	 * Generate an example JSON plan from action descriptors with example values.
 	 * Takes the first 2-3 actions and the first example from each parameter to build a
 	 * concrete plan structure for the LLM to follow.
 	 */
 	private static String generateExamplePlan(List<ActionDescriptor> descriptors) {
-		// Generate example plan showing actual available actions with their parameters
 		if (descriptors.isEmpty()) {
 			return "";
 		}
 		
-		StringBuilder example = new StringBuilder("EXAMPLE PLAN (showing structure):\n");
-		example.append("(P \"Example plan\"\n");
+		StringBuilder example = new StringBuilder("EXAMPLE PLAN (JSON format):\n");
+		example.append("{\n");
+		example.append("  \"message\": \"Example plan description\",\n");
+		example.append("  \"steps\": [\n");
 		
 		// Use first 2-3 actions as examples to keep it concise
 		int count = Math.min(3, descriptors.size());
 		for (int i = 0; i < count; i++) {
 			ActionDescriptor action = descriptors.get(i);
-			example.append("  (PS ").append(action.id());
+			example.append("    {\n");
+			example.append("      \"actionId\": \"").append(action.id()).append("\",\n");
+			example.append("      \"description\": \"").append(escapeJson(action.description())).append("\",\n");
+			example.append("      \"parameters\": {");
 			
 			// Add parameters with examples
-			for (ActionParameterDescriptor param : action.actionParameterSpecs()) {
-				example.append(" (PA ").append(param.name());
-				String exampleValue = getExampleValue(param);
-				// S-expressions (starting with '(') should not be quoted
-				if (exampleValue.trim().startsWith("(")) {
-					example.append(" ").append(exampleValue);
-				} else {
-					example.append(" \"").append(exampleValue).append("\"");
+			List<ActionParameterDescriptor> params = action.actionParameterSpecs();
+			if (params != null && !params.isEmpty()) {
+				example.append("\n");
+				for (int j = 0; j < params.size(); j++) {
+					ActionParameterDescriptor param = params.get(j);
+					String exampleValue = getExampleValue(param);
+					example.append("        \"").append(param.name()).append("\": ").append(exampleValue);
+					if (j < params.size() - 1) {
+						example.append(",");
+					}
+					example.append("\n");
 				}
-				example.append(")");
+				example.append("      ");
 			}
-			example.append(")\n");
+			example.append("}\n");
+			example.append("    }");
+			if (i < count - 1) {
+				example.append(",");
+			}
+			example.append("\n");
 		}
 		
-		example.append(")\n");
+		example.append("  ]\n");
+		example.append("}\n");
 		return example.toString();
 	}
 
 	/**
-	 * Get an example value for a parameter. Uses explicit examples if provided,
-	 * otherwise generates an automatic example for DSL-typed parameters.
+	 * Get an example value for a parameter in JSON format.
+	 * Uses explicit examples if provided, otherwise generates an automatic example.
 	 */
 	private static String getExampleValue(ActionParameterDescriptor param) {
 		// Use explicit example if provided
 		if (param.examples() != null && param.examples().length > 0) {
-			return param.examples()[0];
+			String ex = param.examples()[0];
+			// If it looks like a JSON object/array, return as-is
+			if (ex.trim().startsWith("{") || ex.trim().startsWith("[")) {
+				return ex;
+			}
+			// If it's an S-expression, wrap in quotes
+			if (ex.trim().startsWith("(")) {
+				return "\"" + escapeJson(ex) + "\"";
+			}
+			// For plain strings, quote them
+			return "\"" + escapeJson(ex) + "\"";
 		}
 		
-		// Generate automatic example for DSL-typed parameters
+		// Generate automatic example for DSL-typed parameters (Query)
 		String dslId = param.dslId();
 		if (dslId != null && !dslId.isBlank()) {
 			if ("sxl-sql".equalsIgnoreCase(dslId)) {
-				// Generate a canonical SQL DSL example
-				return "(EMBED sxl-sql (Q (F table_name t) (S t.column_name)))";
+				// Generate a canonical SQL DSL example as a string
+				return "\"(Q (F table_name t) (S t.column_name))\"";
 			}
 			// Generic embedded DSL example
-			return "(EMBED " + dslId + " (<" + param.name() + ">))";
+			return "\"(<" + param.name() + "-expression>)\"";
 		}
 		
-		// Fallback placeholder
-		return "<" + param.name() + ">";
+		// For complex types (objects), show JSON structure placeholder
+		String typeId = param.typeId();
+		if (typeId != null && (typeId.contains(".") || Character.isUpperCase(typeId.charAt(0)))) {
+			return "{ \"...\": \"...\" }";
+		}
+		
+		// Fallback placeholder for simple types
+		return "\"<" + param.name() + ">\"";
+	}
+
+	/**
+	 * Escape special characters for JSON strings.
+	 */
+	private static String escapeJson(String s) {
+		if (s == null) return "";
+		return s.replace("\\", "\\\\")
+				.replace("\"", "\\\"")
+				.replace("\n", "\\n")
+				.replace("\r", "\\r")
+				.replace("\t", "\\t");
 	}
 }

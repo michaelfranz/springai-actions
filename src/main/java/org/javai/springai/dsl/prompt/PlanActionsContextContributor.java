@@ -7,6 +7,7 @@ import org.javai.springai.dsl.act.ActionParameterDescriptor;
 
 /**
  * Default contributor that appends the action catalog after the PLAN DSL guidance.
+ * Generates JSON-oriented format guidance since plans use JSON structure.
  */
 public final class PlanActionsContextContributor implements DslContextContributor {
 
@@ -17,7 +18,6 @@ public final class PlanActionsContextContributor implements DslContextContributo
 
 	@Override
 	public Optional<String> contribute(SystemPromptContext context) {
-		// For SXL mode, provide action list with parameter examples to guide format
 		if (context == null || context.registry() == null) {
 			return Optional.empty();
 		}
@@ -30,19 +30,24 @@ public final class PlanActionsContextContributor implements DslContextContributo
 			return Optional.empty();
 		}
 		
-		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS (select the action that best matches what the user wants to accomplish):\n");
+		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS:\n");
 		for (ActionDescriptor descriptor : descriptors) {
 			actions.append("- ").append(descriptor.id()).append(": ").append(descriptor.description()).append("\n");
 			// Include parameter format guidance
 			if (descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()) {
+				actions.append("  Parameters:\n");
 				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
+					actions.append("    - ").append(param.name()).append(": ").append(param.typeId());
+					
+					// Show DSL format guidance for s-expression-backed parameters
+					if (param.dslId() != null && !param.dslId().isBlank()) {
+						actions.append(" (S-expression string)");
+					}
+					actions.append("\n");
+					
 					// Show explicit examples if provided
 					if (param.examples() != null && param.examples().length > 0) {
-						String example = param.examples()[0];
-						actions.append("  Parameter '").append(param.name()).append("' example: ").append(example).append("\n");
-					} else if (param.dslId() != null && !param.dslId().isBlank()) {
-						// Show DSL format guidance for DSL-typed parameters
-						actions.append("  Parameter '").append(param.name()).append("' format: (EMBED ").append(param.dslId()).append(" <").append(param.dslId()).append("-expression>)\n");
+						actions.append("      Example: ").append(param.examples()[0]).append("\n");
 					}
 				}
 			}

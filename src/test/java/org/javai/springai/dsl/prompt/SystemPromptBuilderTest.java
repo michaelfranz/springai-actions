@@ -83,12 +83,12 @@ class SystemPromptBuilderTest {
 				SystemPromptBuilder.Mode.SXL
 		);
 
-		// Verify that an example plan is generated (if there are actions with examples)
-		if (prompt.contains("EXAMPLE PLAN:")) {
-			assertThat(prompt).contains("(P");
-			assertThat(prompt).contains("(PS");
-			assertThat(prompt).contains("(PA");
-		}
+		// Verify that an example plan is generated in JSON format
+		assertThat(prompt).contains("EXAMPLE PLAN (JSON format):");
+		assertThat(prompt).contains("\"message\"");
+		assertThat(prompt).contains("\"steps\"");
+		assertThat(prompt).contains("\"actionId\"");
+		assertThat(prompt).contains("\"parameters\"");
 		// Verify that extracted example values are present
 		assertThat(prompt).contains("bushing");
 		assertThat(prompt).contains("displacement");
@@ -110,9 +110,9 @@ class SystemPromptBuilderTest {
 		// First example should be used (bushing, not piston; displacement, not force)
 		assertThat(prompt).contains("bushing");
 		assertThat(prompt).contains("displacement");
-		// Second examples should not be in the generated plan
-		assertThat(prompt).doesNotContain("(PA component \"piston\")");
-		assertThat(prompt).doesNotContain("(PA measurement \"force\")");
+		// JSON format should be used - verify it's not S-expression style
+		assertThat(prompt).contains("\"component\":");
+		assertThat(prompt).contains("\"measurement\":");
 	}
 
 	private static class SampleActions {
