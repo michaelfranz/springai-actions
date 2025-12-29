@@ -54,7 +54,7 @@ class PlannerTest {
 				.build();
 
 		PromptPreview preview = planner.preview("do something");
-		// Should have DSL guidance + prompt contributions
+		// Should have DSL guidance + prompt contributions + planning directive
 		assertThat(preview.systemMessages()).hasSizeGreaterThanOrEqualTo(2);
 
 		String system = normalize(preview.systemMessages().getFirst());
@@ -68,8 +68,13 @@ class PlannerTest {
 		assertThat(system).contains("AVAILABLE ACTIONS");
 		assertThat(system).contains("demoAction");
 
-		assertThat(normalize(preview.systemMessages().get(1)))
-				.isEqualTo("system-extra");
+		// Check the planning directive now uses JSON format
+		String planningDirective = preview.systemMessages().getLast();
+		assertThat(planningDirective).contains("JSON ONLY");
+		assertThat(planningDirective).contains("\"message\"");
+		assertThat(planningDirective).contains("\"steps\"");
+		assertThat(planningDirective).contains("\"actionId\"");
+		assertThat(planningDirective).contains("demoAction");
 	}
 
 	@Test
@@ -92,9 +97,9 @@ class PlannerTest {
 	@Test
 	@SuppressWarnings("NullAway")
 	void unparsableResponseReturnsErrorPlan() {
-		// Mock ChatClient to return an unparsable S-expression
+		// Mock ChatClient to return an unparsable response
 		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
-		Mockito.when(mockClient.prompt().call().content()).thenReturn("((("); // malformed plan
+		Mockito.when(mockClient.prompt().call().content()).thenReturn("{{{"); // malformed JSON
 
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
@@ -109,6 +114,106 @@ class PlannerTest {
 		assertThat(result.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 		PlanStep.ErrorStep error = (PlanStep.ErrorStep) result.plan().planSteps().getFirst();
 		assertThat(error.assistantMessage()).contains("Failed to parse");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway")
+	void parsesJsonPlanResponse() {
+		String jsonResponse = """
+				{
+					"message": "Executing demo action",
+					"steps": [
+						{
+							"actionId": "demoAction",
+							"description": "Run the demo",
+							"parameters": { "input": "test value" }
+						}
+					]
+				}
+				""";
+
+		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
+		Mockito.when(mockClient.prompt().call().content()).thenReturn(jsonResponse);
+
+		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
+				.withChatClient(mockClient)
+				.actions(new DemoActions())
+				.build();
+
+		PlanFormulationResult result = planner.formulatePlan("do something", PlannerOptions.defaults());
+
+		assertThat(result.plan()).isNotNull();
+		assertThat(result.plan().status()).isEqualTo(PlanStatus.READY);
+		assertThat(result.plan().planSteps()).hasSize(1);
+
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
+		assertThat(step.actionId()).isEqualTo("demoAction");
+		assertThat(step.actionArguments()).containsExactly("test value");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway")
+	void parsesJsonInMarkdownCodeBlock() {
+		String markdownResponse = """
+				```json
+				{
+					"message": "Executing demo action",
+					"steps": [
+						{
+							"actionId": "demoAction",
+							"description": "Run the demo",
+							"parameters": { "input": "from markdown" }
+						}
+					]
+				}
+				```
+				""";
+
+		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
+		Mockito.when(mockClient.prompt().call().content()).thenReturn(markdownResponse);
+
+		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
+				.withChatClient(mockClient)
+				.actions(new DemoActions())
+				.build();
+
+		PlanFormulationResult result = planner.formulatePlan("do something", PlannerOptions.defaults());
+
+		assertThat(result.plan()).isNotNull();
+		assertThat(result.plan().status()).isEqualTo(PlanStatus.READY);
+
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
+		assertThat(step.actionId()).isEqualTo("demoAction");
+		assertThat(step.actionArguments()).containsExactly("from markdown");
+	}
+
+	@Test
+	@SuppressWarnings("NullAway")
+	void fallsBackToSExpressionParsing() {
+		// S-expression response (for backwards compatibility)
+		String sxlResponse = """
+				(P "Demo plan" (PS demoAction (PA input "sxl value")))
+				""";
+
+		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
+		Mockito.when(mockClient.prompt().call().content()).thenReturn(sxlResponse);
+
+		Planner planner = Planner.builder()
+				.addGrammar(planGrammar)
+				.withChatClient(mockClient)
+				.actions(new DemoActions())
+				.build();
+
+		PlanFormulationResult result = planner.formulatePlan("do something", PlannerOptions.defaults());
+
+		assertThat(result.plan()).isNotNull();
+		assertThat(result.plan().status()).isEqualTo(PlanStatus.READY);
+
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
+		assertThat(step.actionId()).isEqualTo("demoAction");
+		assertThat(step.actionArguments()).containsExactly("sxl value");
 	}
 
 	@Test

@@ -1,5 +1,7 @@
 package org.javai.springai.dsl.plan;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,6 +11,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.execution.ActionResult;
 import org.javai.springai.actions.execution.DefaultPlanExecutor;
@@ -18,6 +22,7 @@ import org.javai.springai.actions.execution.PlanExecutionException;
 import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
+import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
 import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
@@ -53,6 +58,9 @@ import org.springframework.lang.NonNull;
  */
 public final class Planner {
 	private static final Logger logger = LoggerFactory.getLogger(Planner.class);
+	private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+	private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile("```(?:json)?\\s*\\n?(\\{.*?\\})\\s*```", Pattern.DOTALL);
+
 	private final ChatClient chatClient;
 	private final List<SxlGrammar> grammars;
 	private final List<String> promptContributions;
@@ -152,12 +160,12 @@ public final class Planner {
 
 		String response = invokeModel(preview);
 		try {
-			Plan plan = parsePlan(response);
+			Plan plan = parsePlan(response, actionContext.registry());
 			plan = new PlanVerifier(actionContext.registry()).verify(plan);
 			maybeFirePromptHook(preview, effective);
 			return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
 		}
-		catch (SxlParseException e) {
+		catch (PlanParseException e) {
 			// Surface a structured error plan instead of throwing, so callers can present
 			// the issue without crashing the conversation.
 			String snippet = response != null ? response : "<null>";
@@ -213,39 +221,53 @@ public final class Planner {
 	}
 
 	private static final String PLANNING_DIRECTIVE_TEMPLATE = """
-			🔴 OUTPUT FORMAT - FOLLOW EXACTLY:
+			🔴 OUTPUT FORMAT - JSON ONLY:
 			
-			Emit ONLY an S-expression plan. No prose. No SQL. No explanation. Just the plan.
+			Respond with a JSON object. No prose. No markdown. Just JSON.
 			
-			Structure: (P "description" (PS action-id (PA param-name value)))
+			Structure:
+			{
+			  "message": "Brief description of the plan",
+			  "steps": [
+			    {
+			      "actionId": "action-id",
+			      "description": "Why this step is needed",
+			      "parameters": { "param1": value1, "param2": value2 }
+			    }
+			  ]
+			}
 			
-			CRITICAL RULES:
-			1. ALWAYS wrap action with (PS ...): (PS action-id (PA ...))
-			2. SQL queries MUST use EMBED with Q as root AND include table alias:
-			   (PA query (EMBED sxl-sql (Q (F table_name t) (S t.column))))
-			   WRONG: (F fct_orders) - missing alias
-			   RIGHT: (F fct_orders o) - has alias 'o'
-			3. JSON parameters use quoted strings:
-			   (PA data "{...}")
+			PARAMETER TYPES:
+			1. Simple types (string, int, boolean) → use JSON primitives directly
+			2. Complex types (objects) → use JSON objects matching the parameter's structure
+			3. Query parameters (marked S-expression) → embed as string: "(Q (F table t) ...)"
 			
 			Available actions:
 			%s
-			STOP after the closing parenthesis. Emit nothing else.""";
+			
+			STOP after the closing brace. Emit nothing else.""";
 
 	private static String buildPlanningDirective(List<ActionDescriptor> actionDescriptors) {
 		StringBuilder actionsList = new StringBuilder();
 		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
 			for (ActionDescriptor descriptor : actionDescriptors) {
 				String actionId = descriptor.id();
-				String params = descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()
-						? String.format("(requires: %s)", 
-							descriptor.actionParameterSpecs().stream()
-								.map(p -> p.name())
-								.toList()
-								.toString()
-								.replaceAll("[\\[\\]]", ""))
-						: "(no parameters)";
-				actionsList.append(String.format("- %s %s%n", actionId, params));
+				List<ActionParameterDescriptor> params = descriptor.actionParameterSpecs();
+				if (params != null && !params.isEmpty()) {
+					StringBuilder paramsStr = new StringBuilder();
+					for (ActionParameterDescriptor p : params) {
+						if (!paramsStr.isEmpty()) {
+							paramsStr.append(", ");
+						}
+						paramsStr.append(p.name()).append(": ").append(p.typeId());
+						if (p.dslId() != null && !p.dslId().isBlank()) {
+							paramsStr.append(" (S-expression)");
+						}
+					}
+					actionsList.append(String.format("- %s { %s }%n", actionId, paramsStr));
+				} else {
+					actionsList.append(String.format("- %s (no parameters)%n", actionId));
+				}
 			}
 		}
 		return String.format(PLANNING_DIRECTIVE_TEMPLATE, actionsList.toString());
@@ -342,29 +364,108 @@ public final class Planner {
 		}
 	}
 
-	private Plan parsePlan(String response) {
+	/**
+	 * Parse plan from LLM response. Tries JSON first, falls back to S-expression for backwards compatibility.
+	 */
+	private Plan parsePlan(String response, ActionRegistry actionRegistry) {
 		if (response == null || response.isBlank()) {
-			throw new IllegalStateException("LLM returned empty plan llmResponse");
+			throw new PlanParseException("LLM returned empty plan response");
 		}
-		SxlTokenizer tokenizer = new SxlTokenizer(response);
-		var tokens = tokenizer.tokenize();
 
-		// Prefer plan grammar if provided
-		SxlGrammar planGrammar = grammars.stream()
-				.filter(g -> g.dsl() != null && "sxl-plan".equals(g.dsl().id()))
-				.findFirst()
-				.orElse(null);
-
-		var strategy = planGrammar != null
-				? new DslParsingStrategy(planGrammar, this.validatorRegistry)
-				: new UniversalParsingStrategy();
-		SxlParser parser = new SxlParser(tokens, strategy);
-		List<SxlNode> nodes = parser.parse();
-		if (nodes.isEmpty()) {
-			throw new IllegalStateException("LLM returned no parseable plan nodes");
+		String jsonContent = extractJsonContent(response);
+		if (jsonContent != null) {
+			return parseJsonPlan(jsonContent, actionRegistry);
 		}
-		SxlNode planNode = nodes.getFirst();
-		return Plan.of(planNode);
+
+		// Fallback to S-expression parsing for backwards compatibility
+		return parseSxlPlan(response);
+	}
+
+	/**
+	 * Extract JSON content from response, handling markdown code blocks.
+	 */
+	private String extractJsonContent(String response) {
+		String trimmed = response.trim();
+
+		// Check for markdown code block
+		Matcher matcher = JSON_BLOCK_PATTERN.matcher(trimmed);
+		if (matcher.find()) {
+			return matcher.group(1).trim();
+		}
+
+		// Check if response is direct JSON
+		if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+			return trimmed;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Parse JSON plan using JsonPlan DTO.
+	 */
+	private Plan parseJsonPlan(String json, ActionRegistry actionRegistry) {
+		try {
+			JsonPlan jsonPlan = JSON_MAPPER.readValue(json, JsonPlan.class);
+
+			// Build parameter order map from action registry
+			Map<String, String[]> parameterOrders = new HashMap<>();
+			for (ActionDescriptor descriptor : actionRegistry.getActionDescriptors()) {
+				List<ActionParameterDescriptor> params = descriptor.actionParameterSpecs();
+				if (params != null && !params.isEmpty()) {
+					String[] orderedNames = params.stream()
+							.map(ActionParameterDescriptor::name)
+							.toArray(String[]::new);
+					parameterOrders.put(descriptor.id(), orderedNames);
+				}
+			}
+
+			return jsonPlan.toPlan(parameterOrders);
+		} catch (JsonProcessingException e) {
+			throw new PlanParseException("Failed to parse JSON plan: " + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Fallback S-expression parsing for backwards compatibility.
+	 */
+	private Plan parseSxlPlan(String response) {
+		try {
+			SxlTokenizer tokenizer = new SxlTokenizer(response);
+			var tokens = tokenizer.tokenize();
+
+			// Prefer plan grammar if provided
+			SxlGrammar planGrammar = grammars.stream()
+					.filter(g -> g.dsl() != null && "sxl-plan".equals(g.dsl().id()))
+					.findFirst()
+					.orElse(null);
+
+			var strategy = planGrammar != null
+					? new DslParsingStrategy(planGrammar, this.validatorRegistry)
+					: new UniversalParsingStrategy();
+			SxlParser parser = new SxlParser(tokens, strategy);
+			List<SxlNode> nodes = parser.parse();
+			if (nodes.isEmpty()) {
+				throw new PlanParseException("LLM returned no parseable plan nodes");
+			}
+			SxlNode planNode = nodes.getFirst();
+			return Plan.of(planNode);
+		} catch (SxlParseException e) {
+			throw new PlanParseException("Failed to parse S-expression plan: " + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Exception for plan parsing failures.
+	 */
+	public static class PlanParseException extends RuntimeException {
+		public PlanParseException(String message) {
+			super(message);
+		}
+
+		public PlanParseException(String message, Throwable cause) {
+			super(message, cause);
+		}
 	}
 
 	private static ValidatorRegistry buildValidatorRegistry(List<SxlGrammar> grammars) {
