@@ -25,7 +25,7 @@ class PlannerTest {
 	}
 
 	@Test
-	void previewIncludesGrammarAndActions() {
+	void previewIncludesActionsInJsonFormat() {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
@@ -35,17 +35,17 @@ class PlannerTest {
 
 		PromptPreview preview = planner.preview("do something");
 
-		assertThat(preview.systemMessages())
-				.anySatisfy(msg -> assertThat(msg).contains("DSL sxl-plan"));
+		// Actions are included (JSON plans still reference action catalog)
 		assertThat(preview.systemMessages())
 				.anySatisfy(msg -> assertThat(msg).contains("demoAction"));
 		assertThat(preview.userMessages()).contains("do something");
+		// Grammar is still registered for fallback parsing
 		assertThat(preview.grammarIds()).contains("sxl-plan");
 		assertThat(preview.actionNames()).contains("demoAction");
 	}
 
 	@Test
-	void systemPromptMatchesExpectedStructure() {
+	void systemPromptUsesJsonPlanFormat() {
 		Planner planner = Planner.builder()
 				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
@@ -54,21 +54,10 @@ class PlannerTest {
 				.build();
 
 		PromptPreview preview = planner.preview("do something");
-		// Should have DSL guidance + prompt contributions + planning directive
+		// Should have prompt contributions + planning directive
 		assertThat(preview.systemMessages()).hasSizeGreaterThanOrEqualTo(2);
 
-		String system = normalize(preview.systemMessages().getFirst());
-
-		// Should combine DSL guidance + grammar summary + action catalog.
-		assertThat(system).contains("DSL GUIDANCE");
-		assertThat(system).contains("DSL sxl-plan");
-		assertThat(system).contains("PLAN DSL root"); // guidance from llm_specs
-		assertThat(system).contains("P") // grammar summary includes symbol names
-				.contains("PS");
-		assertThat(system).contains("AVAILABLE ACTIONS");
-		assertThat(system).contains("demoAction");
-
-		// Check the planning directive now uses JSON format
+		// Check the planning directive uses JSON format
 		String planningDirective = preview.systemMessages().getLast();
 		assertThat(planningDirective).contains("JSON ONLY");
 		assertThat(planningDirective).contains("\"message\"");

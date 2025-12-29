@@ -103,9 +103,10 @@ public final class SystemPromptBuilder {
 
 		final List<DslContextContributor> ctxContributors = contributors;
 		
-		// Generate example plan to insert after sxl-plan section (keeps format examples salient)
+		// Generate example plan (in JSON format)
 		String examplePlan = generateExamplePlan(selectedDescriptors);
 		
+		// Build DSL guidance section (for SQL and other S-expression DSLs)
 		String dslSection = dslGuidance.stream()
 				.map(g -> {
 					StringBuilder section = new StringBuilder("DSL " + g.dslId() + ":\n" + g.text());
@@ -114,17 +115,23 @@ public final class SystemPromptBuilder {
 							contributor.contribute(ctx).ifPresent(text -> section.append("\n\n").append(text));
 						}
 					}
-					// Insert EXAMPLE PLAN right after sxl-plan (before other DSLs like sxl-sql)
-					if ("sxl-plan".equals(g.dslId()) && !examplePlan.isBlank()) {
-						section.append("\n\n").append(examplePlan);
-					}
 					return section.toString();
 				})
 				.collect(Collectors.joining("\n\n"));
 		
-		String systemPrompt = "DSL GUIDANCE:\n" + dslSection;
+		// Build system prompt: DSL guidance + example plan
+		StringBuilder systemPrompt = new StringBuilder();
+		if (!dslSection.isBlank()) {
+			systemPrompt.append("DSL GUIDANCE:\n").append(dslSection);
+		}
+		if (!examplePlan.isBlank()) {
+			if (!systemPrompt.isEmpty()) {
+				systemPrompt.append("\n\n");
+			}
+			systemPrompt.append(examplePlan);
+		}
 		
-		return systemPrompt;
+		return systemPrompt.toString();
 	}
 
 	private static Set<String> collectDslIds(ActionRegistry registry, ActionDescriptorFilter filter, DslGuidanceProvider guidanceProvider) {
@@ -139,13 +146,11 @@ public final class SystemPromptBuilder {
 				}
 			});
 		}
-		// Always include universal/plan DSLs if available via grammar source
+		// Include universal DSL if available (provides general S-expression guidance for SQL etc.)
+		// Note: Plan DSL is no longer auto-included since we use JSON for plans
 		if (guidanceProvider instanceof DslGrammarSource source) {
 			if (source.grammarFor("sxl-universal").isPresent()) {
 				ids.add("sxl-universal");
-			}
-			if (source.grammarFor("sxl-plan").isPresent()) {
-				ids.add("sxl-plan");
 			}
 		}
 		return ids;
