@@ -255,6 +255,7 @@ public final class Planner {
 				List<ActionParameterDescriptor> params = descriptor.actionParameterSpecs();
 				if (params != null && !params.isEmpty()) {
 					StringBuilder paramsStr = new StringBuilder();
+					StringBuilder examplesStr = new StringBuilder();
 					for (ActionParameterDescriptor p : params) {
 						if (!paramsStr.isEmpty()) {
 							paramsStr.append(", ");
@@ -263,8 +264,12 @@ public final class Planner {
 						if (p.dslId() != null && !p.dslId().isBlank()) {
 							paramsStr.append(" (S-expression)");
 						}
+						// Include examples for complex types to guide JSON structure
+						if (p.examples() != null && p.examples().length > 0) {
+							examplesStr.append("\n    Example ").append(p.name()).append(": ").append(p.examples()[0]);
+						}
 					}
-					actionsList.append(String.format("- %s { %s }%n", actionId, paramsStr));
+					actionsList.append(String.format("- %s { %s }%s%n", actionId, paramsStr, examplesStr));
 				} else {
 					actionsList.append(String.format("- %s (no parameters)%n", actionId));
 				}

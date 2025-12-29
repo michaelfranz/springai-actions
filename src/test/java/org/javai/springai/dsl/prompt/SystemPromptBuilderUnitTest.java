@@ -41,7 +41,8 @@ class SystemPromptBuilderUnitTest {
 
 		String prompt = SystemPromptBuilder.build(registry, ad -> true, guidanceProvider, SystemPromptBuilder.Mode.SXL);
 
-		assertThat(prompt).contains("DSL sxl-plan:");
+		// sxl-plan is no longer auto-included since we use JSON for plans
+		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
 
@@ -55,7 +56,8 @@ class SystemPromptBuilderUnitTest {
 				guidanceProvider,
 				SystemPromptBuilder.Mode.SXL);
 
-		assertThat(prompt).contains("DSL sxl-plan:");
+		// sxl-plan is no longer auto-included since we use JSON for plans
+		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
 
@@ -70,12 +72,15 @@ class SystemPromptBuilderUnitTest {
 				SystemPromptBuilder.Mode.SXL
 		);
 
-		assertThat(prompt).contains("DSL sxl-plan:");
+		// sxl-plan is no longer auto-included since we use JSON for plans
+		assertThat(prompt).doesNotContain("DSL sxl-plan:");
 		assertThat(prompt).contains("DSL sxl-sql:");
 	}
 
 	@Test
 	void ordersGuidanceUniversalThenPlanThenOthersAlphabetically() {
+		// Register both action types to get both sxl-plan and sxl-sql
+		registry.registerActions(new PlanOnlyActions());
 		registry.registerActions(new SqlActions());
 
 		String prompt = SystemPromptBuilder.build(
