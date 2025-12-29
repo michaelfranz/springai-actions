@@ -7,8 +7,10 @@ import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.act.ActionRegistry;
+import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanStep;
+import org.javai.springai.dsl.sql.Query;
 import org.javai.springai.sxl.SxlNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ class DefaultPlanResolverTest {
 
 	@BeforeEach
 	void setup() {
+		TypeFactoryBootstrap.registerBuiltIns();
 		registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 		resolver = new DefaultPlanResolver();
@@ -292,6 +295,53 @@ class DefaultPlanResolverTest {
 		assertThat(errorStep.reason()).contains("Failed to convert");
 	}
 
+	@Test
+	void convertsSExpressionStringToTypedObject() {
+		// This test verifies that when a JSON plan contains an S-expression as a string,
+		// the resolver correctly parses it and converts it to the typed object.
+		// This is the key case for JSON plans with S-expression-backed parameters.
+		
+		String sxlString = "(Q (F customers c) (S c.name))";
+		
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { sxlString }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(step.arguments()).hasSize(1);
+		assertThat(step.arguments().getFirst().value()).isInstanceOf(Query.class);
+
+		Query query = (Query) step.arguments().getFirst().value();
+		assertThat(query).isNotNull();
+		// Verify the Query can generate SQL (proves it was parsed correctly)
+		assertThat(query.sqlString()).contains("customers").contains("c");
+	}
+
+	@Test
+	void convertsComplexSExpressionStringToTypedObject() {
+		// More complex S-expression string as would appear in a JSON plan
+		// The key test is that the S-expression string gets parsed and converted to Query
+		String sxlString = "(Q (F orders o) (C o.id o.status))";
+		
+		Plan plan = new Plan(
+				"",
+				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { sxlString }))
+		);
+
+		ResolvedPlan result = resolver.resolve(plan, registry);
+		assertThat(result.status()).isEqualTo(org.javai.springai.dsl.plan.PlanStatus.READY);
+
+		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		Query query = (Query) step.arguments().getFirst().value();
+		assertThat(query).isNotNull();
+		// Query was successfully created from the S-expression string
+		// (actual SQL generation may have additional requirements not tested here)
+	}
+
 	private static class SampleActions {
 		@Action(description = "Say hello")
 		public void greet(String name, Integer times) {
@@ -319,6 +369,10 @@ class DefaultPlanResolverTest {
 
 		@Action(description = "Use order value record")
 		public void useOrderValue(OrderValueQuery orderValueQuery) {
+		}
+
+		@Action(description = "Run a SQL query")
+		public void runQuery(Query query) {
 		}
 
 		enum Priority {

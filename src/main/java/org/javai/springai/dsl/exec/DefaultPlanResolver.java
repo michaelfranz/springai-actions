@@ -8,15 +8,21 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.stream.Streams;
 import org.javai.springai.dsl.act.ActionBinding;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
+import org.javai.springai.dsl.bind.TypeFactory;
+import org.javai.springai.dsl.bind.TypeFactoryRegistry;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanStep;
 import org.javai.springai.sxl.SExpressionType;
 import org.javai.springai.sxl.SxlNode;
+import org.javai.springai.sxl.SxlParser;
+import org.javai.springai.sxl.SxlTokenizer;
+import org.javai.springai.sxl.UniversalParsingStrategy;
 
 /**
  * Default resolver that maps Plan steps to ActionBindings and resolves arguments.
@@ -106,7 +112,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		if (targetType.isArray()) {
-			return convertArray(raw, targetType.componentType(), actionId, param.name());
+			return convertArray(raw, targetType.componentType(), param.dslId(), actionId, param.name());
 		}
 
 		if (Collection.class.isAssignableFrom(targetType)) {
@@ -118,10 +124,10 @@ public class DefaultPlanResolver implements PlanResolver {
 			return ConversionOutcome.success(asList);
 		}
 
-		return convertScalar(raw, targetType, actionId, param.name());
+		return convertScalar(raw, targetType, param.dslId(), actionId, param.name());
 	}
 
-	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String actionId, String paramName) {
+	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String dslId, String actionId, String paramName) {
 		Object[] elements = toObjectArray(raw);
 		if (elements == null) {
 			return ConversionOutcome.failure("Expected an array or collection value for parameter " + paramName);
@@ -129,7 +135,7 @@ public class DefaultPlanResolver implements PlanResolver {
 
 		Object array = Array.newInstance(componentType, elements.length);
 		for (int i = 0; i < elements.length; i++) {
-			ConversionOutcome converted = convertScalar(elements[i], componentType, actionId, paramName);
+			ConversionOutcome converted = convertScalar(elements[i], componentType, dslId, actionId, paramName);
 			if (!converted.success()) {
 				return converted;
 			}
@@ -138,7 +144,12 @@ public class DefaultPlanResolver implements PlanResolver {
 		return ConversionOutcome.success(array);
 	}
 
-	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String actionId, String paramName) {
+	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName) {
+		// Handle S-expression strings for SExpressionType targets
+		if (raw instanceof String s && SExpressionType.class.isAssignableFrom(targetType) && looksLikeSExpression(s)) {
+			return convertSExpressionString(s, dslId, targetType, paramName);
+		}
+
 		Object normalized = normalizeRaw(raw, targetType);
 		try {
 			if (targetType == String.class) {
@@ -172,6 +183,60 @@ public class DefaultPlanResolver implements PlanResolver {
 					"Failed to convert parameter " + paramName + " to " + targetType.getSimpleName() + ": "
 							+ ex.getMessage());
 		}
+	}
+
+	/**
+	 * Convert an S-expression string to a typed object via TypeFactoryRegistry.
+	 * This handles the case where JSON plans contain S-expression strings for DSL-backed parameters.
+	 */
+	private ConversionOutcome convertSExpressionString(String sxlString, String dslId, Class<?> targetType, String paramName) {
+		try {
+			// Parse the S-expression string
+			SxlTokenizer tokenizer = new SxlTokenizer(sxlString);
+			SxlParser parser = new SxlParser(tokenizer.tokenize(), new UniversalParsingStrategy());
+			List<SxlNode> nodes = parser.parse();
+
+			if (nodes.isEmpty()) {
+				return ConversionOutcome.failure(
+						"Failed to parse S-expression for parameter " + paramName + ": no nodes found");
+			}
+
+			SxlNode rootNode = nodes.getFirst();
+
+			// Find the appropriate dslId - use provided dslId or try to infer from target type
+			String effectiveDslId = dslId;
+			if (effectiveDslId == null || effectiveDslId.isBlank()) {
+				Optional<String> inferredDslId = TypeFactoryRegistry.getDslIdForType(targetType);
+				if (inferredDslId.isEmpty()) {
+					return ConversionOutcome.failure(
+							"No dslId specified and cannot infer dslId for type " + targetType.getSimpleName());
+				}
+				effectiveDslId = inferredDslId.get();
+			}
+
+			// Get the factory and create the typed object
+			Optional<TypeFactory<?>> factoryOpt = TypeFactoryRegistry.getFactory(effectiveDslId);
+			if (factoryOpt.isEmpty()) {
+				return ConversionOutcome.failure(
+						"No TypeFactory registered for dslId: " + effectiveDslId);
+			}
+
+			Object result = factoryOpt.get().create(rootNode);
+			return ConversionOutcome.success(result);
+
+		} catch (Exception ex) {
+			return ConversionOutcome.failure(
+					"Failed to convert S-expression for parameter " + paramName + ": " + ex.getMessage());
+		}
+	}
+
+	/**
+	 * Check if a string looks like an S-expression (starts with parenthesis).
+	 */
+	private boolean looksLikeSExpression(String s) {
+		if (s == null) return false;
+		String trimmed = s.trim();
+		return !trimmed.isEmpty() && trimmed.startsWith("(");
 	}
 
 	/**
