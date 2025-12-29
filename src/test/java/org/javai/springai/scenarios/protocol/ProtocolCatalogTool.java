@@ -3,12 +3,12 @@ package org.javai.springai.scenarios.protocol;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.javai.springai.dsl.instrument.AugmentedPayload;
-import org.javai.springai.dsl.instrument.InvocationEmitter;
-import org.javai.springai.dsl.instrument.InvocationEventType;
-import org.javai.springai.dsl.instrument.InvocationKind;
-import org.javai.springai.dsl.instrument.InvocationSupport;
-import org.javai.springai.dsl.instrument.PayloadAugmentor;
+import org.javai.springai.actions.instrument.AugmentedPayload;
+import org.javai.springai.actions.instrument.InvocationEmitter;
+import org.javai.springai.actions.instrument.InvocationEventType;
+import org.javai.springai.actions.instrument.InvocationKind;
+import org.javai.springai.actions.instrument.InvocationSupport;
+import org.javai.springai.actions.instrument.PayloadAugmentor;
 import org.springframework.ai.tool.annotation.Tool;
 
 /**

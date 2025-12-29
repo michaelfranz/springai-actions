@@ -3,7 +3,7 @@ package org.javai.springai.scenarios.data_warehouse;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.dsl.sql.Query;
+import org.javai.springai.actions.sql.Query;
 
 /**
  * Actions for data warehouse and SQL query scenarios.
