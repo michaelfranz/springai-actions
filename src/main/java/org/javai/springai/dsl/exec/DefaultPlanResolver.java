@@ -5,24 +5,16 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.stream.Streams;
 import org.javai.springai.dsl.act.ActionBinding;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.bind.TypeFactory;
-import org.javai.springai.dsl.bind.TypeFactoryRegistry;
 import org.javai.springai.dsl.plan.Plan;
 import org.javai.springai.dsl.plan.PlanStep;
-import org.javai.springai.sxl.SExpressionType;
-import org.javai.springai.sxl.SxlNode;
-import org.javai.springai.sxl.SxlParser;
-import org.javai.springai.sxl.SxlTokenizer;
-import org.javai.springai.sxl.UniversalParsingStrategy;
+import org.javai.springai.dsl.sql.Query;
+import org.javai.springai.dsl.sql.QueryValidationException;
 
 /**
  * Default resolver that maps Plan steps to ActionBindings and resolves arguments.
@@ -145,9 +137,9 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName) {
-		// Handle S-expression strings for SExpressionType targets
-		if (raw instanceof String s && SExpressionType.class.isAssignableFrom(targetType) && looksLikeSExpression(s)) {
-			return convertSExpressionString(s, dslId, targetType, paramName);
+		// Handle SQL strings for Query targets
+		if (raw instanceof String s && Query.class.isAssignableFrom(targetType)) {
+			return convertSqlString(s, paramName);
 		}
 
 		Object normalized = normalizeRaw(raw, targetType);
@@ -186,63 +178,22 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	/**
-	 * Convert an S-expression string to a typed object via TypeFactoryRegistry.
-	 * This handles the case where JSON plans contain S-expression strings for DSL-backed parameters.
+	 * Convert a SQL string to a Query object.
+	 * This handles the case where plans contain SQL strings for Query parameters.
 	 */
-	private ConversionOutcome convertSExpressionString(String sxlString, String dslId, Class<?> targetType, String paramName) {
+	private ConversionOutcome convertSqlString(String sql, String paramName) {
 		try {
-			// Parse the S-expression string
-			SxlTokenizer tokenizer = new SxlTokenizer(sxlString);
-			SxlParser parser = new SxlParser(tokenizer.tokenize(), new UniversalParsingStrategy());
-			List<SxlNode> nodes = parser.parse();
-
-			if (nodes.isEmpty()) {
-				return ConversionOutcome.failure(
-						"Failed to parse S-expression for parameter " + paramName + ": no nodes found");
-			}
-
-			SxlNode rootNode = nodes.getFirst();
-
-			// Find the appropriate dslId - use provided dslId or try to infer from target type
-			String effectiveDslId = dslId;
-			if (effectiveDslId == null || effectiveDslId.isBlank()) {
-				Optional<String> inferredDslId = TypeFactoryRegistry.getDslIdForType(targetType);
-				if (inferredDslId.isEmpty()) {
-					return ConversionOutcome.failure(
-							"No dslId specified and cannot infer dslId for type " + targetType.getSimpleName());
-				}
-				effectiveDslId = inferredDslId.get();
-			}
-
-			// Get the factory and create the typed object
-			Optional<TypeFactory<?>> factoryOpt = TypeFactoryRegistry.getFactory(effectiveDslId);
-			if (factoryOpt.isEmpty()) {
-				return ConversionOutcome.failure(
-						"No TypeFactory registered for dslId: " + effectiveDslId);
-			}
-
-			Object result = factoryOpt.get().create(rootNode);
-			return ConversionOutcome.success(result);
-
-		} catch (Exception ex) {
+			Query query = Query.fromSql(sql);
+			return ConversionOutcome.success(query);
+		} catch (QueryValidationException e) {
 			return ConversionOutcome.failure(
-					"Failed to convert S-expression for parameter " + paramName + ": " + ex.getMessage());
+					"Failed to parse SQL for parameter " + paramName + ": " + e.getMessage());
 		}
 	}
 
 	/**
-	 * Check if a string looks like an S-expression (starts with parenthesis).
-	 */
-	private boolean looksLikeSExpression(String s) {
-		if (s == null) return false;
-		String trimmed = s.trim();
-		return !trimmed.isEmpty() && trimmed.startsWith("(");
-	}
-
-	/**
-	 * Normalize raw values before conversion. Handles:
-	 * - JSON strings → parsed to Map/List
-	 * - SxlNode for non-DSL types → converted to Map/List structure
+	 * Normalize raw values before conversion.
+	 * Handles JSON strings → parsed to Map/List.
 	 */
 	private Object normalizeRaw(Object raw, Class<?> targetType) {
 		// Handle JSON strings
@@ -255,117 +206,7 @@ public class DefaultPlanResolver implements PlanResolver {
 			}
 		}
 		
-		// Handle S-expressions for non-SExpressionType targets
-		if (raw instanceof SxlNode node && !SExpressionType.class.isAssignableFrom(targetType)) {
-			return sxlNodeToJsonStructure(node);
-			}
-		
 		return raw;
-	}
-
-	/**
-	 * Convert an SxlNode to a JSON-compatible structure (Map, List, or primitive).
-	 * 
-	 * Conversion rules:
-	 * - Literal nodes → their value (parsed as number if applicable)
-	 * - Symbol nodes with alternating identifier/value args → Map (object)
-	 * - Symbol nodes with all-value args → List (array)
-	 * - EMBED nodes → unwrap and convert inner content
-	 */
-	private Object sxlNodeToJsonStructure(SxlNode node) {
-		if (node == null) {
-			return null;
-		}
-		
-		// Literal nodes → return the value
-		if (node.isLiteral()) {
-			return parseLiteralValue(node.literalValue());
-		}
-		
-		String symbol = node.symbol();
-		List<SxlNode> args = node.args();
-		
-		// Handle EMBED: strip the wrapper and process the payload
-		if ("EMBED".equalsIgnoreCase(symbol) && args != null && args.size() >= 2) {
-			// EMBED dsl-id payload → just process the payload
-			return sxlNodeToJsonStructure(args.get(1));
-		}
-		
-		// If no args, just return the symbol as a string
-		if (args == null || args.isEmpty()) {
-			return symbol;
-		}
-		
-		// Determine if this is a key-value object or an array
-		// Key-value: alternating pattern of identifier, value, identifier, value...
-		// Array: all values (no identifiers at odd positions)
-		if (looksLikeKeyValuePairs(args)) {
-			return convertToMap(args);
-		} else {
-			// Treat as array - convert all args
-			List<Object> list = new ArrayList<>();
-			for (SxlNode arg : args) {
-				list.add(sxlNodeToJsonStructure(arg));
-			}
-			return list;
-		}
-	}
-
-	/**
-	 * Check if args look like key-value pairs: identifier, value, identifier, value, ...
-	 * Keys are symbol nodes with no args; values can be anything.
-	 */
-	private boolean looksLikeKeyValuePairs(List<SxlNode> args) {
-		if (args.size() < 2 || args.size() % 2 != 0) {
-			return false;
-		}
-		// Check that even indices (0, 2, 4...) are identifiers (symbols with no args)
-		for (int i = 0; i < args.size(); i += 2) {
-			SxlNode key = args.get(i);
-			if (key.isLiteral() || (key.args() != null && !key.args().isEmpty())) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * Convert key-value pairs to a Map.
-	 */
-	private Map<String, Object> convertToMap(List<SxlNode> args) {
-		Map<String, Object> map = new LinkedHashMap<>();
-		for (int i = 0; i < args.size(); i += 2) {
-			String key = args.get(i).symbol();
-			Object value = sxlNodeToJsonStructure(args.get(i + 1));
-			map.put(key, value);
-		}
-		return map;
-	}
-
-	/**
-	 * Parse a literal value, converting to number if applicable.
-	 */
-	private Object parseLiteralValue(String value) {
-		if (value == null) {
-			return null;
-		}
-		// Try to parse as number
-		try {
-			if (value.contains(".")) {
-				return Double.parseDouble(value);
-			}
-			return Long.parseLong(value);
-		} catch (NumberFormatException ignored) {
-			// Not a number, return as string
-		}
-		// Handle boolean
-		if ("true".equalsIgnoreCase(value)) {
-			return true;
-		}
-		if ("false".equalsIgnoreCase(value)) {
-			return false;
-		}
-		return value;
 	}
 
 	private boolean looksLikeJson(String s) {

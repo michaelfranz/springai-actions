@@ -90,12 +90,14 @@ public class DataWarehouseApplicationScenarioTest {
 			.build();
 
 	// Base planner with catalog context always available
+	// Note: SqlCatalogContextContributor now instructs LLM to return standard ANSI SQL
+	// instead of S-expression DSL syntax
 	planner = Planner.builder()
 			.withChatClient(chatClient)
 			.persona(sqlAnalystPersona)
 			.actions(dataWarehouseActions)
-			.addDslContextContributor(new SqlCatalogContextContributor(catalog))
-			.addDslContext("sxl-sql", catalog)
+			.addPromptContributor(new SqlCatalogContextContributor(catalog))
+			.addPromptContext("sql", catalog)
 			.build();
 		resolver = new DefaultPlanResolver();
 		executor = new DefaultPlanExecutor();
@@ -132,7 +134,7 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(resolvedPlan);
-		assertThat(executed.success()).isTrue();
+ 		assertThat(executed.success()).isTrue();
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 	}
 

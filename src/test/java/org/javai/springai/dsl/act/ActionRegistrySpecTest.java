@@ -4,17 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for ActionRegistry and related classes.
+ */
 class ActionRegistrySpecTest {
-
-	@BeforeEach
-	void setup() {
-		TypeFactoryBootstrap.registerBuiltIns();
-	}
 
 	@Test
 	void buildsActionSpecFromAnnotatedBean() {
@@ -32,8 +28,8 @@ class ActionRegistrySpecTest {
 		ActionParameterDescriptor p0 = descriptor.actionParameterSpecs().get(0);
 		assertThat(p0.name()).isEqualTo("query");
 		assertThat(p0.typeName()).isEqualTo(Query.class.getName());
-		assertThat(p0.typeId()).isEqualTo("sxl-sql:Query");
-		assertThat(p0.dslId()).isEqualTo("sxl-sql");
+		assertThat(p0.typeId()).isEqualTo("sql-query:Query");
+		assertThat(p0.dslId()).isEqualTo("sql-query");
 
 		ActionParameterDescriptor p1 = descriptor.actionParameterSpecs().get(1);
 		assertThat(p1.name()).isEqualTo("note");
@@ -54,8 +50,8 @@ class ActionRegistrySpecTest {
 		assertThat(first.get("description").asText()).isEqualTo("Run a query");
 		var params = first.get("parameters");
 		assertThat(params.size()).isEqualTo(2);
-		assertThat(params.get(0).get("typeId").asText()).isEqualTo("sxl-sql:Query");
-		assertThat(params.get(0).get("dslId").asText()).isEqualTo("sxl-sql");
+		assertThat(params.get(0).get("typeId").asText()).isEqualTo("sql-query:Query");
+		assertThat(params.get(0).get("dslId").asText()).isEqualTo("sql-query");
 		assertThat(params.get(1).get("typeId").asText()).isEqualTo("String");
 		assertThat(params.get(1).has("dslId")).isFalse();
 	}

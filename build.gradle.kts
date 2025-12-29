@@ -48,7 +48,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("com.h2database:h2")
     testImplementation("org.apache.commons:commons-csv:1.10.0")
-    testImplementation("com.github.jsqlparser:jsqlparser:4.9")
+    implementation("com.github.jsqlparser:jsqlparser:4.9")
 }
 
 // Exclude Spring Boot's default Logback starter to avoid conflicts with Log4j2
@@ -66,33 +66,6 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-// ============================================================
-// GOLDEN FILES GENERATION TASK
-// ============================================================
-// Automatically generates golden files from grammar resources.
-// This task runs before tests to ensure golden files are up-to-date.
-tasks.register<JavaExec>("generateGoldenFiles") {
-    group = "verification"
-    description = "Generate golden files from grammar resources for system prompt verification"
-
-    classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
-    mainClass = "org.javai.springai.sxl.grammar.GoldenFileGenerator"
-    workingDir = rootDir
-
-    doFirst {
-        println("Generating golden files from grammar resources...")
-    }
-
-    doLast {
-        println("Golden files generation completed")
-    }
-}
-
-// Run golden file generation before tests
-tasks.test {
-    dependsOn("generateGoldenFiles")
-}
-
 // Configure Spring Boot to not create a bootJar by default.
 // Instead, use the plain JAR as the main artifact for library consumption.
 tasks {
@@ -107,7 +80,6 @@ tasks {
     // Ensure the plain jar is the default artifact
     build {
         dependsOn(jar)
-        dependsOn("generateGoldenFiles")
     }
 }
 

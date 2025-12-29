@@ -7,17 +7,13 @@ import java.util.List;
 import java.util.Locale;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for ActionPromptContributor.
+ */
 class ActionPromptContributorTest {
-
-	@BeforeEach
-	void setup() {
-		TypeFactoryBootstrap.registerBuiltIns();
-	}
 
 	@Test
 	void emitsSxlPrompt() {
@@ -27,7 +23,7 @@ class ActionPromptContributorTest {
 
 		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL, spec -> spec.id().endsWith("runQuery"));
 
-		assertThat(prompt).contains("(PS").contains("runQuery").contains("EMBED sxl-sql");
+		assertThat(prompt).contains("(PS").contains("runQuery").contains("EMBED sql-query");
 		assertThat(prompt).doesNotContain("otherAction");
 	}
 

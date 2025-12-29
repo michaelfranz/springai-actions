@@ -5,29 +5,20 @@ import org.javai.springai.actions.api.Action;
 import org.javai.springai.dsl.prompt.InMemorySqlCatalog;
 import org.javai.springai.dsl.prompt.SqlCatalogContextContributor;
 import org.javai.springai.dsl.sql.Query;
-import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarParser;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
 
+/**
+ * Tests for the Planner class.
+ * Plans use JSON format exclusively; there is no S-expression fallback.
+ */
 @SuppressWarnings("NullAway")
 class PlannerTest {
-
-	private SxlGrammar planGrammar;
-
-	@BeforeEach
-	void setup() {
-		SxlGrammarParser parser = new SxlGrammarParser();
-		planGrammar = parser.parse(
-				PlannerTest.class.getClassLoader().getResourceAsStream("META-INF/sxl-meta-grammar-plan.yml"));
-	}
 
 	@Test
 	void previewIncludesActionsInJsonFormat() {
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
@@ -35,19 +26,18 @@ class PlannerTest {
 
 		PromptPreview preview = planner.preview("do something");
 
-		// Actions are included (JSON plans still reference action catalog)
+		// Actions are included
 		assertThat(preview.systemMessages())
 				.anySatisfy(msg -> assertThat(msg).contains("demoAction"));
 		assertThat(preview.userMessages()).contains("do something");
-		// Grammar is still registered for fallback parsing
-		assertThat(preview.grammarIds()).contains("sxl-plan");
+		// Grammar IDs should be empty since we no longer use S-expression grammars
+		assertThat(preview.grammarIds()).isEmpty();
 		assertThat(preview.actionNames()).contains("demoAction");
 	}
 
 	@Test
 	void systemPromptUsesJsonPlanFormat() {
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.addPromptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
@@ -69,7 +59,6 @@ class PlannerTest {
 	@Test
 	void dryRunReturnsEmptyPlanAndPreview() {
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.actions(new DemoActions())
 				.build();
 
@@ -91,7 +80,6 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn("{{{"); // malformed JSON
 
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -125,7 +113,6 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(jsonResponse);
 
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -163,7 +150,6 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(markdownResponse);
 
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -180,17 +166,14 @@ class PlannerTest {
 
 	@Test
 	@SuppressWarnings("NullAway")
-	void fallsBackToSExpressionParsing() {
-		// S-expression response (for backwards compatibility)
-		String sxlResponse = """
-				(P "Demo plan" (PS demoAction (PA input "sxl value")))
-				""";
+	void nonJsonResponseReturnsErrorPlan() {
+		// Non-JSON response should result in an error plan
+		String nonJsonResponse = "I would be happy to help you with that request.";
 
 		ChatClient mockClient = Mockito.mock(ChatClient.class, Mockito.RETURNS_DEEP_STUBS);
-		Mockito.when(mockClient.prompt().call().content()).thenReturn(sxlResponse);
+		Mockito.when(mockClient.prompt().call().content()).thenReturn(nonJsonResponse);
 
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.withChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
@@ -198,11 +181,10 @@ class PlannerTest {
 		PlanFormulationResult result = planner.formulatePlan("do something", PlannerOptions.defaults());
 
 		assertThat(result.plan()).isNotNull();
-		assertThat(result.plan().status()).isEqualTo(PlanStatus.READY);
-
-		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
-		assertThat(step.actionId()).isEqualTo("demoAction");
-		assertThat(step.actionArguments()).containsExactly("sxl value");
+		assertThat(result.plan().planSteps()).hasSize(1);
+		assertThat(result.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep error = (PlanStep.ErrorStep) result.plan().planSteps().getFirst();
+		assertThat(error.assistantMessage()).contains("Failed to parse");
 	}
 
 	@Test
@@ -227,10 +209,9 @@ class PlannerTest {
 						new String[] { "attribute" }, null);
 
 		Planner planner = Planner.builder()
-				.addGrammar(planGrammar)
 				.actions(new QueryActions())
-				.addDslContextContributor(new SqlCatalogContextContributor(catalog))
-				.addDslContext("sxl-sql", catalog)
+				.addPromptContributor(new SqlCatalogContextContributor(catalog))
+				.addPromptContext("sql-catalog", catalog)
 				.enablePromptCapture()
 				.build();
 
@@ -258,9 +239,4 @@ class PlannerTest {
 			// no-op
 		}
 	}
-
-	private static String normalize(String text) {
-		return text == null ? "" : text.replaceAll("\\s+", " ").trim();
-	}
 }
-

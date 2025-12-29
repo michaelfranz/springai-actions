@@ -5,11 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,7 +22,6 @@ import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.conversation.ConversationPromptBuilder;
 import org.javai.springai.dsl.conversation.ConversationState;
 import org.javai.springai.dsl.exec.DefaultPlanResolver;
@@ -32,22 +29,11 @@ import org.javai.springai.dsl.exec.PlanResolver;
 import org.javai.springai.dsl.exec.PlanVerifier;
 import org.javai.springai.dsl.exec.ResolvedPlan;
 import org.javai.springai.dsl.exec.ResolvedStep;
-import org.javai.springai.dsl.prompt.DslContextContributor;
-import org.javai.springai.dsl.prompt.DslGrammarSource;
-import org.javai.springai.dsl.prompt.DslGuidanceProvider;
 import org.javai.springai.dsl.prompt.PersonaSpec;
 import org.javai.springai.dsl.prompt.PlanActionsContextContributor;
+import org.javai.springai.dsl.prompt.PromptContributor;
 import org.javai.springai.dsl.prompt.SystemPromptBuilder;
-import org.javai.springai.sxl.DefaultValidatorRegistry;
-import org.javai.springai.sxl.DslParsingStrategy;
-import org.javai.springai.sxl.SxlNode;
-import org.javai.springai.sxl.SxlParseException;
-import org.javai.springai.sxl.SxlParser;
-import org.javai.springai.sxl.SxlTokenizer;
-import org.javai.springai.sxl.UniversalParsingStrategy;
-import org.javai.springai.sxl.ValidatorRegistry;
-import org.javai.springai.sxl.grammar.SxlGrammar;
-import org.javai.springai.sxl.grammar.SxlGrammarRegistry;
+import org.javai.springai.dsl.prompt.SystemPromptContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -55,6 +41,7 @@ import org.springframework.lang.NonNull;
 
 /**
  * Fluent planner API that wraps Spring AI's ChatClient and surfaces prompt previews.
+ * Plans are now exclusively JSON-based - there is no S-expression fallback.
  */
 public final class Planner {
 	private static final Logger logger = LoggerFactory.getLogger(Planner.class);
@@ -62,28 +49,24 @@ public final class Planner {
 	private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile("```(?:json)?\\s*\\n?(\\{.*?\\})\\s*```", Pattern.DOTALL);
 
 	private final ChatClient chatClient;
-	private final List<SxlGrammar> grammars;
 	private final List<String> promptContributions;
 	private final CollectedActions collectedActions;
 	private final Object[] toolSources;
-	private final List<DslContextContributor> dslContributors;
-	private final Map<String, Object> dslContext;
+	private final List<PromptContributor> promptContributors;
+	private final Map<String, Object> promptContext;
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
-	private final ValidatorRegistry validatorRegistry;
 	private final PersonaSpec persona;
 
 	private Planner(Builder builder) {
 		this.chatClient = builder.chatClient;
-		this.grammars = List.copyOf(builder.grammars);
 		this.promptContributions = List.copyOf(builder.promptContributions);
 		this.collectedActions = collectActions(builder.actionSources);
 		this.toolSources = builder.toolSources != null ? builder.toolSources : new Object[0];
-		this.dslContributors = List.copyOf(builder.dslContributors);
-		this.dslContext = Map.copyOf(builder.dslContext);
+		this.promptContributors = List.copyOf(builder.promptContributors);
+		this.promptContext = Map.copyOf(builder.promptContext);
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
-		this.validatorRegistry = buildValidatorRegistry(this.grammars);
 		this.persona = builder.persona;
 	}
 
@@ -240,7 +223,7 @@ public final class Planner {
 			PARAMETER TYPES:
 			1. Simple types (string, int, boolean) → use JSON primitives directly
 			2. Complex types (objects) → use JSON objects matching the parameter's structure
-			3. Query parameters (marked S-expression) → embed as string: "(Q (F table t) ...)"
+			3. Query parameters (SQL) → embed as string containing a valid SELECT statement
 			
 			Available actions identified by actionId:
 			%s
@@ -262,7 +245,7 @@ public final class Planner {
 						}
 						paramsStr.append(p.name()).append(": ").append(p.typeId());
 						if (p.dslId() != null && !p.dslId().isBlank()) {
-							paramsStr.append(" (S-expression)");
+							paramsStr.append(" (SQL query)");
 						}
 						// Include examples for complex types to guide JSON structure
 						if (p.examples() != null && p.examples().length > 0) {
@@ -278,29 +261,33 @@ public final class Planner {
 		return String.format(PLANNING_DIRECTIVE_TEMPLATE, actionsList.toString());
 	}
 
-
-
-
 	private PromptPreview buildPromptPreview(@NonNull String requestText,
 			@NonNull List<ActionDescriptor> actionDescriptors,
 			ConversationState state) {
 		List<String> systemMessages = new ArrayList<>();
 
-		DslGuidanceProvider guidanceProvider = new InlineGrammarGuidanceProvider(this.grammars);
 		String systemPrompt = SystemPromptBuilder.build(
 				collectedActions.registry(),
 				ActionDescriptorFilter.ALL,
-				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL,
-				this.dslContributors,
-				this.dslContext,
-				null,
-				null
+				this.promptContributors,
+				this.promptContext
 		);
 		systemMessages.add(systemPrompt);
 
 		if (this.persona != null) {
 			systemMessages.add(renderPersona(this.persona));
+		}
+
+		// Add contributions from prompt contributors (e.g., SqlCatalogContextContributor)
+		SystemPromptContext ctx = new SystemPromptContext(
+				collectedActions.registry(), 
+				actionDescriptors, 
+				ActionDescriptorFilter.ALL, 
+				this.promptContext);
+		for (PromptContributor contributor : this.promptContributors) {
+			if (contributor != null) {
+				contributor.contribute(ctx).ifPresent(systemMessages::add);
+			}
 		}
 
 		systemMessages.addAll(promptContributions);
@@ -313,16 +300,12 @@ public final class Planner {
 		systemMessages.add(buildPlanningDirective(actionDescriptors));
 
 		List<String> userMessages = List.of(requestText);
-		List<String> grammarIds = grammars.stream()
-				.map(g -> g.dsl() != null ? g.dsl().id() : null)
-				.filter(Objects::nonNull)
-				.toList();
 		List<String> actionNames = actionDescriptors.stream().map(ActionDescriptor::id).toList();
 
 		return new PromptPreview(
 				Objects.requireNonNull(systemMessages),
 				Objects.requireNonNull(userMessages),
-				grammarIds,
+				List.of(),  // No grammar IDs - we use JSON now
 				actionNames);
 	}
 
@@ -370,7 +353,7 @@ public final class Planner {
 	}
 
 	/**
-	 * Parse plan from LLM response. Tries JSON first, falls back to S-expression for backwards compatibility.
+	 * Parse plan from LLM response. Only supports JSON format.
 	 */
 	private Plan parsePlan(String response, ActionRegistry actionRegistry) {
 		if (response == null || response.isBlank()) {
@@ -382,8 +365,7 @@ public final class Planner {
 			return parseJsonPlan(jsonContent, actionRegistry);
 		}
 
-		// Fallback to S-expression parsing for backwards compatibility
-		return parseSxlPlan(response);
+		throw new PlanParseException("LLM response does not contain valid JSON plan");
 	}
 
 	/**
@@ -432,35 +414,6 @@ public final class Planner {
 	}
 
 	/**
-	 * Fallback S-expression parsing for backwards compatibility.
-	 */
-	private Plan parseSxlPlan(String response) {
-		try {
-		SxlTokenizer tokenizer = new SxlTokenizer(response);
-		var tokens = tokenizer.tokenize();
-
-		// Prefer plan grammar if provided
-		SxlGrammar planGrammar = grammars.stream()
-				.filter(g -> g.dsl() != null && "sxl-plan".equals(g.dsl().id()))
-				.findFirst()
-				.orElse(null);
-
-		var strategy = planGrammar != null
-				? new DslParsingStrategy(planGrammar, this.validatorRegistry)
-				: new UniversalParsingStrategy();
-		SxlParser parser = new SxlParser(tokens, strategy);
-		List<SxlNode> nodes = parser.parse();
-		if (nodes.isEmpty()) {
-				throw new PlanParseException("LLM returned no parseable plan nodes");
-		}
-		SxlNode planNode = nodes.getFirst();
-		return Plan.of(planNode);
-		} catch (SxlParseException e) {
-			throw new PlanParseException("Failed to parse S-expression plan: " + e.getMessage(), e);
-		}
-	}
-
-	/**
 	 * Exception for plan parsing failures.
 	 */
 	public static class PlanParseException extends RuntimeException {
@@ -471,19 +424,6 @@ public final class Planner {
 		public PlanParseException(String message, Throwable cause) {
 			super(message, cause);
 		}
-	}
-
-	private static ValidatorRegistry buildValidatorRegistry(List<SxlGrammar> grammars) {
-		DefaultValidatorRegistry registry = new DefaultValidatorRegistry();
-		if (grammars != null) {
-			for (SxlGrammar grammar : grammars) {
-				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null
-						&& !grammar.dsl().id().isBlank()) {
-					registry.addGrammar(grammar.dsl().id(), grammar);
-				}
-			}
-		}
-		return registry;
 	}
 
 	private ExecutablePlan toExecutablePlan(ResolvedPlan resolvedPlan) {
@@ -530,12 +470,11 @@ public final class Planner {
 
 	public static final class Builder {
 		private ChatClient chatClient;
-		private final List<SxlGrammar> grammars = new ArrayList<>();
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
 		private Object[] toolSources;
-		private final List<DslContextContributor> dslContributors = new ArrayList<>();
-		private final Map<String, Object> dslContext = new HashMap<>();
+		private final List<PromptContributor> promptContributors = new ArrayList<>();
+		private final Map<String, Object> promptContext = new HashMap<>();
 		private boolean capturePromptByDefault;
 		private Consumer<PromptPreview> promptHook;
 		private PersonaSpec persona;
@@ -545,18 +484,6 @@ public final class Planner {
 
 		public Builder withChatClient(ChatClient chatClient) {
 			this.chatClient = chatClient;
-			return this;
-		}
-
-		public Builder addGrammar(SxlGrammar grammar) {
-			if (grammar != null) {
-				String dslId = grammar.dsl() != null ? grammar.dsl().id() : null;
-				boolean alreadyPresent = dslId != null && grammars.stream()
-						.anyMatch(g -> g.dsl() != null && dslId.equals(g.dsl().id()));
-				if (!alreadyPresent) {
-					grammars.add(grammar);
-				}
-			}
 			return this;
 		}
 
@@ -583,16 +510,40 @@ public final class Planner {
 			return this;
 		}
 
-		public Builder addDslContextContributor(DslContextContributor contributor) {
+		/**
+		 * Add a prompt contributor that provides dynamic context to the system prompt.
+		 * @deprecated Use {@link #addPromptContributor(PromptContributor)} instead
+		 */
+		@Deprecated(forRemoval = true)
+		public Builder addDslContextContributor(PromptContributor contributor) {
+			return addPromptContributor(contributor);
+		}
+
+		/**
+		 * Add a prompt contributor that provides dynamic context to the system prompt.
+		 */
+		public Builder addPromptContributor(PromptContributor contributor) {
 			if (contributor != null) {
-				this.dslContributors.add(contributor);
+				this.promptContributors.add(contributor);
 			}
 			return this;
 		}
 
-		public Builder addDslContext(String dslId, Object context) {
-			if (dslId != null && !dslId.isBlank() && context != null) {
-				this.dslContext.put(dslId, context);
+		/**
+		 * Add context data that can be accessed by prompt contributors.
+		 * @deprecated Use {@link #addPromptContext(String, Object)} instead
+		 */
+		@Deprecated(forRemoval = true)
+		public Builder addDslContext(String key, Object context) {
+			return addPromptContext(key, context);
+		}
+
+		/**
+		 * Add context data that can be accessed by prompt contributors.
+		 */
+		public Builder addPromptContext(String key, Object context) {
+			if (key != null && !key.isBlank() && context != null) {
+				this.promptContext.put(key, context);
 			}
 			return this;
 		}
@@ -613,115 +564,17 @@ public final class Planner {
 		}
 
 		public Planner build() {
-			// Ensure built-in DSL type mappings exist (sql)
-			TypeFactoryBootstrap.registerBuiltIns();
-
-			// Auto-discover grammars: explicit additions win, then defaults/meta-inf.
-			// Note: Plan grammar is no longer registered since plans use JSON format.
-			SxlGrammarRegistry registry = SxlGrammarRegistry.create();
-			registry.registerUniversal(Planner.class.getClassLoader());
-			registry.registerResource("META-INF/sxl-meta-grammar-sql.yml");
-			registry.registerMetaInfGrammars(Planner.class.getClassLoader());
-
-			Map<String, SxlGrammar> merged = new LinkedHashMap<>();
-			for (SxlGrammar grammar : this.grammars) {
-				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
-					merged.putIfAbsent(grammar.dsl().id(), grammar);
-				}
-			}
-			for (SxlGrammar grammar : registry.grammars()) {
-				if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
-					merged.putIfAbsent(grammar.dsl().id(), grammar);
-				}
-			}
-			this.grammars.clear();
-			this.grammars.addAll(merged.values());
-
 			// Ensure plan actions contributor is present (provides action catalog)
-			boolean hasPlanContributor = this.dslContributors.stream()
+			boolean hasPlanContributor = this.promptContributors.stream()
 					.anyMatch(c -> c instanceof PlanActionsContextContributor);
 			if (!hasPlanContributor) {
-				this.dslContributors.add(new PlanActionsContextContributor());
+				this.promptContributors.add(new PlanActionsContextContributor());
 			}
 			return new Planner(this);
 		}
 	}
 
 	private record CollectedActions(List<ActionDescriptor> descriptors, ActionRegistry registry) {
-	}
-
-	/**
-	 * Lightweight provider that serves guidance and grammar access from in-memory grammars.
-	 */
-	private static final class InlineGrammarGuidanceProvider implements DslGuidanceProvider, DslGrammarSource {
-
-		private final Map<String, SxlGrammar> grammarsById;
-
-		InlineGrammarGuidanceProvider(List<SxlGrammar> grammars) {
-			this.grammarsById = new LinkedHashMap<>();
-			if (grammars != null) {
-				for (SxlGrammar grammar : grammars) {
-					if (grammar != null && grammar.dsl() != null && grammar.dsl().id() != null) {
-						this.grammarsById.putIfAbsent(grammar.dsl().id(), grammar);
-					}
-				}
-			}
-		}
-
-		@Override
-		public Optional<String> guidanceFor(String dslId, String providerId, String modelId) {
-			SxlGrammar grammar = grammarsById.get(dslId);
-			if (grammar == null || grammar.llmSpecs() == null) {
-				return Optional.empty();
-			}
-
-			// model-specific override wins if present
-			if (providerId != null && modelId != null && grammar.llmSpecs().models() != null) {
-				var providerModels = grammar.llmSpecs().models().get(providerId);
-				if (providerModels != null) {
-					var modelOverrides = providerModels.get(modelId);
-					if (modelOverrides != null && modelOverrides.overrides() != null) {
-						String guidance = clean(modelOverrides.overrides().guidance());
-						if (guidance != null) {
-							return Optional.of(guidance);
-						}
-					}
-				}
-			}
-
-			// provider-level default next
-			if (providerId != null && grammar.llmSpecs().providerDefaults() != null) {
-				var providerDefaults = grammar.llmSpecs().providerDefaults().get(providerId);
-				if (providerDefaults != null) {
-					String guidance = clean(providerDefaults.guidance());
-					if (guidance != null) {
-						return Optional.of(guidance);
-					}
-				}
-			}
-
-			// fall back to defaults
-			if (grammar.llmSpecs().defaults() != null) {
-				String guidance = clean(grammar.llmSpecs().defaults().guidance());
-				if (guidance != null) {
-					return Optional.of(guidance);
-				}
-			}
-
-			return Optional.empty();
-		}
-
-		@Override
-		public Optional<SxlGrammar> grammarFor(String dslId) {
-			return Optional.ofNullable(grammarsById.get(dslId));
-		}
-
-		private static String clean(String guidance) {
-			if (guidance == null || guidance.isBlank()) {
-				return null;
-			}
-			return guidance.trim();
-		}
 	}
 
 	private static String renderPersona(PersonaSpec persona) {
@@ -756,4 +609,3 @@ public final class Planner {
 		return sb.toString().trim();
 	}
 }
-

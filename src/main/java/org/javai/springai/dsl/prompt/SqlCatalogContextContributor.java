@@ -4,11 +4,26 @@ import java.util.Optional;
 import java.util.StringJoiner;
 
 /**
- * Contributes SQL catalog metadata (tables/columns) to the system prompt for the SQL DSL.
- * By default it reads a provided {@link SqlCatalog} instance; if absent, it will look for
- * a {@link SqlCatalog} under the dslContext key "sxl-sql" in {@link SystemPromptContext}.
+ * Contributes SQL catalog metadata (tables/columns) to the system prompt.
+ * 
+ * <p>This contributor provides schema information and guidance for generating
+ * standard ANSI SQL SELECT statements. The LLM should return SQL strings directly,
+ * not S-expression DSL syntax.</p>
+ * 
+ * <p>By default it reads a provided {@link SqlCatalog} instance; if absent, it will look for
+ * a {@link SqlCatalog} under the context key "sql" in {@link SystemPromptContext}.</p>
  */
-public final class SqlCatalogContextContributor implements DslContextContributor {
+public final class SqlCatalogContextContributor implements PromptContributor {
+
+	private static final String SQL_GUIDANCE = """
+			
+			SQL QUERY GUIDELINES:
+			When a Query parameter is needed, provide a standard ANSI SQL SELECT statement.
+			- Use only SELECT statements (no INSERT, UPDATE, DELETE, or DDL)
+			- Reference only tables and columns from the catalog above
+			- Use standard SQL syntax that is compatible with most databases
+			- Use table aliases for clarity (e.g., SELECT o.id FROM orders o)
+			""";
 
 	private final SqlCatalog catalog;
 
@@ -17,15 +32,14 @@ public final class SqlCatalogContextContributor implements DslContextContributor
 	}
 
 	@Override
-	public String dslId() {
-		return "sxl-sql";
-	}
-
-	@Override
 	public Optional<String> contribute(SystemPromptContext context) {
 		SqlCatalog effectiveCatalog = catalog != null ? catalog
 				: context != null
-						? context.contextFor("sxl-sql").filter(SqlCatalog.class::isInstance).map(SqlCatalog.class::cast).orElse(null)
+						? context.contextFor("sql")
+								.or(() -> context.contextFor("sxl-sql"))  // backward compatibility
+								.filter(SqlCatalog.class::isInstance)
+								.map(SqlCatalog.class::cast)
+								.orElse(null)
 						: null;
 		if (effectiveCatalog == null || effectiveCatalog.tables().isEmpty()) {
 			return Optional.empty();
@@ -66,6 +80,7 @@ public final class SqlCatalogContextContributor implements DslContextContributor
 				}
 			}
 		});
+		sb.append(SQL_GUIDANCE);
 		return Optional.of(sb.toString().trim());
 	}
 }

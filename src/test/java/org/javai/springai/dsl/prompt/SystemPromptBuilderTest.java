@@ -1,71 +1,48 @@
 package org.javai.springai.dsl.prompt;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.Map;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.dsl.bind.TypeFactoryBootstrap;
 import org.javai.springai.dsl.sql.Query;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for SystemPromptBuilder.
+ * Plans use JSON format exclusively; SQL queries use standard ANSI SQL.
+ */
 class SystemPromptBuilderTest {
 
-	private DslGuidanceProvider guidanceProvider;
-
-	@BeforeEach
-	void setup() {
-		TypeFactoryBootstrap.registerBuiltIns();
-		guidanceProvider = new MapBackedDslGuidanceProvider(
-				Map.of(
-						"sxl-sql", "SQL grammar guidance here",
-						"sxl-plan", "Plan grammar guidance here"
-				)
-		);
-	}
-
 	@Test
-	void buildsSxlPromptWithSelectedActionsAndDslGuidance() {
+	void buildsPromptWithSelectedActions() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
 		String prompt = SystemPromptBuilder.build(
 				registry,
-				spec -> spec.id().endsWith("runQuery"),
-				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL,
-				"openai",
-				"gpt-4.1"
+				spec -> spec.id().endsWith("runQuery")
 		);
 
 		assertThat(prompt).contains("runQuery");
-		// Note: EMBED sxl-sql may or may not appear depending on DSL detection
 		assertThat(prompt).doesNotContain("otherAction");
-		assertThat(prompt).contains("DSL GUIDANCE:").contains("SQL grammar guidance here");
 	}
 
 	@Test
-	void buildsJsonPromptWithSelectedActionsAndDslGuidance() {
+	void buildsJsonPromptWithActions() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 
 		String prompt = SystemPromptBuilder.build(
 				registry,
-				ActionDescriptorFilter.ALL,
-				guidanceProvider,
-				SystemPromptBuilder.Mode.JSON,
-				"openai",
-				"gpt-4.1"
+				ActionDescriptorFilter.ALL
 		);
 
 		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 		try {
 			var root = mapper.readTree(prompt);
 			assertThat(root.get("actions").isArray()).isTrue();
-			assertThat(root.get("dslGuidance").isArray()).isTrue();
 		} catch (Exception e) {
 			throw new AssertionError("Failed to parse JSON prompt", e);
 		}
@@ -76,23 +53,19 @@ class SystemPromptBuilderTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithExamples());
 
-		String prompt = SystemPromptBuilder.build(
-				registry,
-				ActionDescriptorFilter.ALL,
-				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL
-		);
+		var descriptors = registry.getActionDescriptors();
+		String examplePlan = SystemPromptBuilder.generateExamplePlan(descriptors);
 
 		// Verify that an example plan is generated in JSON format
-		assertThat(prompt).contains("EXAMPLE PLAN (JSON format):");
-		assertThat(prompt).contains("\"message\"");
-		assertThat(prompt).contains("\"steps\"");
-		assertThat(prompt).contains("\"actionId\"");
-		assertThat(prompt).contains("\"parameters\"");
+		assertThat(examplePlan).contains("EXAMPLE PLAN (JSON format):");
+		assertThat(examplePlan).contains("\"message\"");
+		assertThat(examplePlan).contains("\"steps\"");
+		assertThat(examplePlan).contains("\"actionId\"");
+		assertThat(examplePlan).contains("\"parameters\"");
 		// Verify that extracted example values are present
-		assertThat(prompt).contains("bushing");
-		assertThat(prompt).contains("displacement");
-		assertThat(prompt).contains("A12345");
+		assertThat(examplePlan).contains("bushing");
+		assertThat(examplePlan).contains("displacement");
+		assertThat(examplePlan).contains("A12345");
 	}
 
 	@Test
@@ -100,19 +73,15 @@ class SystemPromptBuilderTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithMultipleExamples());
 
-		String prompt = SystemPromptBuilder.build(
-				registry,
-				ActionDescriptorFilter.ALL,
-				guidanceProvider,
-				SystemPromptBuilder.Mode.SXL
-		);
+		var descriptors = registry.getActionDescriptors();
+		String examplePlan = SystemPromptBuilder.generateExamplePlan(descriptors);
 
 		// First example should be used (bushing, not piston; displacement, not force)
-		assertThat(prompt).contains("bushing");
-		assertThat(prompt).contains("displacement");
+		assertThat(examplePlan).contains("bushing");
+		assertThat(examplePlan).contains("displacement");
 		// JSON format should be used - verify it's not S-expression style
-		assertThat(prompt).contains("\"component\":");
-		assertThat(prompt).contains("\"measurement\":");
+		assertThat(examplePlan).contains("\"component\":");
+		assertThat(examplePlan).contains("\"measurement\":");
 	}
 
 	private static class SampleActions {

@@ -1,242 +1,70 @@
 package org.javai.springai.dsl.prompt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.javai.springai.dsl.act.ActionDescriptor;
 import org.javai.springai.dsl.act.ActionDescriptorFilter;
 import org.javai.springai.dsl.act.ActionParameterDescriptor;
 import org.javai.springai.dsl.act.ActionPromptContributor;
 import org.javai.springai.dsl.act.ActionRegistry;
-import org.javai.springai.sxl.grammar.SxlGrammarJsonSchemaEmitter;
 
 /**
- * Builds full system prompts combining selected action specs with DSL guidance.
+ * Builds system prompts for the LLM containing action specifications.
+ * 
+ * <p>Plans use JSON format exclusively. SQL queries use standard ANSI SQL.</p>
  */
 public final class SystemPromptBuilder {
 
 	private SystemPromptBuilder() {
 	}
 
-	public enum Mode {
-		SXL, JSON
-	}
-
 	/**
-	 * Build a system prompt for the given action selection and mode.
+	 * Build a system prompt for the given actions.
+	 * 
 	 * @param registry action registry containing all available actions
 	 * @param filter selection filter to limit actions for this prompt
-	 * @param guidanceProvider supplies DSL guidance for referenced DSL ids
-	 * @param mode emission mode (SXL or JSON)
-	 * @return full system prompt text
+	 * @return JSON system prompt containing action specifications
 	 */
-	public static String build(ActionRegistry registry,
-			ActionDescriptorFilter filter,
-			DslGuidanceProvider guidanceProvider,
-			Mode mode) {
-		return build(registry, filter, guidanceProvider, mode, List.of(new PlanActionsContextContributor()), Map.of(), null, null);
+	public static String build(ActionRegistry registry, ActionDescriptorFilter filter) {
+		return build(registry, filter, List.of(), Map.of());
 	}
 
 	/**
-	 * Build a system prompt with provider/model-specific guidance if available.
+	 * Build a system prompt with prompt contributors and context.
+	 * 
+	 * @param registry action registry containing all available actions
+	 * @param filter selection filter to limit actions for this prompt
+	 * @param contributors prompt contributors that add dynamic context
+	 * @param context context data accessible to contributors
+	 * @return JSON system prompt containing action specifications
 	 */
 	public static String build(ActionRegistry registry,
 			ActionDescriptorFilter filter,
-			DslGuidanceProvider guidanceProvider,
-			Mode mode,
-			String providerId,
-			String modelId) {
-		return build(registry, filter, guidanceProvider, mode, List.of(new PlanActionsContextContributor()), Map.of(), providerId, modelId);
-	}
-
-	/**
-	 * Build a system prompt with optional DSL context contributors and per-DSL context.
-	 */
-	public static String build(ActionRegistry registry,
-			ActionDescriptorFilter filter,
-			DslGuidanceProvider guidanceProvider,
-			Mode mode,
-			List<DslContextContributor> contributors,
-			Map<String, Object> dslContext,
-			String providerId,
-			String modelId) {
+			List<PromptContributor> contributors,
+			Map<String, Object> context) {
 		if (filter == null) {
 			filter = ActionDescriptorFilter.ALL;
-		}
-		if (guidanceProvider == null) {
-			guidanceProvider = DslGuidanceProvider.NONE;
 		}
 		if (contributors == null) {
 			contributors = List.of();
 		}
-		if (dslContext == null) {
-			dslContext = Map.of();
+		if (context == null) {
+			context = Map.of();
 		}
 
-		Set<String> dslIds = collectDslIds(registry, filter, guidanceProvider);
-		for (DslContextContributor contributor : contributors) {
-			if (contributor != null && contributor.dslId() != null && !contributor.dslId().isBlank()) {
-				dslIds.add(contributor.dslId());
-			}
-		}
-		List<String> orderedDslIds = sortDslIds(dslIds);
-		List<GuidanceEntry> dslGuidance = buildDslSection(orderedDslIds, guidanceProvider, providerId, modelId, mode);
-		List<ObjectNode> dslSchemas = collectDslSchemas(orderedDslIds, guidanceProvider);
-
-		List<ActionDescriptor> selectedDescriptors = registry.getActionDescriptors().stream()
-				.filter(filter::include)
-				.toList();
-		SystemPromptContext ctx = new SystemPromptContext(registry, selectedDescriptors, filter, dslContext);
-
-		if (mode == Mode.JSON) {
-			String actionsSection = buildJsonActions(registry, filter);
-			return buildJson(actionsSection, dslGuidance, dslSchemas);
-		}
-
-		final List<DslContextContributor> ctxContributors = contributors;
-		
-		// Generate example plan (in JSON format)
-		String examplePlan = generateExamplePlan(selectedDescriptors);
-		
-		// Build DSL guidance section (for SQL and other S-expression DSLs)
-		String dslSection = dslGuidance.stream()
-				.map(g -> {
-					StringBuilder section = new StringBuilder("DSL " + g.dslId() + ":\n" + g.text());
-					for (DslContextContributor contributor : ctxContributors) {
-						if (contributor != null && g.dslId().equals(contributor.dslId())) {
-							contributor.contribute(ctx).ifPresent(text -> section.append("\n\n").append(text));
-						}
-					}
-					return section.toString();
-				})
-				.collect(Collectors.joining("\n\n"));
-		
-		// Collect contributions from contributors with null dslId (e.g., action catalog)
-		// These are included directly without associating with a specific DSL
-		String standaloneContributions = ctxContributors.stream()
-				.filter(c -> c != null && c.dslId() == null)
-				.map(c -> c.contribute(ctx))
-				.filter(Optional::isPresent)
-				.map(Optional::get)
-				.collect(Collectors.joining("\n\n"));
-
-		// Build system prompt: DSL guidance + standalone contributions + example plan
-		StringBuilder systemPrompt = new StringBuilder();
-		if (!dslSection.isBlank()) {
-			systemPrompt.append("DSL GUIDANCE:\n").append(dslSection);
-		}
-		if (!standaloneContributions.isBlank()) {
-			if (!systemPrompt.isEmpty()) {
-				systemPrompt.append("\n\n");
-			}
-			systemPrompt.append(standaloneContributions);
-		}
-		if (!examplePlan.isBlank()) {
-			if (!systemPrompt.isEmpty()) {
-				systemPrompt.append("\n\n");
-			}
-			systemPrompt.append(examplePlan);
-		}
-		
-		return systemPrompt.toString();
+		String actionsSection = buildJsonActions(registry, filter);
+		return buildJson(actionsSection);
 	}
 
-	private static Set<String> collectDslIds(ActionRegistry registry, ActionDescriptorFilter filter, DslGuidanceProvider guidanceProvider) {
-		Set<String> ids = new LinkedHashSet<>();
-		List<ActionDescriptor> selected = registry.getActionDescriptors().stream()
-				.filter(filter::include)
-				.toList();
-		for (ActionDescriptor descriptor : selected) {
-			descriptor.actionParameterSpecs().forEach(p -> {
-				if (p.dslId() != null && !p.dslId().isBlank()) {
-					ids.add(p.dslId());
-				}
-			});
-		}
-		// Only include universal DSL guidance if there are actual S-expression DSLs being used
-		// (e.g., sxl-sql). Skip sxl-plan since plans now use JSON format.
-		boolean hasSExpressionDsls = ids.stream()
-				.anyMatch(id -> id.startsWith("sxl-") && !"sxl-plan".equals(id));
-		if (hasSExpressionDsls && guidanceProvider instanceof DslGrammarSource source) {
-			if (source.grammarFor("sxl-universal").isPresent()) {
-				ids.add("sxl-universal");
-			}
-		}
-		return ids;
-	}
+	// ========== Private helpers ==========
 
-	private static List<GuidanceEntry> buildDslSection(List<String> dslIds, DslGuidanceProvider provider, String providerId, String modelId, Mode mode) {
-		List<GuidanceEntry> entries = new ArrayList<>();
-		for (String id : dslIds) {
-			String guidance = provider.guidanceFor(id, providerId, modelId).orElse("(no guidance available)");
-			if (mode == Mode.JSON) {
-				guidance = "Use JSON structures (not S-expressions) adhering to the provided schemas. DSL id: " + id + ". Guidance: " + guidance;
-			} else if (mode == Mode.SXL && provider instanceof DslGrammarSource source) {
-				// In SXL mode, prepend the grammar summary to the provider guidance
-				String summary = GrammarPromptSummarizer.summarize(Objects.requireNonNull(source.grammarFor(id).orElse(null)));
-				// Combine: provider guidance (high-signal) + grammar summary (reference)
-				if (!guidance.isBlank() && !"(no guidance available)".equals(guidance)) {
-					guidance = guidance + "\n\n" + summary;
-				} else {
-					guidance = summary;
-				}
-			}
-			// Add compact, DSL-specific scaffolding to reduce hallucinations.
-			entries.add(new GuidanceEntry(id, guidance));
-		}
-		return entries;
-	}
-
-	private static List<ObjectNode> collectDslSchemas(List<String> dslIds, DslGuidanceProvider provider) {
-		if (!(provider instanceof DslGrammarSource source)) {
-			return List.of();
-		}
-		List<ObjectNode> schemas = new ArrayList<>();
-		for (String id : dslIds) {
-			source.grammarFor(id).ifPresent(grammar -> schemas.add(SxlGrammarJsonSchemaEmitter.emit(grammar)));
-		}
-		return schemas;
-	}
-
-	private static List<String> sortDslIds(Set<String> dslIds) {
-		List<String> ids = new ArrayList<>(dslIds);
-		Comparator<String> comparator = Comparator
-				.comparingInt((String id) -> {
-					if ("sxl-universal".equals(id)) return 0;
-					if ("sxl-plan".equals(id)) return 1;
-					return 2;
-				})
-				.thenComparing(Comparator.naturalOrder());
-		ids.sort(comparator);
-		return ids;
-	}
-
-	private static String buildJson(String actionsJsonArray, List<GuidanceEntry> dslGuidance, List<ObjectNode> dslSchemas) {
+	private static String buildJson(String actionsJsonArray) {
 		try {
 			ObjectMapper mapper = new ObjectMapper();
 			ObjectNode root = mapper.createObjectNode();
-			// Actions as parsed JSON array
 			root.set("actions", mapper.readTree(actionsJsonArray));
-			// DSL guidance as array of objects
-			ArrayNode guidanceArray = root.putArray("dslGuidance");
-			for (GuidanceEntry gEntry : dslGuidance) {
-				ObjectNode g = guidanceArray.addObject();
-				g.put("dslId", gEntry.dslId());
-				g.put("guidance", gEntry.text());
-			}
-			if (dslSchemas != null && !dslSchemas.isEmpty()) {
-				ArrayNode schemas = root.putArray("dslSchemas");
-				dslSchemas.forEach(schemas::add);
-			}
 			return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
 		} catch (Exception e) {
 			throw new IllegalStateException("Failed to build JSON system prompt", e);
@@ -249,24 +77,19 @@ public final class SystemPromptBuilder {
 				filter != null ? filter : ActionDescriptorFilter.ALL);
 	}
 
-	private record GuidanceEntry(String dslId, String text) {}
-
 	/**
 	 * Generate an example JSON plan from action descriptors with example values.
-	 * Takes the first 2-3 actions and the first example from each parameter to build a
-	 * concrete plan structure for the LLM to follow.
 	 */
-	private static String generateExamplePlan(List<ActionDescriptor> descriptors) {
-		if (descriptors.isEmpty()) {
+	public static String generateExamplePlan(List<ActionDescriptor> descriptors) {
+		if (descriptors == null || descriptors.isEmpty()) {
 			return "";
 		}
-		
+
 		StringBuilder example = new StringBuilder("EXAMPLE PLAN (JSON format):\n");
 		example.append("{\n");
 		example.append("  \"message\": \"Example plan description\",\n");
 		example.append("  \"steps\": [\n");
-		
-		// Use first 2-3 actions as examples to keep it concise
+
 		int count = Math.min(3, descriptors.size());
 		for (int i = 0; i < count; i++) {
 			ActionDescriptor action = descriptors.get(i);
@@ -274,14 +97,13 @@ public final class SystemPromptBuilder {
 			example.append("      \"actionId\": \"").append(action.id()).append("\",\n");
 			example.append("      \"description\": \"").append(escapeJson(action.description())).append("\",\n");
 			example.append("      \"parameters\": {");
-			
-			// Add parameters with examples
+
 			List<ActionParameterDescriptor> params = action.actionParameterSpecs();
 			if (params != null && !params.isEmpty()) {
 				example.append("\n");
 				for (int j = 0; j < params.size(); j++) {
 					ActionParameterDescriptor param = params.get(j);
-				String exampleValue = getExampleValue(param);
+					String exampleValue = getExampleValue(param);
 					example.append("        \"").append(param.name()).append("\": ").append(exampleValue);
 					if (j < params.size() - 1) {
 						example.append(",");
@@ -294,59 +116,40 @@ public final class SystemPromptBuilder {
 			example.append("    }");
 			if (i < count - 1) {
 				example.append(",");
-				}
-			example.append("\n");
 			}
-		
+			example.append("\n");
+		}
+
 		example.append("  ]\n");
 		example.append("}\n");
 		return example.toString();
 	}
 
-	/**
-	 * Get an example value for a parameter in JSON format.
-	 * Uses explicit examples if provided, otherwise generates an automatic example.
-	 */
 	private static String getExampleValue(ActionParameterDescriptor param) {
-		// Use explicit example if provided
 		if (param.examples() != null && param.examples().length > 0) {
 			String ex = param.examples()[0];
-			// If it looks like a JSON object/array, return as-is
 			if (ex.trim().startsWith("{") || ex.trim().startsWith("[")) {
 				return ex;
 			}
-			// If it's an S-expression, wrap in quotes
-			if (ex.trim().startsWith("(")) {
-				return "\"" + escapeJson(ex) + "\"";
-			}
-			// For plain strings, quote them
 			return "\"" + escapeJson(ex) + "\"";
 		}
-		
-		// Generate automatic example for DSL-typed parameters (Query)
+
 		String dslId = param.dslId();
 		if (dslId != null && !dslId.isBlank()) {
-			if ("sxl-sql".equalsIgnoreCase(dslId)) {
-				// Generate a canonical SQL DSL example as a string
-				return "\"(Q (F table_name t) (S t.column_name))\"";
+			if ("sql-query".equalsIgnoreCase(dslId)) {
+				return "\"SELECT column_name FROM table_name WHERE condition = 'value'\"";
 			}
-			// Generic embedded DSL example
-			return "\"(<" + param.name() + "-expression>)\"";
+			return "\"<" + param.name() + ">\"";
 		}
-		
-		// For complex types (objects), show JSON structure placeholder
+
 		String typeId = param.typeId();
 		if (typeId != null && (typeId.contains(".") || Character.isUpperCase(typeId.charAt(0)))) {
 			return "{ \"...\": \"...\" }";
 		}
-		
-		// Fallback placeholder for simple types
+
 		return "\"<" + param.name() + ">\"";
 	}
 
-	/**
-	 * Escape special characters for JSON strings.
-	 */
 	private static String escapeJson(String s) {
 		if (s == null) return "";
 		return s.replace("\\", "\\\\")

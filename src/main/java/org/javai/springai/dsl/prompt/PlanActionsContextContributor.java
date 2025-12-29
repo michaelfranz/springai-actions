@@ -7,17 +7,10 @@ import org.javai.springai.dsl.act.ActionParameterDescriptor;
 
 /**
  * Contributor that provides the action catalog for the system prompt.
- * Since plans use JSON structure (not S-expressions), this contributor
- * does not associate itself with any DSL - the action catalog is included
- * directly in the system prompt.
+ * The action catalog is included directly in the system prompt to help
+ * the LLM understand the available actions and their parameters.
  */
-public final class PlanActionsContextContributor implements DslContextContributor {
-
-	@Override
-	public String dslId() {
-		// Return null since plans use JSON format, not S-expression DSL
-		return null;
-	}
+public final class PlanActionsContextContributor implements PromptContributor {
 
 	@Override
 	public Optional<String> contribute(SystemPromptContext context) {

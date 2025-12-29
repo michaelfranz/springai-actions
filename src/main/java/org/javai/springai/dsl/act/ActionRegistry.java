@@ -10,7 +10,7 @@ import java.util.Map;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.dsl.bind.TypeFactoryRegistry;
+import org.javai.springai.dsl.sql.Query;
 
 public final class ActionRegistry {
 
@@ -47,7 +47,7 @@ public final class ActionRegistry {
 
 	private static ActionParameterDescriptor createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
-		String dslId = TypeFactoryRegistry.getDslIdForType(parameter.getType()).orElse(null);
+		String dslId = getDslIdForType(parameter.getType());
 		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
 		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
 		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
@@ -63,6 +63,17 @@ public final class ActionRegistry {
 				caseInsensitive,
 				examples
 		);
+	}
+
+	/**
+	 * Get the DSL ID for a parameter type.
+	 * Query types are specially recognized; other types return null.
+	 */
+	private static String getDslIdForType(Class<?> type) {
+		if (Query.class.isAssignableFrom(type)) {
+			return "sql-query";
+		}
+		return null;
 	}
 
 	private static String[] deriveAllowedValues(Parameter parameter, ActionParam annotation) {
