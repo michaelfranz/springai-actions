@@ -1,5 +1,6 @@
 package org.javai.springai.actions.sql;
 
+import java.util.Optional;
 import java.util.Set;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -134,7 +135,7 @@ public record Query(Select select, SqlCatalog catalog) {
 
 		for (String table : tables) {
 			// Handle potential aliases (e.g., "orders o" -> "orders")
-			String tableName = extractTableName(table);
+			String tableName = extractTableName(table).orElse(table);
 			if (!catalog.tables().containsKey(tableName)) {
 				throw new QueryValidationException("Unknown table: " + tableName + 
 						". Available tables: " + catalog.tables().keySet());
@@ -145,12 +146,12 @@ public record Query(Select select, SqlCatalog catalog) {
 	/**
 	 * Extracts the table name from a potentially aliased table reference.
 	 */
-	private static String extractTableName(String tableRef) {
-		if (tableRef == null) {
-			return null;
+	private static Optional<String> extractTableName(String tableRef) {
+		if (tableRef == null || tableRef.isBlank()) {
+			return Optional.empty();
 		}
 		// TablesNamesFinder returns just the table name, not aliases
-		return tableRef.trim();
+		return Optional.of(tableRef.trim());
 	}
 
 	/**

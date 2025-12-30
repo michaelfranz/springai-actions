@@ -1,6 +1,8 @@
 package org.javai.springai.scenarios.stats_app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
+import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
 import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
@@ -85,13 +87,13 @@ public class StatsApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(statsActions.displayControlChartInvoked()).isTrue();
 	}
 
@@ -101,13 +103,13 @@ public class StatsApplicationScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "export-session");
 		Plan plan = turn.plan();
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
 
@@ -117,11 +119,11 @@ public class StatsApplicationScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "spc-session");
 		Plan plan = turn.plan();
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(statsActions.evaluateSpcReadinessInvoked()).isTrue();
 	}
 
@@ -173,7 +175,7 @@ public class StatsApplicationScenarioTest {
 		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(secondPlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
 }

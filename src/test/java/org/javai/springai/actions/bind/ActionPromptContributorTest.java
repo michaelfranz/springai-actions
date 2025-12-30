@@ -18,14 +18,14 @@ import org.junit.jupiter.api.Test;
 class ActionPromptContributorTest {
 
 	@Test
-	void emitsSxlPrompt() {
+	void emitsJsonPrompt() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL, spec -> spec.id().endsWith("runQuery"));
+		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
 
-		assertThat(prompt).contains("(PS").contains("runQuery").contains("EMBED sql-query");
+		assertThat(prompt).contains("runQuery");
 		assertThat(prompt).doesNotContain("otherAction");
 	}
 
@@ -35,7 +35,7 @@ class ActionPromptContributorTest {
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.JSON, spec -> spec.id().endsWith("runQuery"));
+		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
 
 		ObjectMapper mapper = new ObjectMapper();
 		JsonNode node = mapper.readTree(prompt);
@@ -48,28 +48,27 @@ class ActionPromptContributorTest {
 	}
 
 	@Test
-	void emitsSxlPromptWithCollectionExample() {
+	void emitsJsonPromptWithCollectionExample() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ListActions());
 
-		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL, spec -> spec.id().equals("processBundleIds"));
+		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().equals("processBundleIds"), null);
 
-		assertThat(prompt).contains("(PA bundleIds \"<bundleIds item1>\" \"<bundleIds item2>\")");
+		assertThat(prompt).contains("processBundleIds");
+		assertThat(prompt).contains("bundleIds");
 	}
 
 	@Test
-	void emitsSxlPromptWithAllowedValuesAndRegexConstraints() {
+	void emitsJsonPromptWithConstrainedParameters() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ConstrainedActions());
 
-		String prompt = ActionPromptContributor.emit(registry, ActionPromptContributor.Mode.SXL,
-				spec -> spec.id().equals("constrainedAction"));
+		String prompt = ActionPromptContributor.emit(registry, 
+				spec -> spec.id().equals("constrainedAction"), null);
 
 		assertThat(prompt).contains("constrainedAction");
-		// Allowed values for enum parameter should be surfaced
-		assertThat(prompt).contains("allowed values").contains("HIGH").contains("MEDIUM").contains("LOW");
-		// Regex constraint should be surfaced
-		assertThat(prompt).contains("regex").contains("^A[0-9]{3}$");
+		// JSON schema includes parameter names
+		assertThat(prompt).contains("priority").contains("code").contains("note");
 	}
 
 	private static class SampleActions {

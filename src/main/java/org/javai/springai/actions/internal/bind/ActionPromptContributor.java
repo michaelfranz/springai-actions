@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.lang.reflect.Method;
-import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
+import org.javai.springai.actions.api.TypeSpecProvider;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 
 /**
@@ -16,26 +19,23 @@ import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
  */
 public final class ActionPromptContributor {
 
-	public enum Mode {
-		SXL, JSON
-	}
-
 	private static final ObjectMapper mapper = new ObjectMapper();
 
 	private ActionPromptContributor() {
 	}
 
-	public static String emit(ActionRegistry registry, Mode mode) {
-		return emit(registry, mode, ActionDescriptorFilter.ALL);
+	public static String emit(ActionRegistry registry, ActionDescriptorFilter filter) {
+		return emit(registry, filter, null);
 	}
 
-	public static String emit(ActionRegistry registry, Mode mode, ActionDescriptorFilter filter) {
+	public static String emit(ActionRegistry registry, ActionDescriptorFilter filter,
+			TypeHandlerRegistry typeRegistry) {
 		if (filter == null) {
 			filter = ActionDescriptorFilter.ALL;
 		}
 		List<ActionDescriptor> selectedDescriptors = registry.getActionDescriptors().stream()
 				.filter(filter::include)
-				.collect(Collectors.toList());
+				.toList();
 		Set<String> selectedIds = selectedDescriptors.stream().map(ActionDescriptor::id).collect(Collectors.toSet());
 		List<ActionBinding> selectedBindings = registry.getActionBindings().stream()
 				.filter(binding -> selectedIds.contains(binding.id()))
@@ -43,82 +43,39 @@ public final class ActionPromptContributor {
 		Map<String, ActionDescriptor> descriptorById = selectedDescriptors.stream()
 				.collect(Collectors.toMap(ActionDescriptor::id, d -> d));
 
-		return switch (mode) {
-			case SXL -> emitSxl(selectedDescriptors, selectedBindings);
-			case JSON -> emitJson(selectedBindings, descriptorById);
-		};
+		return emitJson(selectedBindings, descriptorById, typeRegistry);
 	}
 
-	private static String emitSxl(List<ActionDescriptor> specs, List<ActionBinding> bindings) {
-		// For SXL mode, emit only the action specs without JSON schemas (which are noise)
-		// The example plan generation will provide concrete examples
-		return specs.stream()
-				.map(descriptor -> {
-					String base = descriptor.toSxl();
-					String constraints = descriptor.renderConstraints();
-					String example = descriptor.example();
-					if (example == null || example.isBlank()) {
-						example = defaultExample(descriptor);
-					}
-					String pendingExample = defaultPendingExample(descriptor);
-					StringBuilder sb = new StringBuilder(base);
-					if (!constraints.isBlank()) {
-						sb.append("\nConstraints:\n").append(constraints);
-					}
-					sb.append("\nExample: ").append(example.trim());
-					sb.append("\nPending Example: ").append(pendingExample.trim());
-					return sb.toString();
-				})
-				.collect(Collectors.joining("\n\n"));
-	}
-
-	private static String defaultExample(ActionDescriptor d) {
-		// Provide a canonical plan-shaped exemplar using PS + PA params (no EMBED unless the action DSL id is specified).
-		String params = d.actionParameterSpecs().stream()
-				.map(ActionPromptContributor::renderParameterExample)
-				.collect(Collectors.joining(" "));
-		return "(P \"Example for " + d.id() + "\" (PS " + d.id()
-				+ (params.isEmpty() ? "" : " " + params) + "))";
-	}
-
-	private static String defaultPendingExample(ActionDescriptor d) {
-		String firstParam = d.actionParameterSpecs().isEmpty()
-				? "value"
-				: d.actionParameterSpecs().getFirst().name();
-		String otherParams = d.actionParameterSpecs().stream()
-				.skip(1)
-				.map(p -> "(PA " + p.name() + " \"<" + p.name() + ">\")")
-				.collect(Collectors.joining(" "));
-		String pending = "(PENDING " + firstParam + " \"Provide " + firstParam + "\")";
-		String params = pending + (otherParams.isEmpty() ? "" : " " + otherParams);
-		return "(P \"Example pending for " + d.id() + "\" (PS " + d.id()
-				+ (params.isEmpty() ? "" : " " + params) + "))";
-	}
-
-	private static String renderParameterExample(ActionParameterDescriptor p) {
-		if (isCollectionOrArray(p.typeName())) {
-			return "(PA " + p.name() + " \"<" + p.name() + " item1>\" \"<" + p.name() + " item2>\")";
+	/**
+	 * Collects guidance text from type spec providers for any special types used in actions.
+	 */
+	public static String collectTypeGuidance(ActionRegistry registry, TypeHandlerRegistry typeRegistry) {
+		if (typeRegistry == null) {
+			return "";
 		}
-		return "(PA " + p.name() + " \"<" + p.name() + ">\")";
+		Set<String> guidanceTexts = new HashSet<>();
+		for (ActionDescriptor descriptor : registry.getActionDescriptors()) {
+			for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
+				try {
+					Class<?> paramType = Class.forName(param.typeName());
+					Optional<TypeSpecProvider> provider = typeRegistry.specProvider(paramType);
+					provider.ifPresent(p -> {
+						String guidance = p.guidance();
+						if (guidance != null && !guidance.isBlank()) {
+							guidanceTexts.add(guidance.trim());
+						}
+					});
+				} catch (ClassNotFoundException e) {
+					// Ignore - type not found
+				}
+			}
+		}
+		return String.join("\n\n", guidanceTexts);
 	}
 
-	private static boolean isCollectionOrArray(String typeName) {
-		if (typeName == null || typeName.isBlank()) {
-			return false;
-		}
-		if (typeName.startsWith("[")) {
-			return true;
-		}
-		try {
-			Class<?> clazz = Class.forName(typeName);
-			return Collection.class.isAssignableFrom(clazz);
-		}
-		catch (ClassNotFoundException ex) {
-			return typeName.contains("List") || typeName.contains("Collection");
-		}
-	}
 
-	private static String emitJson(List<ActionBinding> bindings, Map<String, ActionDescriptor> descriptors) {
+	private static String emitJson(List<ActionBinding> bindings, Map<String, ActionDescriptor> descriptors,
+			TypeHandlerRegistry typeRegistry) {
 		ArrayNode array = mapper.createArrayNode();
 		for (ActionBinding binding : bindings) {
 			ObjectNode node = mapper.createObjectNode();
@@ -129,27 +86,103 @@ public final class ActionPromptContributor {
 				ArrayNode params = ActionDescriptorJsonMapper.toJson(descriptor).withArray("parameters");
 				node.set("parameters", params);
 			}
-			// Add Spring AI-style schema for the method input
-			String schemaJson = generateSchemaSafely(binding);
-			try {
-				if (schemaJson != null) {
-					node.set("schema", mapper.readTree(schemaJson));
-				}
-			} catch (Exception e) {
-				throw new IllegalStateException("Failed to parse schema for action: " + binding.id(), e);
-			}
+			// Generate schema using type registry for special types, or default for regular types
+			generateSchema(binding, descriptor, typeRegistry)
+					.ifPresent(schemaNode -> node.set("schema", schemaNode));
 			array.add(node);
 		}
 		return array.toPrettyString();
 	}
 
-	private static String generateSchemaSafely(ActionBinding binding) {
-		Method method = binding.method();
-		if (method == null) {
-			throw new IllegalStateException("Action binding missing method for action id: " + binding.id());
+	/**
+	 * Generates a JSON schema for the action binding.
+	 * Uses TypeHandlerRegistry to get custom schemas for special types.
+	 */
+	private static Optional<ObjectNode> generateSchema(ActionBinding binding, ActionDescriptor descriptor,
+			TypeHandlerRegistry typeRegistry) {
+		if (descriptor == null) {
+			return generateDefaultSchema(binding);
 		}
+
+		// Check if any parameter has a custom spec provider
+		boolean hasCustomTypes = typeRegistry != null && descriptor.actionParameterSpecs().stream()
+				.anyMatch(param -> {
+					try {
+						Class<?> paramType = Class.forName(param.typeName());
+						return typeRegistry.specProvider(paramType).isPresent();
+					} catch (ClassNotFoundException e) {
+						return false;
+					}
+				});
+
+		if (hasCustomTypes) {
+			return Optional.of(generateSchemaWithCustomTypes(descriptor, typeRegistry));
+		}
+
+		return generateDefaultSchema(binding);
+	}
+
+	/**
+	 * Generates schema using custom TypeSpecProviders for special types.
+	 */
+	private static ObjectNode generateSchemaWithCustomTypes(ActionDescriptor descriptor, 
+			TypeHandlerRegistry typeRegistry) {
+		ObjectNode schema = mapper.createObjectNode();
+		schema.put("$schema", "https://json-schema.org/draft/2020-12/schema");
+		schema.put("type", "object");
+
+		ObjectNode properties = schema.putObject("properties");
+		ArrayNode required = schema.putArray("required");
+
+		for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
+			ObjectNode paramSchema;
+			
+			try {
+				Class<?> paramType = Class.forName(param.typeName());
+				Optional<TypeSpecProvider> provider = typeRegistry.specProvider(paramType);
+				
+				if (provider.isPresent()) {
+					// Use custom schema from provider
+					paramSchema = provider.get().schema().deepCopy();
+				} else {
+					// Default: use generic object schema
+					paramSchema = mapper.createObjectNode();
+					paramSchema.put("type", "object");
+					if (!param.description().isBlank()) {
+						paramSchema.put("description", param.description());
+					}
+				}
+			} catch (ClassNotFoundException e) {
+				paramSchema = mapper.createObjectNode();
+				paramSchema.put("type", "object");
+			}
+			
+			properties.set(param.name(), paramSchema);
+			required.add(param.name());
+		}
+
+		schema.put("additionalProperties", false);
+		return schema;
+	}
+
+	/**
+	 * Generates default schema using Spring AI's schema generator.
+	 */
+	private static Optional<ObjectNode> generateDefaultSchema(ActionBinding binding) {
+		return generateSchemaSafely(binding)
+				.map(schemaJson -> {
+					try {
+						return (ObjectNode) mapper.readTree(schemaJson);
+					} catch (Exception e) {
+						throw new IllegalStateException("Failed to parse schema for action: " + binding.id(), e);
+					}
+				});
+	}
+
+	private static Optional<String> generateSchemaSafely(ActionBinding binding) {
+		Method method = binding.method();
 		try {
-			return JsonSchemaGenerator.generateForMethodInput(method);
+			return Optional.ofNullable(JsonSchemaGenerator.generateForMethodInput(method));
 		}
 		catch (Exception ex) {
 			// Propagate as runtime to surface prompt-generation failures early

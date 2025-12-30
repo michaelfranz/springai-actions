@@ -7,14 +7,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
 import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
-import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
@@ -48,6 +49,7 @@ public final class Planner {
 	private final boolean capturePromptByDefault;
 	private final Consumer<PromptPreview> promptHook;
 	private final PersonaSpec persona;
+	private final TypeHandlerRegistry typeHandlerRegistry;
 
 	private Planner(Builder builder) {
 		this.chatClient = builder.chatClient;
@@ -59,6 +61,7 @@ public final class Planner {
 		this.capturePromptByDefault = builder.capturePromptByDefault;
 		this.promptHook = builder.promptHook;
 		this.persona = builder.persona;
+		this.typeHandlerRegistry = builder.typeHandlerRegistry;
 	}
 
 	public static Builder builder() {
@@ -171,57 +174,48 @@ public final class Planner {
 			
 			Respond with a JSON object. No prose. No markdown. Just JSON.
 			
-			Structure:
+			EXAMPLES:
+			
+			1. For SQL queries (showSqlQuery, runSqlQuery):
 			{
-			  "message": "Brief description of the plan",
+			  "message": "Query orders with customer names and dates",
 			  "steps": [
 			    {
-			      "actionId": "action-id",
-			      "description": "Why this step is needed",
-			      "parameters": { "param1": value1, "param2": value2 }
+			      "actionId": "showSqlQuery",
+			      "description": "Join fct_orders with dim_customer and dim_date",
+			      "parameters": {
+			        "query": { "sql": "SELECT o.order_value, c.customer_name, d.date FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id JOIN dim_date d ON o.date_id = d.id" }
+			      }
 			    }
 			  ]
 			}
 			
-			PARAMETER TYPES:
-			1. Simple types (string, int, boolean) → use JSON primitives directly
-			2. Complex types (objects) → use JSON objects matching the parameter's structure
-			3. Query parameters (SQL) → embed as string containing a valid SELECT statement
+			2. For aggregateOrderValue:
+			{
+			  "message": "Calculate total order value for Mike in January 2024",
+			  "steps": [
+			    {
+			      "actionId": "aggregateOrderValue",
+			      "description": "Sum orders for customer Mike in date range",
+			      "parameters": {
+			        "orderValueQuery": { "customer_name": "Mike", "period": { "start": "2024-01-01", "end": "2024-01-31" } }
+			      }
+			    }
+			  ]
+			}
 			
-			Available actions identified by actionId:
-			%s
+			RULES:
+			- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS (e.g., "query" for SQL, "orderValueQuery" for aggregates)
+			- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
+			- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
+			- SQL MUST use exact table/column names from SQL CATALOG
+			- NEVER invent columns - only use columns listed in the SQL CATALOG
 			
 			STOP after the closing brace. Emit nothing else.""";
 
 	private static String buildPlanningDirective(List<ActionDescriptor> actionDescriptors) {
-		StringBuilder actionsList = new StringBuilder();
-		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
-			for (ActionDescriptor descriptor : actionDescriptors) {
-				String actionId = descriptor.id();
-				List<ActionParameterDescriptor> params = descriptor.actionParameterSpecs();
-				if (params != null && !params.isEmpty()) {
-					StringBuilder paramsStr = new StringBuilder();
-					StringBuilder examplesStr = new StringBuilder();
-					for (ActionParameterDescriptor p : params) {
-						if (!paramsStr.isEmpty()) {
-							paramsStr.append(", ");
-						}
-						paramsStr.append(p.name()).append(": ").append(p.typeId());
-						if (p.dslId() != null && !p.dslId().isBlank()) {
-							paramsStr.append(" (SQL query)");
-						}
-						// Include examples for complex types to guide JSON structure
-						if (p.examples() != null && p.examples().length > 0) {
-							examplesStr.append("\n    Example ").append(p.name()).append(": ").append(p.examples()[0]);
-						}
-					}
-					actionsList.append(String.format("- %s { %s }%s%n", actionId, paramsStr, examplesStr));
-				} else {
-					actionsList.append(String.format("- %s (no parameters)%n", actionId));
-				}
-			}
-		}
-		return String.format(PLANNING_DIRECTIVE_TEMPLATE, actionsList.toString());
+		// The planning directive is now a static template - action details are in PLAN STEP OPTIONS
+		return PLANNING_DIRECTIVE_TEMPLATE;
 	}
 
 	private PromptPreview buildPromptPreview(@NonNull String requestText,
@@ -233,9 +227,12 @@ public final class Planner {
 				collectedActions.registry(),
 				ActionDescriptorFilter.ALL,
 				this.promptContributors,
-				this.promptContext
+				this.promptContext,
+				this.typeHandlerRegistry
 		);
-		systemMessages.add(systemPrompt);
+		if (systemPrompt != null && !systemPrompt.isBlank()) {
+			systemMessages.add(systemPrompt);
+		}
 
 		if (this.persona != null) {
 			systemMessages.add(renderPersona(this.persona));
@@ -250,6 +247,15 @@ public final class Planner {
 		for (PromptContributor contributor : this.promptContributors) {
 			if (contributor != null) {
 				contributor.contribute(ctx).ifPresent(systemMessages::add);
+			}
+		}
+
+		// Add type-specific guidance from registered type handlers
+		if (this.typeHandlerRegistry != null) {
+			String typeGuidance = org.javai.springai.actions.internal.bind.ActionPromptContributor
+					.collectTypeGuidance(collectedActions.registry(), this.typeHandlerRegistry);
+			if (!typeGuidance.isBlank()) {
+				systemMessages.add(typeGuidance);
 			}
 		}
 
@@ -323,32 +329,29 @@ public final class Planner {
 			throw new PlanParseException("LLM returned empty plan response");
 		}
 
-		String jsonContent = extractJsonContent(response);
-		if (jsonContent != null) {
-			return parseRawPlan(jsonContent, actionRegistry);
-		}
-
-		throw new PlanParseException("LLM response does not contain valid JSON plan");
+		return extractJsonContent(response)
+				.map(json -> parseRawPlan(json, actionRegistry))
+				.orElseThrow(() -> new PlanParseException("LLM response does not contain valid JSON plan"));
 	}
 
 	/**
 	 * Extract JSON content from response, handling markdown code blocks.
 	 */
-	private String extractJsonContent(String response) {
+	private Optional<String> extractJsonContent(String response) {
 		String trimmed = response.trim();
 
 		// Check for markdown code block
 		Matcher matcher = JSON_BLOCK_PATTERN.matcher(trimmed);
 		if (matcher.find()) {
-			return matcher.group(1).trim();
+			return Optional.of(matcher.group(1).trim());
 		}
 
 		// Check if response is direct JSON
 		if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-			return trimmed;
+			return Optional.of(trimmed);
 		}
 
-		return null;
+		return Optional.empty();
 	}
 
 	/**
@@ -357,8 +360,8 @@ public final class Planner {
 	private Plan parseRawPlan(String json, ActionRegistry actionRegistry) {
 		try {
 			RawPlan jsonPlan = JSON_MAPPER.readValue(json, RawPlan.class);
-			// Pass prompt context to resolver for domain-specific validation (e.g., SQL schema)
-			ResolutionContext context = ResolutionContext.of(actionRegistry, promptContext);
+			// Pass type handlers and prompt context to resolver for domain-specific handling
+			ResolutionContext context = ResolutionContext.of(actionRegistry, typeHandlerRegistry, promptContext);
 			// Resolve directly to bound Plan (includes validation)
 			return new DefaultPlanResolver().resolve(jsonPlan, context);
 		} catch (JsonProcessingException e) {
@@ -389,6 +392,7 @@ public final class Planner {
 		private boolean capturePromptByDefault;
 		private Consumer<PromptPreview> promptHook;
 		private PersonaSpec persona;
+		private TypeHandlerRegistry typeHandlerRegistry;
 
 		private Builder() {
 		}
@@ -464,6 +468,15 @@ public final class Planner {
 			return this;
 		}
 
+		/**
+		 * Register custom type handlers for schema generation and resolution.
+		 * Use {@link TypeHandlerRegistry#withSqlSupport()} for SQL Query support.
+		 */
+		public Builder withTypeHandlers(TypeHandlerRegistry registry) {
+			this.typeHandlerRegistry = registry;
+			return this;
+		}
+
 		public Builder enablePromptCapture() {
 			this.capturePromptByDefault = true;
 			return this;
@@ -480,6 +493,10 @@ public final class Planner {
 					.anyMatch(c -> c instanceof PlanActionsContextContributor);
 			if (!hasPlanContributor) {
 				this.promptContributors.add(new PlanActionsContextContributor());
+			}
+			// Auto-discover type handlers via SPI if not explicitly provided
+			if (this.typeHandlerRegistry == null) {
+				this.typeHandlerRegistry = TypeHandlerRegistry.discover();
 			}
 			return new Planner(this);
 		}

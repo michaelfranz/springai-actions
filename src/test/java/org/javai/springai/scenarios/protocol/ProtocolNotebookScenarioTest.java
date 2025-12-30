@@ -1,13 +1,14 @@
 package org.javai.springai.scenarios.protocol;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
+import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
 import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
-import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
@@ -107,10 +108,10 @@ public class ProtocolNotebookScenarioTest {
 
 		plan.planSteps().forEach(step -> System.out.println(step.toString()));
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		PlanExecutionResult executed = executor.execute(plan);
 		executed.steps().forEach(step -> System.out.println(step.toString()));
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(protocolNotebookActions.invoked()).isTrue(); // Now an action was called
 
 		assertThat(invocationListener.events).isNotEmpty();

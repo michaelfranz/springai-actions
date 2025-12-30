@@ -1,14 +1,10 @@
 package org.javai.springai.actions.sql;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
-import org.javai.springai.actions.internal.bind.ActionRegistry;
-import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;
 import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,17 +47,15 @@ class SqlCatalogContextContributorTest {
 	}
 
 	@Test
-	void includesSqlQueryGuidelines() {
+	void includesSqlCatalogNotes() {
 		Optional<String> contribution = contributor.contribute(null);
 
 		assertThat(contribution).isPresent();
 		String content = contribution.get();
 
-		// Verify SQL guidance is included
-		assertThat(content).contains("SQL QUERY GUIDELINES:");
-		assertThat(content).contains("standard ANSI SQL SELECT statement");
-		assertThat(content).contains("Use only SELECT statements");
-		assertThat(content).contains("no INSERT, UPDATE, DELETE");
+		// Verify catalog footer note is included
+		assertThat(content).contains("Use ONLY the exact table and column names");
+		assertThat(content).contains("JOINs based on FK relationships");
 	}
 
 	@Test
@@ -106,21 +100,17 @@ class SqlCatalogContextContributorTest {
 
 	@Test
 	void contributesToSystemPrompt() {
-		ActionRegistry registry = new ActionRegistry();
-		registry.registerActions(new SqlActions());
+		// SqlCatalogContextContributor contributes directly to the prompt
+		// SystemPromptBuilder.build() now returns empty string (action catalog
+		// is provided by PlanActionsContextContributor instead)
+		Optional<String> contribution = contributor.contribute(null);
 
-		// Build the system prompt with the SQL catalog contributor
-		String prompt = SystemPromptBuilder.build(
-				registry,
-				ActionDescriptorFilter.ALL,
-				List.of(new SqlCatalogContextContributor(catalog)),
-				Map.of("sql", catalog)
-		);
-
-		// The SystemPromptBuilder returns JSON with action specs
-		// The SqlCatalogContextContributor is called separately by Planner
-		assertThat(prompt).contains("actions");
-		assertThat(prompt).contains("displaySqlQuery");
+		assertThat(contribution).isPresent();
+		String content = contribution.get();
+		
+		// Verify the contributor provides SQL catalog information
+		assertThat(content).contains("SQL CATALOG:");
+		assertThat(content).contains("orders: Orders placed by customers");
 	}
 
 	private static class SqlActions {

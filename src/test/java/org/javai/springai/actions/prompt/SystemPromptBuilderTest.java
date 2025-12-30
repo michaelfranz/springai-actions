@@ -16,7 +16,9 @@ import org.junit.jupiter.api.Test;
 class SystemPromptBuilderTest {
 
 	@Test
-	void buildsPromptWithSelectedActions() {
+	void buildReturnsEmptyStringAsActionCatalogProvidedElsewhere() {
+		// SystemPromptBuilder.build() now returns empty string because
+		// the action catalog is provided by PlanActionsContextContributor
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
@@ -26,12 +28,13 @@ class SystemPromptBuilderTest {
 				spec -> spec.id().endsWith("runQuery")
 		);
 
-		assertThat(prompt).contains("runQuery");
-		assertThat(prompt).doesNotContain("otherAction");
+		assertThat(prompt).isEmpty();
 	}
 
 	@Test
-	void buildsJsonPromptWithActions() {
+	void buildWithContributorsReturnsEmptyString() {
+		// SystemPromptBuilder.build() returns empty string - action catalog
+		// is provided by PlanActionsContextContributor instead
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new SampleActions());
 
@@ -40,13 +43,7 @@ class SystemPromptBuilderTest {
 				ActionDescriptorFilter.ALL
 		);
 
-		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-		try {
-			var root = mapper.readTree(prompt);
-			assertThat(root.get("actions").isArray()).isTrue();
-		} catch (Exception e) {
-			throw new AssertionError("Failed to parse JSON prompt", e);
-		}
+		assertThat(prompt).isEmpty();
 	}
 
 	@Test

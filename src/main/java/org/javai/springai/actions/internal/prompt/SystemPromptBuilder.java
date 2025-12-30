@@ -1,14 +1,12 @@
 package org.javai.springai.actions.internal.prompt;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.PromptContributor;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
-import org.javai.springai.actions.internal.bind.ActionPromptContributor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 
 /**
@@ -29,7 +27,7 @@ public final class SystemPromptBuilder {
 	 * @return JSON system prompt containing action specifications
 	 */
 	public static String build(ActionRegistry registry, ActionDescriptorFilter filter) {
-		return build(registry, filter, List.of(), Map.of());
+		return build(registry, filter, List.of(), Map.of(), null);
 	}
 
 	/**
@@ -45,37 +43,31 @@ public final class SystemPromptBuilder {
 			ActionDescriptorFilter filter,
 			List<PromptContributor> contributors,
 			Map<String, Object> context) {
-		if (filter == null) {
-			filter = ActionDescriptorFilter.ALL;
-		}
-		if (contributors == null) {
-			contributors = List.of();
-		}
-		if (context == null) {
-			context = Map.of();
-		}
-
-		String actionsSection = buildJsonActions(registry, filter);
-		return buildJson(actionsSection);
+		return build(registry, filter, contributors, context, null);
 	}
 
-	// ========== Private helpers ==========
-
-	private static String buildJson(String actionsJsonArray) {
-		try {
-			ObjectMapper mapper = new ObjectMapper();
-			ObjectNode root = mapper.createObjectNode();
-			root.set("actions", mapper.readTree(actionsJsonArray));
-			return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
-		} catch (Exception e) {
-			throw new IllegalStateException("Failed to build JSON system prompt", e);
-		}
-	}
-
-	private static String buildJsonActions(ActionRegistry registry, ActionDescriptorFilter filter) {
-		return ActionPromptContributor.emit(registry,
-				ActionPromptContributor.Mode.JSON,
-				filter != null ? filter : ActionDescriptorFilter.ALL);
+	/**
+	 * Build a system prompt with prompt contributors, context, and type handlers.
+	 * 
+	 * <p>Note: The action catalog is provided by {@link PlanActionsContextContributor}
+	 * in the PLAN STEP OPTIONS section. This method returns an empty string to avoid
+	 * duplicate/conflicting action representations in the prompt.</p>
+	 * 
+	 * @param registry action registry containing all available actions
+	 * @param filter selection filter to limit actions for this prompt
+	 * @param contributors prompt contributors that add dynamic context
+	 * @param context context data accessible to contributors
+	 * @param typeRegistry registry for custom type schema generation
+	 * @return empty string (action catalog provided elsewhere)
+	 */
+	public static String build(ActionRegistry registry,
+			ActionDescriptorFilter filter,
+			List<PromptContributor> contributors,
+			Map<String, Object> context,
+			TypeHandlerRegistry typeRegistry) {
+		// Action catalog is provided by PlanActionsContextContributor
+		// Returning empty to avoid duplicate/conflicting representations
+		return "";
 	}
 
 	/**
@@ -138,7 +130,8 @@ public final class SystemPromptBuilder {
 		String dslId = param.dslId();
 		if (dslId != null && !dslId.isBlank()) {
 			if ("sql-query".equalsIgnoreCase(dslId)) {
-				return "\"SELECT column_name FROM table_name WHERE condition = 'value'\"";
+				// SQL Query uses { "sql": "..." } format
+				return "{ \"sql\": \"SELECT column FROM table WHERE condition = 'value'\" }";
 			}
 			return "\"<" + param.name() + ">\"";
 		}

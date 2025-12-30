@@ -6,8 +6,8 @@ import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 import org.javai.springai.actions.internal.plan.PlannerOptions;
 import org.javai.springai.actions.internal.plan.PromptPreview;
 import org.javai.springai.actions.sql.InMemorySqlCatalog;
-import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.javai.springai.actions.sql.Query;
+import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
@@ -50,13 +50,16 @@ class PlannerTest {
 		// Should have prompt contributions + planning directive
 		assertThat(preview.systemMessages()).hasSizeGreaterThanOrEqualTo(2);
 
-		// Check the planning directive uses JSON format
+		// Check the planning directive uses JSON format (last message)
 		String planningDirective = preview.systemMessages().getLast();
 		assertThat(planningDirective).contains("JSON ONLY");
 		assertThat(planningDirective).contains("\"message\"");
 		assertThat(planningDirective).contains("\"steps\"");
 		assertThat(planningDirective).contains("\"actionId\"");
-		assertThat(planningDirective).contains("demoAction");
+		
+		// Action IDs are in PLAN STEP OPTIONS section (separate from planning directive)
+		assertThat(preview.systemMessages())
+				.anySatisfy(msg -> assertThat(msg).contains("demoAction"));
 	}
 
 	@Test

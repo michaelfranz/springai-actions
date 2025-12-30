@@ -1,6 +1,8 @@
 package org.javai.springai.scenarios.data_warehouse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
+import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
@@ -8,7 +10,6 @@ import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
-import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
@@ -86,7 +87,6 @@ public class DataWarehouseApplicationScenarioTest {
 						"If any required parameter is unclear, use PENDING"))
 				.build();
 
-		// Base planner with catalog context always available
 		planner = Planner.builder()
 				.withChatClient(chatClient)
 				.persona(sqlAnalystPersona)
@@ -105,13 +105,13 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 	}
 
@@ -121,13 +121,13 @@ public class DataWarehouseApplicationScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "constrained-select-session");
 		Plan plan = turn.plan();
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 	}
 
@@ -141,13 +141,13 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
 
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.aggregateOrderValueInvoked()).isTrue();
 
 		OrderValueQuery query = dataWarehouseActions.lastOrderValueQuery();
@@ -169,11 +169,11 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
 		// Verify the generated SQL contains a JOIN
@@ -192,10 +192,10 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 
 		// Verify JOIN and WHERE clause on dimension attribute
@@ -214,10 +214,10 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 
 		// Verify the SQL contains JOINs to both dimension tables
 		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
@@ -237,10 +237,10 @@ public class DataWarehouseApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 
 		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
 		assertThat(sql).contains("JOIN");

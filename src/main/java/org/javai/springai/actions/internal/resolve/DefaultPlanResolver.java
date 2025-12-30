@@ -7,18 +7,16 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanStep;
+import org.javai.springai.actions.api.TypeResolver;
 import org.javai.springai.actions.internal.bind.ActionBinding;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
-import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.javai.springai.actions.internal.plan.PlanArgument;
-import org.javai.springai.actions.sql.Query;
-import org.javai.springai.actions.sql.QueryValidationException;
-import org.javai.springai.actions.sql.SqlCatalog;
 
 /**
  * Default resolver that converts a RawPlan to a bound Plan.
@@ -29,7 +27,7 @@ import org.javai.springai.actions.sql.SqlCatalog;
  *   <li>Checks parameter counts match</li>
  *   <li>Binds actions to their method implementations</li>
  *   <li>Converts parameter values to their target types</li>
- *   <li>Validates SQL queries against the schema catalog (if provided)</li>
+ *   <li>Uses registered TypeResolvers for special types (e.g., Query)</li>
  * </ul>
  * <p>
  * Resolution issues are captured as {@link PlanStep.ErrorStep} entries.
@@ -40,11 +38,7 @@ public class DefaultPlanResolver implements PlanResolver {
 
 	@Override
 	public Plan resolve(RawPlan jsonPlan, ResolutionContext context) {
-		if (jsonPlan == null || context == null || context.registry() == null) {
-			return new Plan(null, List.of(new PlanStep.ErrorStep("RawPlan or resolution context is null")));
-		}
-
-		if (jsonPlan.steps() == null || jsonPlan.steps().isEmpty()) {
+		if (jsonPlan.steps().isEmpty()) {
 			return new Plan(jsonPlan.message(), List.of());
 		}
 
@@ -60,13 +54,13 @@ public class DefaultPlanResolver implements PlanResolver {
 			return new PlanStep.ErrorStep("Step has no actionId");
 		}
 
-		ActionBinding binding = context.registry().getActionBinding(actionId);
+		ActionBinding binding = context.actionRegistry().getActionBinding(actionId);
 		if (binding == null) {
-			return new PlanStep.ErrorStep("Unknown action id: " + actionId);
+			return new PlanStep.ErrorStep("Unknown action: " + actionId);
 		}
 
 		List<ActionParameterDescriptor> params = binding.parameters();
-		Map<String, Object> stepParams = step.parameters() != null ? step.parameters() : Map.of();
+		Map<String, Object> stepParams = step.parameters();
 
 		// Check arity
 		if (stepParams.size() != params.size()) {
@@ -85,12 +79,13 @@ public class DefaultPlanResolver implements PlanResolver {
 			}
 			
 			// Validate constraints (allowed values, regex)
-			String constraintError = validateConstraint(param, outcome.value());
-			if (constraintError != null) {
-				return new PlanStep.ErrorStep(constraintError);
+			Optional<String> constraintValidation = validateConstraint(param, outcome.value());
+			if (constraintValidation.isPresent()) {
+				return new PlanStep.ErrorStep(constraintValidation.get());
 			}
 			
-			arguments.add(new PlanArgument(param.name(), outcome.value(), resolveType(param.typeName())));
+			Class<?> targetType = resolveType(param.typeName()).orElse(Object.class);
+			arguments.add(new PlanArgument(param.name(), outcome.value(), targetType));
 		}
 
 		return new PlanStep.ActionStep(binding, arguments);
@@ -98,15 +93,16 @@ public class DefaultPlanResolver implements PlanResolver {
 
 	/**
 	 * Validate parameter constraints (allowed values, regex patterns).
-	 * Returns null if valid, error message if invalid.
+	 * Returns Optional.empty() if valid, error message if invalid.
 	 */
-	private String validateConstraint(ActionParameterDescriptor param, Object value) {
+	private Optional<String> validateConstraint(ActionParameterDescriptor param, Object value) {
+		//noinspection ConstantValue
 		if (value == null) {
-			return null; // Let downstream handle nulls
+			return Optional.empty();
 		}
 		String stringValue = value.toString();
 		
-		if (param.allowedValues() != null && param.allowedValues().length > 0) {
+		if (param.allowedValues().length > 0) {
 			boolean match = false;
 			for (String allowed : param.allowedValues()) {
 				if (param.caseInsensitive()) {
@@ -120,62 +116,53 @@ public class DefaultPlanResolver implements PlanResolver {
 				}
 			}
 			if (!match) {
-				return "Value for parameter '" + param.name() + "' must be one of: "
-						+ String.join(", ", param.allowedValues());
+				return Optional.of("Value for parameter '" + param.name() + "' must be one of: "
+						+ String.join(", ", param.allowedValues()));
 			}
 		}
 		
-		if (param.allowedRegex() != null && !param.allowedRegex().isBlank()) {
+		if (!param.allowedRegex().isBlank()) {
 			String pattern = param.allowedRegex();
 			boolean matches = param.caseInsensitive()
 					? stringValue.toLowerCase().matches(pattern.toLowerCase())
 					: stringValue.matches(pattern);
 			if (!matches) {
-				return "Value for parameter '" + param.name() + "' must match pattern: " + pattern;
+				return Optional.of("Value for parameter '" + param.name() + "' must match pattern: " + pattern);
 			}
 		}
-		
-		return null;
+
+		return Optional.empty();
 	}
 
 	private ConversionOutcome convert(Object raw, ActionParameterDescriptor param, String actionId, ResolutionContext context) {
-		Class<?> targetType = resolveType(param.typeName());
-		if (targetType == null) {
-			return ConversionOutcome.failure(
-					"Unknown parameter type for action " + actionId + ": " + param.typeName());
+		Optional<Class<?>> maybeTargetType = resolveType(param.typeName());
+		if (maybeTargetType.isEmpty()) {
+			return ConversionOutcome.failure("Unknown type: " + param.typeName());
 		}
-		if (raw == null) {
-			return ConversionOutcome.success(null);
-		}
+		Class<?> targetType = maybeTargetType.get();
 		if (targetType.isInstance(raw)) {
 			return ConversionOutcome.success(raw);
 		}
 
 		if (targetType.isArray()) {
-			return convertArray(raw, targetType.componentType(), param.dslId(), actionId, param.name(), context);
+			return convertArray(raw, targetType.componentType(), param.name(), context);
 		}
 
 		if (Collection.class.isAssignableFrom(targetType)) {
-			List<?> asList = toList(raw);
-			if (asList == null) {
-				return ConversionOutcome.failure(
-						"Expected a collection-compatible value for parameter " + param.name());
-			}
-			return ConversionOutcome.success(asList);
+			return toList(raw)
+					.map(ConversionOutcome::success)
+					.orElseGet(() -> ConversionOutcome.failure("Cannot convert to list: " + param.name()));
 		}
 
-		return convertScalar(raw, targetType, param.dslId(), actionId, param.name(), context);
+		return convertScalar(raw, targetType, param.name(), context);
 	}
 
-	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String dslId, String actionId, String paramName, ResolutionContext context) {
+	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String paramName, ResolutionContext context) {
 		Object[] elements = toObjectArray(raw);
-		if (elements == null) {
-			return ConversionOutcome.failure("Expected an array or collection value for parameter " + paramName);
-		}
 
 		Object array = Array.newInstance(componentType, elements.length);
 		for (int i = 0; i < elements.length; i++) {
-			ConversionOutcome converted = convertScalar(elements[i], componentType, dslId, actionId, paramName, context);
+			ConversionOutcome converted = convertScalar(elements[i], componentType, paramName, context);
 			if (!converted.success()) {
 				return converted;
 			}
@@ -184,13 +171,22 @@ public class DefaultPlanResolver implements PlanResolver {
 		return ConversionOutcome.success(array);
 	}
 
-	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName, ResolutionContext context) {
-		// Handle SQL strings for Query targets - catalog looked up from context if available
-		if (raw instanceof String s && Query.class.isAssignableFrom(targetType)) {
-			SqlCatalog catalog = context.get("sql", SqlCatalog.class).orElse(null);
-			return convertSqlString(s, paramName, catalog);
+	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String paramName, ResolutionContext context) {
+		// Check for custom TypeResolver first
+		Optional<TypeResolver> customResolver = context.typeRegistry()
+				.flatMap(registry -> registry.resolver(targetType));
+		
+		if (customResolver.isPresent()) {
+			TypeResolver.ResolveResult result = customResolver.get().resolve(raw, context.context());
+			if (result.isSuccess()) {
+				return ConversionOutcome.success(result.value().orElse(null));
+			} else {
+				return ConversionOutcome.failure(
+						"Failed to resolve parameter " + paramName + ": " + result.failureReason().orElse("unknown error"));
+			}
 		}
 
+		// Standard type conversion
 		Object normalized = normalizeRaw(raw, targetType);
 		try {
 			if (targetType == String.class) {
@@ -226,17 +222,6 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 	}
 
-	private ConversionOutcome convertSqlString(String sql, String paramName, SqlCatalog catalog) {
-		try {
-			// Pass catalog for schema validation (table/column references)
-			Query query = Query.fromSql(sql, catalog);
-			return ConversionOutcome.success(query);
-		} catch (QueryValidationException e) {
-			return ConversionOutcome.failure(
-					"Failed to parse SQL for parameter " + paramName + ": " + e.getMessage());
-		}
-	}
-
 	private Object normalizeRaw(Object raw, Class<?> targetType) {
 		if (raw instanceof String s && looksLikeJson(s)) {
 			try {
@@ -255,9 +240,6 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private ConversionOutcome convertEnum(Object raw, Class<?> targetType, String paramName) {
-		if (raw == null) {
-			return ConversionOutcome.success(null);
-		}
 		String candidate = raw.toString();
 		for (Object constant : targetType.getEnumConstants()) {
 			if (constant.toString().equalsIgnoreCase(candidate) || ((Enum<?>) constant).name().equalsIgnoreCase(candidate)) {
@@ -272,9 +254,6 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private Object[] toObjectArray(Object raw) {
-		if (raw == null) {
-			return new Object[0];
-		}
 		if (raw instanceof Object[] objectArray) {
 			return objectArray;
 		}
@@ -292,35 +271,35 @@ public class DefaultPlanResolver implements PlanResolver {
 		return new Object[] { raw };
 	}
 
-	private List<?> toList(Object raw) {
+	private Optional<List<?>> toList(Object raw) {
 		if (raw instanceof List<?> list) {
-			return list;
+			return Optional.of(list);
 		}
 		if (raw instanceof Object[] array) {
-			return Arrays.asList(array);
+			return Optional.of(Arrays.asList(array));
 		}
-		if (raw != null && raw.getClass().isArray()) {
-			return Arrays.asList(toObjectArray(raw));
+		if (raw.getClass().isArray()) {
+			return Optional.of(Arrays.asList(toObjectArray(raw)));
 		}
-		return null;
+		return Optional.empty();
 	}
 
-	private Class<?> resolveType(String typeName) {
+	private Optional<Class<?>> resolveType(String typeName) {
 		if (typeName == null || typeName.isBlank()) {
-			return Object.class;
+			return Optional.of(Object.class);
 		}
 		try {
-			return switch (typeName) {
+			return Optional.of(switch (typeName) {
 				case "int" -> int.class;
 				case "long" -> long.class;
 				case "double" -> double.class;
 				case "float" -> float.class;
 				case "boolean" -> boolean.class;
 				default -> Class.forName(typeName);
-			};
+			});
 		}
 		catch (ClassNotFoundException e) {
-			return null;
+			return Optional.empty();
 		}
 	}
 

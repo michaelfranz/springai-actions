@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
@@ -47,7 +48,7 @@ public final class ActionRegistry {
 
 	private static ActionParameterDescriptor createActionParameterDefinition(Parameter parameter) {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
-		String dslId = getDslIdForType(parameter.getType());
+		Optional<String> dslId = getDslIdForType(parameter.getType());
 		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
 		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
 		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
@@ -57,7 +58,7 @@ public final class ActionRegistry {
 				parameter.getType().getName(),
 				deriveShortTypeId(parameter.getType(), dslId),
 				createActionParameterDescription(annotation, parameter.getName()),
-				dslId,
+				dslId.orElse(null),
 				derivedAllowedValues,
 				allowedRegex,
 				caseInsensitive,
@@ -67,13 +68,13 @@ public final class ActionRegistry {
 
 	/**
 	 * Get the DSL ID for a parameter type.
-	 * Query types are specially recognized; other types return null.
+	 * Query types are specially recognized; other types return empty.
 	 */
-	private static String getDslIdForType(Class<?> type) {
+	private static Optional<String> getDslIdForType(Class<?> type) {
 		if (Query.class.isAssignableFrom(type)) {
-			return "sql-query";
+			return Optional.of("sql-query");
 		}
-		return null;
+		return Optional.empty();
 	}
 
 	private static String[] deriveAllowedValues(Parameter parameter, ActionParam annotation) {
@@ -98,12 +99,12 @@ public final class ActionRegistry {
 		return "Parameter to " + nameBreakdown(name);
 	}
 
-	private static String deriveShortTypeId(Class<?> type, String dslId) {
+	private static String deriveShortTypeId(Class<?> type, Optional<String> dslId) {
 		String simple = type.getSimpleName();
-		if (dslId != null && !dslId.isBlank()) {
-			return dslId + ":" + simple;
-		}
-		return simple;
+		return dslId
+				.filter(id -> !id.isBlank())
+				.map(id -> id + ":" + simple)
+				.orElse(simple);
 	}
 
 

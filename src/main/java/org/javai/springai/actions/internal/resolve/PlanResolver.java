@@ -1,6 +1,7 @@
 package org.javai.springai.actions.internal.resolve;
 
 import org.javai.springai.actions.Plan;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 
@@ -31,6 +32,7 @@ public interface PlanResolver {
 
 	/**
 	 * Resolve a JSON plan into a bound Plan (convenience method without SQL catalog).
+	 * Auto-discovers type handlers via SPI.
 	 *
 	 * @param jsonPlan the parsed JSON plan from the LLM
 	 * @param registry the action registry for binding
@@ -39,6 +41,6 @@ public interface PlanResolver {
 	 */
 	@Deprecated(forRemoval = true)
 	default Plan resolve(RawPlan jsonPlan, ActionRegistry registry) {
-		return resolve(jsonPlan, ResolutionContext.of(registry));
+		return resolve(jsonPlan, ResolutionContext.of(registry, TypeHandlerRegistry.discover(), null));
 	}
 }

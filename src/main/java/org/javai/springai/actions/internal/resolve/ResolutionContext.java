@@ -2,14 +2,15 @@ package org.javai.springai.actions.internal.resolve;
 
 import java.util.Map;
 import java.util.Optional;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 
 /**
- * Context for plan resolution, bundling the action registry and optional contextual data.
+ * Context for plan resolution, bundling the action registry, type handlers, and optional contextual data.
  * 
  * <p>This allows the resolver to access context-specific information during resolution,
- * such as schema catalogs for validation, without coupling the core framework to
- * any specific domain (e.g., SQL).</p>
+ * such as schema catalogs for validation and custom type resolvers, without coupling
+ * the core framework to any specific domain (e.g., SQL).</p>
  * 
  * <p>Context entries are keyed by string and can be retrieved by type:</p>
  * <pre>{@code
@@ -17,21 +18,37 @@ import org.javai.springai.actions.internal.bind.ActionRegistry;
  * }</pre>
  */
 public record ResolutionContext(
-		ActionRegistry registry,
+		ActionRegistry actionRegistry,
+		TypeHandlerRegistry typeHandlerRegistry,
 		Map<String, Object> context
 ) {
 	/**
-	 * Creates a context with just the registry (no additional context).
+	 * Creates a context with just the registry (no type handlers or additional context).
 	 */
-	public static ResolutionContext of(ActionRegistry registry) {
-		return new ResolutionContext(registry, Map.of());
+	public static ResolutionContext of(ActionRegistry actionRegistry) {
+		return new ResolutionContext(actionRegistry, null, Map.of());
 	}
 
 	/**
-	 * Creates a context with registry and context map.
+	 * Creates a context with registry and context map (no type handlers).
 	 */
-	public static ResolutionContext of(ActionRegistry registry, Map<String, Object> context) {
-		return new ResolutionContext(registry, context != null ? context : Map.of());
+	public static ResolutionContext of(ActionRegistry actionRegistry, Map<String, Object> context) {
+		return new ResolutionContext(actionRegistry, null, context != null ? context : Map.of());
+	}
+
+	/**
+	 * Creates a context with registry, type handlers, and context map.
+	 */
+	public static ResolutionContext of(ActionRegistry actionRegistry, TypeHandlerRegistry typeHandlerRegistry, 
+			Map<String, Object> context) {
+		return new ResolutionContext(actionRegistry, typeHandlerRegistry, context != null ? context : Map.of());
+	}
+
+	/**
+	 * Returns the type handler registry if present.
+	 */
+	public Optional<TypeHandlerRegistry> typeRegistry() {
+		return Optional.ofNullable(typeHandlerRegistry);
 	}
 
 	/**
@@ -49,4 +66,3 @@ public record ResolutionContext(
 		return Optional.empty();
 	}
 }
-

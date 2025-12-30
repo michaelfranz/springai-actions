@@ -1,6 +1,8 @@
 package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
+import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.Map;
 import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
@@ -88,13 +90,13 @@ public class ShoppingApplicationScenarioTest {
 		Plan plan = turn.plan();
 
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.startSessionInvoked()).isTrue();
 		assertThat(shoppingActions.presentOffersInvoked()).isTrue();
 		assertThat(specialOfferTool.listInvoked()).isTrue();
@@ -106,13 +108,13 @@ public class ShoppingApplicationScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "export-session");
 		Plan plan = turn.plan();
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 		PlanStep step = plan.planSteps().getFirst();
 		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.addItemInvoked()).isTrue();
 		assertThat(shoppingActions.lastAddItem()).isNotNull();
 		assertThat(shoppingActions.lastAddItem().product()).containsIgnoringCase("coke zero");
@@ -125,11 +127,11 @@ public class ShoppingApplicationScenarioTest {
 		ConversationTurnResult turn = conversationManager.converse(request, "snacks-session");
 		Plan plan = turn.plan();
 		assertThat(plan).isNotNull();
-		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(plan);
 		assertThat(plan.planSteps()).hasSize(1);
 
 		PlanExecutionResult executed = executor.execute(plan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.addPartySnacksInvoked()).isTrue();
 	}
 
@@ -181,7 +183,7 @@ public class ShoppingApplicationScenarioTest {
 		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(secondPlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.addItemInvoked()).isTrue();
 	}
 
@@ -205,12 +207,12 @@ public class ShoppingApplicationScenarioTest {
 		Plan viewPlan = viewTurn.plan();
 
 		assertThat(viewPlan).isNotNull();
-		assertThat(viewPlan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(viewPlan);
 		assertThat(viewPlan.planSteps()).hasSize(1);
 		assertThat(viewPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(viewPlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.viewBasketInvoked()).isTrue();
 		assertThat(shoppingActions.getBasketState()).containsEntry("Coke Zero", 3);
 	}
@@ -235,9 +237,9 @@ public class ShoppingApplicationScenarioTest {
 		Plan removePlan = removeTurn.plan();
 
 		assertThat(removePlan).isNotNull();
-		assertThat(removePlan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(removePlan);
 		PlanExecutionResult executed = executor.execute(removePlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.removeItemInvoked()).isTrue();
 		assertThat(shoppingActions.getBasketState()).doesNotContainKey("Coke Zero");
 	}
@@ -298,9 +300,9 @@ public class ShoppingApplicationScenarioTest {
 		Plan checkoutPlan = turn4.plan();
 
 		assertThat(checkoutPlan).isNotNull();
-		assertThat(checkoutPlan.status()).isEqualTo(PlanStatus.READY);
+		assertPlanReady(checkoutPlan);
 		PlanExecutionResult executed = executor.execute(checkoutPlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.checkoutInvoked()).isTrue();
 	}
 
@@ -357,7 +359,7 @@ public class ShoppingApplicationScenarioTest {
 
 		assertThat(feedbackPlan).isNotNull();
 		PlanExecutionResult executed = executor.execute(feedbackPlan);
-		assertThat(executed.success()).isTrue();
+		assertExecutionSuccess(executed);
 		assertThat(shoppingActions.requestFeedbackInvoked()).isTrue();
 	}
 }

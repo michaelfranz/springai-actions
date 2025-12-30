@@ -27,19 +27,18 @@ public final class PlanActionsContextContributor implements PromptContributor {
 			return Optional.empty();
 		}
 		
-		StringBuilder actions = new StringBuilder("AVAILABLE ACTIONS:\n");
+		StringBuilder actions = new StringBuilder();
+		actions.append("PLAN STEP OPTIONS:\n");
+		actions.append("Valid actionId values (use EXACTLY as shown, case-sensitive):\n\n");
+		
 		for (ActionDescriptor descriptor : descriptors) {
-			actions.append("- ").append(descriptor.id()).append(": ").append(descriptor.description()).append("\n");
-			// Include parameter format guidance
+			actions.append("• actionId: \"").append(descriptor.id()).append("\"\n");
+			actions.append("  Purpose: ").append(descriptor.description()).append("\n");
+			
 			if (descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()) {
 				actions.append("  Parameters:\n");
 				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
 					actions.append("    - ").append(param.name()).append(": ").append(param.typeId());
-					
-					// Show DSL format guidance for s-expression-backed parameters
-					if (param.dslId() != null && !param.dslId().isBlank()) {
-						actions.append(" (S-expression string)");
-					}
 					actions.append("\n");
 					
 					// Show explicit examples if provided
@@ -48,6 +47,7 @@ public final class PlanActionsContextContributor implements PromptContributor {
 					}
 				}
 			}
+			actions.append("\n");
 		}
 		
 		return Optional.of(actions.toString());

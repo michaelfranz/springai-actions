@@ -9,6 +9,7 @@ import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.api.Action;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.parse.RawPlanStep;
@@ -283,7 +284,7 @@ class DefaultPlanResolverTest {
 		);
 
 		// Resolve with catalog in context - should fail because table doesn't exist
-		ResolutionContext context = ResolutionContext.of(registry, Map.of("sql", catalog));
+		ResolutionContext context = ResolutionContext.of(registry, TypeHandlerRegistry.discover(), Map.of("sql", catalog));
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
@@ -308,7 +309,7 @@ class DefaultPlanResolverTest {
 		);
 
 		// Resolve with catalog in context - should succeed
-		ResolutionContext context = ResolutionContext.of(registry, Map.of("sql", catalog));
+		ResolutionContext context = ResolutionContext.of(registry, TypeHandlerRegistry.discover(), Map.of("sql", catalog));
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
@@ -328,7 +329,7 @@ class DefaultPlanResolverTest {
 		);
 
 		// Resolve without catalog (empty context) - should succeed (no schema validation)
-		ResolutionContext context = ResolutionContext.of(registry, Map.of());
+		ResolutionContext context = ResolutionContext.of(registry, TypeHandlerRegistry.discover(), Map.of());
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);

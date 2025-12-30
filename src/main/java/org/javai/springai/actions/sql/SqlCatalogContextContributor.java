@@ -17,14 +17,10 @@ import org.javai.springai.actions.internal.prompt.SystemPromptContext;
  */
 public final class SqlCatalogContextContributor implements PromptContributor {
 
-	private static final String SQL_GUIDANCE = """
+	private static final String SQL_CATALOG_FOOTER = """
 			
-			SQL QUERY GUIDELINES:
-			When a Query parameter is needed, provide a standard ANSI SQL SELECT statement.
-			- Use only SELECT statements (no INSERT, UPDATE, DELETE, or DDL)
-			- Reference only tables and columns from the catalog above
-			- Use standard SQL syntax that is compatible with most databases
-			- Use table aliases for clarity (e.g., SELECT o.id FROM orders o)
+			Note: Use ONLY the exact table and column names shown above.
+			For data across tables, use JOINs based on FK relationships.
 			""";
 
 	private final SqlCatalog catalog;
@@ -82,7 +78,7 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 				}
 			}
 		});
-		sb.append(SQL_GUIDANCE);
+		sb.append(SQL_CATALOG_FOOTER);
 		return Optional.of(sb.toString().trim());
 	}
 }
