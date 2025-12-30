@@ -160,6 +160,39 @@ public interface SqlCatalog {
 		}
 
 		/**
+		 * Derives the table type from tags (fact, dimension, bridge, or table).
+		 * 
+		 * @return the table type string
+		 */
+		public String tableType() {
+			if (tags == null || tags.isEmpty()) {
+				return "table";
+			}
+			if (tags.contains("fact")) return "fact";
+			if (tags.contains("dimension")) return "dimension";
+			if (tags.contains("bridge")) return "bridge";
+			return "table";
+		}
+
+		/**
+		 * Returns synonyms as a non-null list.
+		 * 
+		 * @return synonyms, or empty list if null
+		 */
+		public List<String> synonymsOrEmpty() {
+			return synonyms != null ? synonyms : List.of();
+		}
+
+		/**
+		 * Returns the number of columns.
+		 * 
+		 * @return column count
+		 */
+		public int columnCount() {
+			return columns != null ? columns.size() : 0;
+		}
+
+		/**
 		 * Resolves a column name (which may be a synonym) to the canonical column name.
 		 * 
 		 * @param columnName the column name to resolve (may be canonical or a synonym)

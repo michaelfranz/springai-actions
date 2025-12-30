@@ -23,7 +23,7 @@ Transform natural language query requests into **executable SQL** that, in the b
 |-------|------|--------|-----------|
 | 1 | Documentation & Foundation | ✅ Complete | 2024-12-30 |
 | 2 | Static Approach Hardening | ✅ Complete | 2024-12-30 |
-| 3 | Tool-Based Dynamic Metadata | 🔲 Not Started | — |
+| 3 | Tool-Based Dynamic Metadata | 🔄 In Progress | — |
 | 4 | Adaptive Hybrid Approach | 🔲 Not Started | — |
 | 5 | Advanced Query Features | 🔲 Not Started | — |
 
@@ -385,24 +385,26 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 | ID | Task | Status | Completed |
 |----|------|--------|-----------|
-| 3.1 | Create `SqlCatalogTool` with `listTables()` method | 🔲 | — |
-| 3.2 | Add `getTableDetails(tableName)` method to tool | 🔲 | — |
-| 3.3 | Add `getTableRelationships(tableName)` method to tool | 🔲 | — |
-| 3.4 | Create supporting types: `TableSummary`, `TableDetail`, `Relationship` | 🔲 | — |
-| 3.5 | Create tool-based variant of scenario test | 🔲 | — |
-| 3.6 | Test: LLM calls `listTables` before formulating query | 🔲 | — |
-| 3.7 | Test: LLM calls `getTableDetails` for relevant tables only | 🔲 | — |
-| 3.8 | Test: LLM correctly joins tables using relationship info | 🔲 | — |
-| 3.9 | Test: System handles tool errors gracefully | 🔲 | — |
+| 3.1 | Create `SqlCatalogTool` with `listTables()` method | ✅ | 2024-12-30 |
+| 3.2 | Add `getTableDetails(tableName)` method to tool | ✅ | 2024-12-30 |
+| 3.3 | Add `getTableRelationships(tableName)` method to tool | ✅ | 2024-12-30 |
+| 3.4 | Create supporting types: `TableSummary`, `TableDetail`, `ColumnDetail`, `TableRelationship` | ✅ | 2024-12-30 |
+| 3.5 | Create tool-based variant of scenario test | ✅ | 2024-12-30 |
+| 3.6 | Test: LLM calls `listTables` before formulating query | ✅ | 2024-12-30 |
+| 3.7 | Test: LLM calls `getTableDetails` for relevant tables only | ✅ | 2024-12-30 |
+| 3.8 | Test: LLM correctly joins tables using relationship info | ✅ | 2024-12-30 |
+| 3.9 | Test: System handles tool errors gracefully | ✅ | 2024-12-30 |
 | 3.10 | Document tool call patterns and latency characteristics | 🔲 | — |
 
 ### Deliverables
 
-- [ ] `actions/sql/SqlCatalogTool.java`
-- [ ] `actions/sql/TableSummary.java`
-- [ ] `actions/sql/TableDetail.java`
-- [ ] `actions/sql/Relationship.java`
-- [ ] Tool-based test variant in scenario
+- [x] `actions/sql/SqlCatalogTool.java`
+- [x] `actions/sql/TableSummary.java`
+- [x] `actions/sql/TableDetail.java`
+- [x] `actions/sql/ColumnDetail.java`
+- [x] `actions/sql/TableRelationship.java`
+- [x] `SqlCatalogToolTest.java` - Unit tests for the tool
+- [x] `DataWarehouseToolBasedScenarioTest.java` - Tool-based integration tests
 
 ### Phase 3 Completion Checklist
 
