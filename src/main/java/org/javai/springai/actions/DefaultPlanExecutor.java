@@ -1,4 +1,4 @@
-package org.javai.springai.actions.exec;
+package org.javai.springai.actions;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -10,9 +10,9 @@ import org.javai.springai.actions.internal.exec.StepExecutionResult;
 import org.javai.springai.actions.internal.instrument.InvocationEmitter;
 import org.javai.springai.actions.internal.instrument.InvocationEventType;
 import org.javai.springai.actions.internal.instrument.InvocationKind;
-import org.javai.springai.actions.plan.Plan;
-import org.javai.springai.actions.plan.PlanStatus;
-import org.javai.springai.actions.plan.PlanStep;
+import org.javai.springai.actions.Plan;
+import org.javai.springai.actions.PlanStatus;
+import org.javai.springai.actions.PlanStep;
 
 /**
  * Default sequential executor for plans.

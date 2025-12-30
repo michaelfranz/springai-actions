@@ -2,9 +2,9 @@ package org.javai.springai.actions.conversation;
 
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.plan.Plan;
-import org.javai.springai.actions.plan.PlanStatus;
-import org.javai.springai.actions.plan.PlanStep;
+import org.javai.springai.actions.Plan;
+import org.javai.springai.actions.PlanStatus;
+import org.javai.springai.actions.PlanStep;
 
 /**
  * Result of processing a single conversation turn.

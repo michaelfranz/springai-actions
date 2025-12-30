@@ -3,7 +3,7 @@ package org.javai.springai.actions.conversation;
 import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
-import org.javai.springai.actions.plan.PlanStep;
+import org.javai.springai.actions.PlanStep;
 
 /**
  * Builds compact prompt addenda for conversation-aware re-planning.

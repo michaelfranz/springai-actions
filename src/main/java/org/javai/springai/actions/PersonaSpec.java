@@ -1,4 +1,4 @@
-package org.javai.springai.actions.prompt;
+package org.javai.springai.actions;
 
 import java.util.ArrayList;
 import java.util.List;

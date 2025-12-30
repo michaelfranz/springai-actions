@@ -1,6 +1,6 @@
-package org.javai.springai.actions.exec;
+package org.javai.springai.actions;
 
-import org.javai.springai.actions.plan.Plan;
+import org.javai.springai.actions.Plan;
 
 /**
  * Executes a bound plan.

@@ -13,9 +13,9 @@ import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.parse.RawPlanStep;
-import org.javai.springai.actions.plan.Plan;
+import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.internal.plan.PlanArgument;
-import org.javai.springai.actions.plan.PlanStep;
+import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.QueryValidationException;
 

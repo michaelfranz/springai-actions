@@ -1,4 +1,4 @@
-package org.javai.springai.actions.plan;
+package org.javai.springai.actions;
 
 import java.util.List;
 import java.util.Map;

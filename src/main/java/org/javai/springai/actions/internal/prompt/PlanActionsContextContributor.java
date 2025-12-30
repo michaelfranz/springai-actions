@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
-import org.javai.springai.actions.prompt.PromptContributor;
+import org.javai.springai.actions.PromptContributor;
 
 /**
  * Contributor that provides the action catalog for the system prompt.

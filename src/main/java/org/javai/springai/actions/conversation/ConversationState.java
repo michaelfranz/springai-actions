@@ -3,7 +3,7 @@ package org.javai.springai.actions.conversation;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.plan.PlanStep.PendingParam;
+import org.javai.springai.actions.PlanStep.PendingParam;
 
 /**
  * Captures compact conversational state needed to continue planning across turns.

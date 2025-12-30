@@ -1,4 +1,4 @@
-package org.javai.springai.actions.exec;
+package org.javai.springai.actions;
 
 import java.util.List;
 import org.javai.springai.actions.internal.exec.StepExecutionResult;

@@ -1,4 +1,4 @@
-package org.javai.springai.actions.plan;
+package org.javai.springai.actions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,9 +21,9 @@ import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 import org.javai.springai.actions.internal.plan.PlannerOptions;
 import org.javai.springai.actions.internal.plan.PromptPreview;
 import org.javai.springai.actions.internal.resolve.DefaultPlanResolver;
-import org.javai.springai.actions.prompt.PersonaSpec;
+import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.internal.prompt.PlanActionsContextContributor;
-import org.javai.springai.actions.prompt.PromptContributor;
+import org.javai.springai.actions.PromptContributor;
 import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;
 import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 import org.slf4j.Logger;

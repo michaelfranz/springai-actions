@@ -265,21 +265,25 @@ Move to `internal.plan` package.
 
 **Status:** `compileJava` ✅ | `compileTestJava` ✅ | `test` ✅
 
-### Phase 5: Promote Public Types
-1. Move `Plan`, `PlanStep`, `PlanStatus` to top-level `actions/`
-2. Move `Planner` to top-level `actions/`
-3. Move `PlanExecutor`, `DefaultPlanExecutor`, `PlanExecutionResult` to top-level
-4. Move `PersonaSpec`, `PromptContributor` to top-level
-5. Move remaining `plan/` internals to `internal/plan/`
+### Phase 5: Promote Public Types ✅ COMPLETE
+1. ~~Move `Plan`, `PlanStep`, `PlanStatus` to top-level `actions/`~~
+2. ~~Move `Planner` to top-level `actions/`~~
+3. ~~Move `PlanExecutor`, `DefaultPlanExecutor`, `PlanExecutionResult` to top-level~~
+4. ~~Move `PersonaSpec`, `PromptContributor` to top-level~~
+5. ~~Update all imports throughout codebase~~
+6. ~~Move `PlannerTest` and `RawPlanTest` to appropriate test packages~~
 
-### Phase 6: Update Imports
-1. Update all source files with new package locations
-2. Update all test files with new package locations
+**Status:** `compileJava` ✅ | `compileTestJava` ✅ | `test` ✅
 
-### Phase 7: Verification
-1. Run `./gradlew compileJava` - verify no errors
-2. Run `./gradlew compileTestJava` - verify no errors
-3. Run `./gradlew test` - verify all tests pass
+### Phase 6: Update Imports ✅ COMPLETE
+*(Merged with Phase 5)*
+
+### Phase 7: Verification ✅ COMPLETE
+1. ~~Run `./gradlew compileJava` - verify no errors~~
+2. ~~Run `./gradlew compileTestJava` - verify no errors~~
+3. ~~Run `./gradlew test` - verify all tests pass~~
+
+**Status:** All phases complete!
 
 ---
 

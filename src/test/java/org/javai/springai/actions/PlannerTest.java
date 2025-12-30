@@ -1,10 +1,6 @@
-package org.javai.springai.actions.plan;
+package org.javai.springai.actions;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import org.javai.springai.actions.Plan;
-import org.javai.springai.actions.Planner;
-import org.javai.springai.actions.PlanStatus;
-import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 import org.javai.springai.actions.internal.plan.PlannerOptions;

@@ -1,10 +1,8 @@
-package org.javai.springai.actions.plan;
+package org.javai.springai.actions.internal.parse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Map;
-import org.javai.springai.actions.internal.parse.RawPlan;
-import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

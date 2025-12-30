@@ -1,4 +1,4 @@
-package org.javai.springai.actions.plan;
+package org.javai.springai.actions;
 
 /**
  * Status of a plan after formulation.
