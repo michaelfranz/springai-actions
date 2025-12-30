@@ -8,12 +8,41 @@ import java.util.Map;
 
 /**
  * In-memory SqlCatalog implementation for tests or simple configurations.
+ * 
+ * <p>Supports fluent configuration of tables, columns, and the target SQL dialect:</p>
+ * 
+ * <pre>{@code
+ * SqlCatalog catalog = new InMemorySqlCatalog()
+ *     .withDialect(Query.Dialect.POSTGRES)
+ *     .addTable("orders", "Order fact table", "fact")
+ *     .addColumn("orders", "id", "Primary key", "bigint", new String[]{"pk"}, null);
+ * }</pre>
  */
 public final class InMemorySqlCatalog implements SqlCatalog {
 
 	private static final List<String> EMPTY = List.of();
 
 	private final Map<String, TableBuilder> tables = new LinkedHashMap<>();
+	private Query.Dialect dialect = Query.Dialect.ANSI;
+
+	/**
+	 * Sets the target SQL dialect for queries using this catalog.
+	 * 
+	 * <p>When a {@link Query} is created with this catalog, calling {@link Query#sqlString()}
+	 * without arguments will return SQL formatted for this dialect.</p>
+	 * 
+	 * @param dialect the target SQL dialect
+	 * @return this catalog for fluent chaining
+	 */
+	public InMemorySqlCatalog withDialect(Query.Dialect dialect) {
+		this.dialect = dialect != null ? dialect : Query.Dialect.ANSI;
+		return this;
+	}
+
+	@Override
+	public Query.Dialect dialect() {
+		return dialect;
+	}
 
 	public InMemorySqlCatalog addTable(String tableName, String description, String... tags) {
 		if (tableName == null || tableName.isBlank()) {

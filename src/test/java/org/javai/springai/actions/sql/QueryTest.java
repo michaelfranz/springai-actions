@@ -235,7 +235,7 @@ class QueryTest {
 	class DialectTransformation {
 
 		@Test
-		@DisplayName("sqlString() returns ANSI by default")
+		@DisplayName("sqlString() returns ANSI by default when catalog has no dialect set")
 		void sqlStringReturnsAnsiByDefault() {
 			String sql = "SELECT id FROM orders WHERE status = 'ACTIVE'";
 			Query query = Query.fromSql(sql, catalog);
@@ -263,6 +263,83 @@ class QueryTest {
 
 			String result = query.sqlString(Query.Dialect.POSTGRES);
 			assertThat(result).containsIgnoringCase("LIMIT");
+		}
+	}
+
+	@Nested
+	@DisplayName("Catalog dialect configuration")
+	class CatalogDialectConfiguration {
+
+		@Test
+		@DisplayName("sqlString() uses catalog dialect when configured")
+		void usesDialectFromCatalog() {
+			SqlCatalog postgresCatalog = new InMemorySqlCatalog()
+					.withDialect(Query.Dialect.POSTGRES)
+					.addTable("orders", "Order table");
+
+			String sql = "SELECT id FROM orders LIMIT 10";
+			Query query = Query.fromSql(sql, postgresCatalog);
+
+			// sqlString() without args should use POSTGRES from catalog
+			String result = query.sqlString();
+			assertThat(result).containsIgnoringCase("LIMIT");
+		}
+
+		@Test
+		@DisplayName("catalog defaults to ANSI dialect")
+		void catalogDefaultsToAnsi() {
+			SqlCatalog defaultCatalog = new InMemorySqlCatalog()
+					.addTable("orders", "Order table");
+
+			assertThat(defaultCatalog.dialect()).isEqualTo(Query.Dialect.ANSI);
+		}
+
+		@Test
+		@DisplayName("withDialect allows fluent configuration")
+		void withDialectIsFluent() {
+			InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+					.withDialect(Query.Dialect.POSTGRES)
+					.addTable("orders", "Order table")
+					.addColumn("orders", "id", "PK", "integer", null, null);
+
+			assertThat(catalog.dialect()).isEqualTo(Query.Dialect.POSTGRES);
+			assertThat(catalog.tables()).containsKey("orders");
+		}
+
+		@Test
+		@DisplayName("sqlString() defaults to ANSI when no catalog")
+		void defaultsToAnsiWithoutCatalog() {
+			String sql = "SELECT id FROM any_table";
+			Query query = Query.fromSql(sql);
+
+			// Should not throw, should return valid SQL
+			String result = query.sqlString();
+			assertThat(result).containsIgnoringCase("SELECT");
+		}
+
+		@Test
+		@DisplayName("explicit dialect overrides catalog dialect")
+		void explicitDialectOverridesCatalog() {
+			SqlCatalog postgresCatalog = new InMemorySqlCatalog()
+					.withDialect(Query.Dialect.POSTGRES)
+					.addTable("orders", "Order table");
+
+			String sql = "SELECT id FROM orders";
+			Query query = Query.fromSql(sql, postgresCatalog);
+
+			// Explicit ANSI should work even though catalog is POSTGRES
+			String ansiResult = query.sqlString(Query.Dialect.ANSI);
+			assertThat(ansiResult).containsIgnoringCase("SELECT");
+		}
+
+		@Test
+		@DisplayName("withDialect handles null gracefully")
+		void withDialectHandlesNull() {
+			InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+					.withDialect(null);
+
+			// Should default to ANSI
+			assertThat(catalog.dialect()).isEqualTo(Query.Dialect.ANSI);
 		}
 	}
 

@@ -21,12 +21,22 @@ import net.sf.jsqlparser.util.TablesNamesFinder;
  * 
  * <p>The action body can focus on business logic rather than defensive validation.</p>
  * 
- * <h2>Example Usage</h2>
+ * <h2>Dialect Configuration</h2>
+ * 
+ * <p>The SQL dialect can be configured once on the {@link SqlCatalog} and will be used
+ * automatically by {@link #sqlString()}:</p>
+ * 
  * <pre>{@code
+ * // Configure dialect once at startup
+ * SqlCatalog catalog = new InMemorySqlCatalog()
+ *     .withDialect(Query.Dialect.POSTGRES)
+ *     .addTable("orders", "Order table");
+ * 
+ * // In action method - dialect is automatic
  * @Action(description = "Run a SQL query against the database")
  * public void runSqlQuery(@ActionParam(description = "The SQL query to run") Query query) {
- *     String sql = query.sqlString(Query.Dialect.POSTGRES);
- *     // Execute against database - validation already done
+ *     String sql = query.sqlString();  // Automatically uses POSTGRES from catalog
+ *     // Execute against database
  * }
  * }</pre>
  */
@@ -89,10 +99,16 @@ public record Query(Select select, SqlCatalog catalog) {
 	}
 
 	/**
-	 * Returns the SQL string in ANSI format.
+	 * Returns the SQL string using the catalog's configured dialect.
+	 * 
+	 * <p>If this Query was created with a {@link SqlCatalog}, the catalog's
+	 * {@link SqlCatalog#dialect()} is used. Otherwise, defaults to ANSI.</p>
+	 * 
+	 * @return the SQL string in the appropriate dialect
 	 */
 	public String sqlString() {
-		return sqlString(Dialect.ANSI);
+		Dialect effectiveDialect = (catalog != null) ? catalog.dialect() : Dialect.ANSI;
+		return sqlString(effectiveDialect);
 	}
 
 	/**
