@@ -57,8 +57,8 @@ public class DataWarehouseApplicationScenarioTest {
 		dataWarehouseActions = new DataWarehouseActions();
 
 		// Create SQL catalog once in setUp - consistent context for all tests
-		// Synonyms allow informal table names (e.g., "orders") to be automatically
-		// substituted with canonical names (e.g., "fct_orders") without LLM retry
+		// Table and column synonyms allow informal names to be automatically
+		// substituted with canonical names without LLM retry
 		InMemorySqlCatalog catalog = new InMemorySqlCatalog()
 				.addTable("fct_orders", "Fact table for orders", "fact")
 				.withSynonyms("fct_orders", "orders", "order", "sales")
@@ -68,12 +68,14 @@ public class DataWarehouseApplicationScenarioTest {
 						new String[] { "fk:dim_date.id" }, null)
 				.addColumn("fct_orders", "order_value", "Order amount", "double",
 						new String[] { "measure" }, null)
+				.withColumnSynonyms("fct_orders", "order_value", "value", "amount", "total")
 				.addTable("dim_customer", "Customer dimension", "dimension")
 				.withSynonyms("dim_customer", "customers", "customer", "cust")
 				.addColumn("dim_customer", "id", "PK", "string",
 						new String[] { "pk" }, new String[] { "unique" })
 				.addColumn("dim_customer", "customer_name", "Customer name", "string",
 						new String[] { "attribute" }, null)
+				.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name")
 				.addTable("dim_date", "Date dimension", "dimension")
 				.withSynonyms("dim_date", "dates", "date", "calendar")
 				.addColumn("dim_date", "id", "PK", "string",

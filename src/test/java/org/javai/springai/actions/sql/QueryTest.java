@@ -275,7 +275,8 @@ class QueryTest {
 		void usesDialectFromCatalog() {
 			SqlCatalog postgresCatalog = new InMemorySqlCatalog()
 					.withDialect(Query.Dialect.POSTGRES)
-					.addTable("orders", "Order table");
+					.addTable("orders", "Order table")
+					.addColumn("orders", "id", "Primary key", "integer", null, null);
 
 			String sql = "SELECT id FROM orders LIMIT 10";
 			Query query = Query.fromSql(sql, postgresCatalog);
@@ -322,7 +323,8 @@ class QueryTest {
 		void explicitDialectOverridesCatalog() {
 			SqlCatalog postgresCatalog = new InMemorySqlCatalog()
 					.withDialect(Query.Dialect.POSTGRES)
-					.addTable("orders", "Order table");
+					.addTable("orders", "Order table")
+					.addColumn("orders", "id", "Primary key", "integer", null, null);
 
 			String sql = "SELECT id FROM orders";
 			Query query = Query.fromSql(sql, postgresCatalog);
@@ -564,6 +566,226 @@ class QueryTest {
 					.withSynonyms("order_items", "ORDERS"))  // case-insensitive duplicate!
 					.isInstanceOf(IllegalArgumentException.class)
 					.hasMessageContaining("already defined");
+		}
+	}
+
+	@Nested
+	@DisplayName("Column synonym substitution and validation")
+	class ColumnSynonymSubstitution {
+
+		private SqlCatalog catalogWithColumnSynonyms;
+
+		@BeforeEach
+		void setUp() {
+			// Enable column validation for these tests
+			catalogWithColumnSynonyms = new InMemorySqlCatalog()
+					.withValidateColumns(true)
+					.addTable("fct_orders", "Order transactions", "fact")
+					.withSynonyms("fct_orders", "orders")
+					.addColumn("fct_orders", "id", "Primary key", "integer", new String[]{"pk"}, null)
+					.addColumn("fct_orders", "customer_id", "FK to customer", "integer", new String[]{"fk"}, null)
+					.addColumn("fct_orders", "order_value", "Order value", "decimal", null, null)
+					.withColumnSynonyms("fct_orders", "order_value", "value", "amount", "total")
+					.addTable("dim_customer", "Customer dimension", "dimension")
+					.withSynonyms("dim_customer", "customers", "customer")
+					.addColumn("dim_customer", "id", "Primary key", "integer", new String[]{"pk"}, null)
+					.addColumn("dim_customer", "customer_name", "Customer full name", "varchar", null, null)
+					.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name");
+		}
+
+		@Test
+		@DisplayName("substitutes column synonym in SELECT clause")
+		void substitutesColumnSynonymInSelect() {
+			String sql = "SELECT name FROM dim_customer";
+			Query query = Query.fromSql(sql, catalogWithColumnSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("customer_name");
+			assertThat(query.sqlString()).doesNotContain("FROM name");
+		}
+
+		@Test
+		@DisplayName("substitutes column synonym with table alias")
+		void substitutesColumnSynonymWithAlias() {
+			String sql = "SELECT c.name FROM dim_customer c";
+			Query query = Query.fromSql(sql, catalogWithColumnSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("c.customer_name");
+		}
+
+		@Test
+		@DisplayName("substitutes multiple column synonyms")
+		void substitutesMultipleColumnSynonyms() {
+			String sql = "SELECT o.value, c.name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id";
+			Query query = Query.fromSql(sql, catalogWithColumnSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("o.order_value");
+			assertThat(query.sqlString()).containsIgnoringCase("c.customer_name");
+		}
+
+		@Test
+		@DisplayName("validates columns exist in catalog")
+		void validatesColumnsExist() {
+			assertThatThrownBy(() -> 
+					Query.fromSql("SELECT nonexistent_column FROM fct_orders", catalogWithColumnSynonyms))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown column 'nonexistent_column'");
+		}
+
+		@Test
+		@DisplayName("validates qualified column references")
+		void validatesQualifiedColumnReferences() {
+			assertThatThrownBy(() -> 
+					Query.fromSql("SELECT o.bad_column FROM fct_orders o", catalogWithColumnSynonyms))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown column 'bad_column'")
+					.hasMessageContaining("fct_orders");
+		}
+
+		@Test
+		@DisplayName("accepts column synonyms in validation")
+		void acceptsColumnSynonymsInValidation() {
+			// After substitution, "value" becomes "order_value" which exists
+			Query query = Query.fromSql("SELECT value FROM fct_orders", catalogWithColumnSynonyms);
+			assertThat(query.sqlString()).containsIgnoringCase("order_value");
+		}
+
+		@Test
+		@DisplayName("SqlColumn.matchesName works for synonyms")
+		void sqlColumnMatchesNameWorks() {
+			SqlCatalog.SqlTable ordersTable = catalogWithColumnSynonyms.tables().get("fct_orders");
+			SqlCatalog.SqlColumn valueColumn = ordersTable.findColumn("order_value").orElseThrow();
+
+			assertThat(valueColumn.matchesName("order_value")).isTrue();
+			assertThat(valueColumn.matchesName("value")).isTrue();
+			assertThat(valueColumn.matchesName("VALUE")).isTrue();  // case-insensitive
+			assertThat(valueColumn.matchesName("amount")).isTrue();
+			assertThat(valueColumn.matchesName("unknown")).isFalse();
+		}
+
+		@Test
+		@DisplayName("resolveColumnName returns canonical name for synonym")
+		void resolveColumnNameReturnsCatalogName() {
+			SqlCatalog.SqlTable ordersTable = catalogWithColumnSynonyms.tables().get("fct_orders");
+
+			assertThat(ordersTable.resolveColumnName("value")).hasValue("order_value");
+			assertThat(ordersTable.resolveColumnName("amount")).hasValue("order_value");
+			assertThat(ordersTable.resolveColumnName("total")).hasValue("order_value");
+		}
+
+		@Test
+		@DisplayName("rejects duplicate column synonym in same table")
+		void rejectsDuplicateColumnSynonymInSameTable() {
+			assertThatThrownBy(() -> new InMemorySqlCatalog()
+					.addTable("orders", "Orders", "fact")
+					.addColumn("orders", "value", "Value", "decimal", null, null)
+					.withColumnSynonyms("orders", "value", "amount")
+					.addColumn("orders", "total", "Total", "decimal", null, null)
+					.withColumnSynonyms("orders", "total", "amount"))  // duplicate within same table!
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("already defined");
+		}
+
+		@Test
+		@DisplayName("allows same synonym in different tables")
+		void allowsSameSynonymInDifferentTables() {
+			// "name" can be a synonym in both tables since columns are table-scoped
+			SqlCatalog catalog = new InMemorySqlCatalog()
+					.addTable("customers", "Customers", "dimension")
+					.addColumn("customers", "customer_name", "Name", "varchar", null, null)
+					.withColumnSynonyms("customers", "customer_name", "name")
+					.addTable("products", "Products", "dimension")
+					.addColumn("products", "product_name", "Name", "varchar", null, null)
+					.withColumnSynonyms("products", "product_name", "name");
+
+			assertThat(catalog.tables().get("customers").resolveColumnName("name")).hasValue("customer_name");
+			assertThat(catalog.tables().get("products").resolveColumnName("name")).hasValue("product_name");
+		}
+
+		@Test
+		@DisplayName("validates columns in WHERE clause")
+		void validatesColumnsInWhereClause() {
+			assertThatThrownBy(() -> 
+					Query.fromSql("SELECT id FROM fct_orders WHERE bad_column = 1", catalogWithColumnSynonyms))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown column 'bad_column'");
+		}
+
+		@Test
+		@DisplayName("validates columns in JOIN ON clause")
+		void validatesColumnsInJoinOnClause() {
+			assertThatThrownBy(() -> 
+					Query.fromSql("SELECT o.id FROM fct_orders o JOIN dim_customer c ON o.bad_fk = c.id", 
+							catalogWithColumnSynonyms))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown column 'bad_fk'");
+		}
+
+		@Test
+		@DisplayName("column validation is disabled by default")
+		void columnValidationDisabledByDefault() {
+			SqlCatalog catalogWithoutValidation = new InMemorySqlCatalog()
+					// Note: NOT calling withValidateColumns(true)
+					.addTable("orders", "Orders", "fact")
+					.addColumn("orders", "id", "PK", "integer", null, null);
+
+			// Should NOT throw even though "nonexistent" column doesn't exist
+			Query query = Query.fromSql("SELECT nonexistent FROM orders", catalogWithoutValidation);
+			assertThat(query.sqlString()).containsIgnoringCase("nonexistent");
+		}
+
+		@Test
+		@DisplayName("column validation can be enabled per catalog")
+		void columnValidationCanBeEnabled() {
+			SqlCatalog catalogWithValidation = new InMemorySqlCatalog()
+					.withValidateColumns(true)
+					.addTable("orders", "Orders", "fact")
+					.addColumn("orders", "id", "PK", "integer", null, null);
+
+			// Should throw because validation is enabled
+			assertThatThrownBy(() -> 
+					Query.fromSql("SELECT nonexistent FROM orders", catalogWithValidation))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown column 'nonexistent'");
+		}
+
+		@Test
+		@DisplayName("AST-based substitution does not affect SQL keywords")
+		void astSubstitutionDoesNotAffectKeywords() {
+			// Create catalog with "order" as a table synonym - this could match ORDER BY
+			SqlCatalog catalog = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "order")  // Dangerous if using string replacement!
+					.addColumn("fct_orders", "id", "PK", "integer", null, null)
+					.addColumn("fct_orders", "amount", "Amount", "decimal", null, null);
+
+			// This SQL has "ORDER BY" which should NOT be affected by the "order" table synonym
+			String sql = "SELECT id, amount FROM order ORDER BY amount DESC";
+			Query query = Query.fromSql(sql, catalog);
+
+			// The table "order" should be replaced with "fct_orders"
+			// but "ORDER BY" should remain as "ORDER BY"
+			String result = query.sqlString();
+			assertThat(result).containsIgnoringCase("FROM fct_orders");
+			assertThat(result).containsIgnoringCase("ORDER BY");
+			assertThat(result).doesNotContain("fct_orders BY");  // This would happen with naive string replace
+		}
+
+		@Test
+		@DisplayName("AST-based substitution does not affect string literals")
+		void astSubstitutionDoesNotAffectStringLiterals() {
+			SqlCatalog catalog = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "orders")
+					.addColumn("fct_orders", "id", "PK", "integer", null, null)
+					.addColumn("fct_orders", "status", "Status", "varchar", null, null);
+
+			// The string literal 'orders pending' should NOT be affected
+			String sql = "SELECT id FROM orders WHERE status = 'orders pending'";
+			Query query = Query.fromSql(sql, catalog);
+
+			String result = query.sqlString();
+			assertThat(result).containsIgnoringCase("FROM fct_orders");
+			assertThat(result).contains("'orders pending'");  // String literal preserved
 		}
 	}
 }

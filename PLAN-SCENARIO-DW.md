@@ -180,21 +180,23 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 #### FWK-WEAK-002: No Column-Level Validation
 
+**Status**: ✅ Fixed (2024-12-30)
+
 **Location**: `Query.validateSchemaReferences()` (line 114)
 
 **Issue**: Only table names are validated. Column references are not checked against the catalog.
 
-```java
-// Current validation checks tables only:
-if (!catalog.tables().containsKey(tableName)) {
-    throw new QueryValidationException("Unknown table: " + tableName);
-}
-// Column validation: missing
-```
-
-**Impact**: LLM can generate queries with non-existent columns and they will be accepted until database execution fails.
-
-**Recommended Fix**: Use JSqlParser's column extraction and validate against `SqlTable.columns()`.
+**Solution Implemented**:
+- Added `synonyms` field to `SqlColumn` record
+- Added `matchesName()` method to `SqlColumn` for case-insensitive synonym matching
+- Added `resolveColumnName()` and `findColumn()` methods to `SqlTable`
+- Added `withColumnSynonyms()` method to `InMemorySqlCatalog` with uniqueness validation
+- Extended `applySynonymSubstitution()` in `Query` to handle column synonyms
+- Added `validateColumnReferences()` to extract and validate columns from SELECT, WHERE, and JOIN ON clauses
+- Uses JSqlParser to extract column references and validates against catalog
+- **Column validation is optional** (disabled by default) via `withValidateColumns(true)` on the catalog
+  - This allows LLM-generated SQL with minor column errors to pass while still benefiting from synonym substitution
+- 16 new tests in `QueryTest.ColumnSynonymSubstitution`
 
 ---
 
@@ -292,7 +294,7 @@ if (!catalog.tables().containsKey(tableName)) {
 | ID | Severity | Area | Effort to Fix | Status |
 |----|----------|------|---------------|--------|
 | FWK-WEAK-001 | **Critical** | Resolution | Medium | ✅ Fixed |
-| FWK-WEAK-002 | High | Validation | Medium | 🔲 |
+| FWK-WEAK-002 | High | Validation | Medium | ✅ Fixed |
 | FWK-WEAK-003 | Medium | Reliability | High |
 | FWK-WEAK-004 | Medium | Testing | Low |
 | FWK-WEAK-005 | Medium | Testing | Low |

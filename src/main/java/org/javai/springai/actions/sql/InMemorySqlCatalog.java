@@ -24,6 +24,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 
 	private final Map<String, TableBuilder> tables = new LinkedHashMap<>();
 	private Query.Dialect dialect = Query.Dialect.ANSI;
+	private boolean validateColumns = false;
 
 	/**
 	 * Sets the target SQL dialect for queries using this catalog.
@@ -42,6 +43,26 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 	@Override
 	public Query.Dialect dialect() {
 		return dialect;
+	}
+
+	/**
+	 * Enables or disables column-level validation for queries using this catalog.
+	 * 
+	 * <p>When enabled, {@link Query#fromSql(String, SqlCatalog)} will validate that
+	 * all column references in the SQL exist in the catalog. This is off by default
+	 * for backward compatibility with LLM-generated SQL.</p>
+	 * 
+	 * @param validateColumns true to enable column validation
+	 * @return this catalog for fluent chaining
+	 */
+	public InMemorySqlCatalog withValidateColumns(boolean validateColumns) {
+		this.validateColumns = validateColumns;
+		return this;
+	}
+
+	@Override
+	public boolean validateColumns() {
+		return validateColumns;
 	}
 
 	public InMemorySqlCatalog addTable(String tableName, String description, String... tags) {
@@ -121,14 +142,75 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			return this;
 		}
 		TableBuilder table = tables.computeIfAbsent(tableName, t -> new TableBuilder(tableName, null, null));
-		table.columns.add(new SqlCatalog.SqlColumn(
-				columnName,
-				description,
-				dataType,
-				tags != null ? List.of(tags) : EMPTY,
-				constraints != null ? List.of(constraints) : EMPTY
-		));
+		table.columns.put(columnName, new ColumnBuilder(columnName, description, dataType, tags, constraints));
 		return this;
+	}
+
+	/**
+	 * Adds synonyms (alternative names) for a column.
+	 * 
+	 * <p>Synonyms allow the framework to automatically map informal column names 
+	 * (e.g., "name", "value") to canonical catalog names (e.g., "customer_name", 
+	 * "order_value") without requiring an LLM retry.</p>
+	 * 
+	 * <p>Example:</p>
+	 * <pre>{@code
+	 * catalog.addColumn("dim_customer", "customer_name", "Customer name", "varchar", null, null)
+	 *        .withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name");
+	 * }</pre>
+	 * 
+	 * @param tableName the table containing the column
+	 * @param columnName the canonical column name (must already exist in table)
+	 * @param synonyms alternative names that should map to this column
+	 * @return this catalog for fluent chaining
+	 */
+	public InMemorySqlCatalog withColumnSynonyms(String tableName, String columnName, String... synonyms) {
+		if (tableName == null || tableName.isBlank() || columnName == null || columnName.isBlank() 
+				|| synonyms == null || synonyms.length == 0) {
+			return this;
+		}
+		TableBuilder table = tables.get(tableName);
+		if (table == null) {
+			return this;
+		}
+		ColumnBuilder column = table.columns.get(columnName);
+		if (column != null) {
+			for (String synonym : synonyms) {
+				if (synonym != null && !synonym.isBlank()) {
+					validateColumnSynonymUniqueness(table, synonym, columnName);
+					column.synonyms.add(synonym);
+				}
+			}
+		}
+		return this;
+	}
+
+	/**
+	 * Validates that a column synonym is not already in use by another column in the same table.
+	 */
+	private void validateColumnSynonymUniqueness(TableBuilder table, String synonym, String targetColumn) {
+		// Check if synonym matches any existing column name in this table
+		for (String existingColumnName : table.columns.keySet()) {
+			if (existingColumnName.equalsIgnoreCase(synonym) && !existingColumnName.equals(targetColumn)) {
+				throw new IllegalArgumentException(
+						"Column synonym '%s' conflicts with existing column name '%s' in table '%s'"
+								.formatted(synonym, existingColumnName, table.name));
+			}
+		}
+		
+		// Check if synonym is already used by another column in this table
+		for (ColumnBuilder existingColumn : table.columns.values()) {
+			if (existingColumn.name.equals(targetColumn)) {
+				continue; // Skip the column we're adding synonyms to
+			}
+			for (String existingSynonym : existingColumn.synonyms) {
+				if (existingSynonym.equalsIgnoreCase(synonym)) {
+					throw new IllegalArgumentException(
+							"Column synonym '%s' is already defined for column '%s' in table '%s'"
+									.formatted(synonym, existingColumn.name, table.name));
+				}
+			}
+		}
 	}
 
 	@Override
@@ -144,7 +226,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		private final String name;
 		private final String description;
 		private final List<String> tags;
-		private final List<SqlCatalog.SqlColumn> columns;
+		private final Map<String, ColumnBuilder> columns;
 		private final List<String> constraints;
 		private final List<String> synonyms;
 
@@ -152,13 +234,38 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			this.name = name;
 			this.description = description;
 			this.tags = tags != null ? List.of(tags) : EMPTY;
-			this.columns = new ArrayList<>();
+			this.columns = new LinkedHashMap<>();
 			this.constraints = EMPTY;
 			this.synonyms = new ArrayList<>();
 		}
 
 		SqlTable build() {
-			return new SqlTable(name, description, List.copyOf(columns), tags, constraints, List.copyOf(synonyms));
+			List<SqlCatalog.SqlColumn> builtColumns = columns.values().stream()
+					.map(ColumnBuilder::build)
+					.toList();
+			return new SqlTable(name, description, builtColumns, tags, constraints, List.copyOf(synonyms));
+		}
+	}
+
+	private static final class ColumnBuilder {
+		private final String name;
+		private final String description;
+		private final String dataType;
+		private final List<String> tags;
+		private final List<String> constraints;
+		private final List<String> synonyms;
+
+		ColumnBuilder(String name, String description, String dataType, String[] tags, String[] constraints) {
+			this.name = name;
+			this.description = description;
+			this.dataType = dataType;
+			this.tags = tags != null ? List.of(tags) : EMPTY;
+			this.constraints = constraints != null ? List.of(constraints) : EMPTY;
+			this.synonyms = new ArrayList<>();
+		}
+
+		SqlCatalog.SqlColumn build() {
+			return new SqlCatalog.SqlColumn(name, description, dataType, tags, constraints, List.copyOf(synonyms));
 		}
 	}
 }
