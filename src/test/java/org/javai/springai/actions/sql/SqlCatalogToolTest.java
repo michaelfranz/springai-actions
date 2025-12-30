@@ -138,6 +138,19 @@ class SqlCatalogToolTest {
 		}
 
 		@Test
+		@DisplayName("includes FK relationship info in column tags")
+		void includesFkRelationshipInfo() {
+			TableDetail detail = tool.getTableDetails("fct_orders");
+
+			ColumnDetail customerId = detail.columns().stream()
+					.filter(c -> c.name().equals("customer_id"))
+					.findFirst().orElseThrow();
+			
+			// FK info is in the tags - LLM can derive JOIN from this
+			assertThat(customerId.tags()).contains("fk:dim_customer.id");
+		}
+
+		@Test
 		@DisplayName("returns null for unknown table")
 		void returnsNullForUnknown() {
 			TableDetail detail = tool.getTableDetails("nonexistent");
@@ -164,76 +177,6 @@ class SqlCatalogToolTest {
 			tool.getTableDetails("dim_customer");
 			assertThat(tool.getTableDetailsInvokedCount()).isEqualTo(2);
 			assertThat(tool.lastTableRequested()).isEqualTo("dim_customer");
-		}
-	}
-
-	@Nested
-	@DisplayName("getTableRelationships")
-	class GetTableRelationships {
-
-		@Test
-		@DisplayName("returns FK relationships")
-		void returnsFkRelationships() {
-			List<TableRelationship> relationships = tool.getTableRelationships("fct_orders");
-
-			assertThat(relationships).hasSize(2);  // customer_id and date_id FKs
-		}
-
-		@Test
-		@DisplayName("includes correct relationship details")
-		void includesRelationshipDetails() {
-			List<TableRelationship> relationships = tool.getTableRelationships("fct_orders");
-
-			TableRelationship customerFk = relationships.stream()
-					.filter(r -> r.toTable().equals("dim_customer"))
-					.findFirst().orElseThrow();
-			
-			assertThat(customerFk.fromTable()).isEqualTo("fct_orders");
-			assertThat(customerFk.fromColumn()).isEqualTo("customer_id");
-			assertThat(customerFk.toColumn()).isEqualTo("id");
-			assertThat(customerFk.description()).contains("Customer dimension");
-		}
-
-		@Test
-		@DisplayName("provides join hint")
-		void providesJoinHint() {
-			List<TableRelationship> relationships = tool.getTableRelationships("fct_orders");
-
-			TableRelationship customerFk = relationships.stream()
-					.filter(r -> r.toTable().equals("dim_customer"))
-					.findFirst().orElseThrow();
-			
-			assertThat(customerFk.joinHint())
-					.isEqualTo("JOIN dim_customer ON fct_orders.customer_id = dim_customer.id");
-		}
-
-		@Test
-		@DisplayName("returns empty list for table without FKs")
-		void returnsEmptyForNoFks() {
-			List<TableRelationship> relationships = tool.getTableRelationships("dim_customer");
-			assertThat(relationships).isEmpty();
-		}
-
-		@Test
-		@DisplayName("returns empty list for unknown table")
-		void returnsEmptyForUnknown() {
-			List<TableRelationship> relationships = tool.getTableRelationships("nonexistent");
-			assertThat(relationships).isEmpty();
-		}
-
-		@Test
-		@DisplayName("finds table by synonym")
-		void findsBySynonym() {
-			List<TableRelationship> relationships = tool.getTableRelationships("orders");
-			assertThat(relationships).hasSize(2);
-		}
-
-		@Test
-		@DisplayName("tracks invocation count")
-		void tracksInvocations() {
-			assertThat(tool.getRelationshipsInvokedCount()).isZero();
-			tool.getTableRelationships("fct_orders");
-			assertThat(tool.getRelationshipsInvokedCount()).isEqualTo(1);
 		}
 	}
 
@@ -299,15 +242,18 @@ class SqlCatalogToolTest {
 		}
 
 		@Test
-		@DisplayName("getTableRelationships returns tokenized names")
-		void getTableRelationshipsReturnsTokens() {
-			List<TableRelationship> relationships = tool.getTableRelationships("orders");
+		@DisplayName("getTableDetails includes FK info in column tags")
+		void getTableDetailsIncludesFkInfo() {
+			TableDetail detail = tool.getTableDetails("orders");
 
-			assertThat(relationships).hasSize(1);
-			TableRelationship rel = relationships.get(0);
+			// Find the FK column (customer_id -> cryptic token)
+			ColumnDetail customerIdCol = detail.columns().stream()
+					.filter(c -> c.description().equals("FK to customer"))
+					.findFirst().orElseThrow();
 			
-			assertThat(rel.fromTable()).isEqualTo("orders");
-			assertThat(rel.toTable()).isEqualTo("customers");
+			// FK tags contain relationship info (note: tags use canonical names)
+			assertThat(customerIdCol.tags()).anyMatch(tag -> 
+					tag.startsWith("fk:") && tag.contains("dim_customer"));
 		}
 	}
 
@@ -316,14 +262,11 @@ class SqlCatalogToolTest {
 	void resetCountersClearsAll() {
 		tool.listTables();
 		tool.getTableDetails("fct_orders");
-		tool.getTableRelationships("fct_orders");
 
 		tool.resetCounters();
 
 		assertThat(tool.listTablesInvokedCount()).isZero();
 		assertThat(tool.getTableDetailsInvokedCount()).isZero();
-		assertThat(tool.getRelationshipsInvokedCount()).isZero();
 		assertThat(tool.lastTableRequested()).isNull();
 	}
 }
-

@@ -36,7 +36,8 @@ import org.springframework.ai.openai.api.OpenAiApi;
  * <h2>Key Differences from Static Approach</h2>
  * <ul>
  *   <li>No {@link org.javai.springai.actions.sql.SqlCatalogContextContributor} in system prompt</li>
- *   <li>LLM uses {@code listTables()}, {@code getTableDetails()}, {@code getTableRelationships()} tools</li>
+ *   <li>LLM uses {@code listTables()} and {@code getTableDetails()} tools</li>
+ *   <li>FK relationships are in column tags (e.g., fk:dim_customer.id) - no separate tool needed</li>
  *   <li>Additional latency from tool calls, but smaller initial system prompt</li>
  * </ul>
  */
@@ -108,7 +109,7 @@ public class DataWarehouseToolBasedScenarioTest {
 						"Understand what the user wants to accomplish from a domain perspective",
 						"Use the listTables tool first to discover available tables",
 						"Use getTableDetails to get column information for relevant tables",
-						"Use getTableRelationships to understand how to JOIN tables",
+						"For JOINs, use FK info from column tags (e.g., fk:dim_customer.id)",
 						"Select the action whose purpose best matches the user's intent"))
 				.constraints(List.of(
 						"Only use the available actions",
@@ -152,7 +153,6 @@ public class DataWarehouseToolBasedScenarioTest {
 			System.out.println("Tool usage for simple query:");
 			System.out.println("  listTables: " + catalogTool.listTablesInvokedCount());
 			System.out.println("  getTableDetails: " + catalogTool.getTableDetailsInvokedCount());
-			System.out.println("  getRelationships: " + catalogTool.getRelationshipsInvokedCount());
 		}
 
 		@Test
@@ -204,8 +204,8 @@ public class DataWarehouseToolBasedScenarioTest {
 	class JoinDiscovery {
 
 		@Test
-		@DisplayName("LLM uses getTableRelationships to understand JOINs")
-		void llmUsesRelationshipsTool() {
+		@DisplayName("LLM uses FK tags from getTableDetails to understand JOINs")
+		void llmUsesFkTagsForJoins() {
 			catalogTool.resetCounters();
 			
 			String request = "show me order values with customer names";
@@ -214,9 +214,8 @@ public class DataWarehouseToolBasedScenarioTest {
 
 			assertThat(plan).isNotNull();
 			
-			// LLM should call getTableRelationships to understand how to JOIN
-			// This may or may not be called depending on LLM strategy
-			// The key test is that the final query is correct
+			// LLM should call getTableDetails and use FK tags (e.g., fk:dim_customer.id)
+			// to understand how to JOIN tables
 			if (plan.status() == PlanStatus.READY) {
 				PlanExecutionResult executed = executor.execute(plan);
 				if (executed.success() && dataWarehouseActions.showSqlQueryInvoked()) {
@@ -275,7 +274,6 @@ public class DataWarehouseToolBasedScenarioTest {
 			System.out.println("Tool invocations for 'show me all customer names':");
 			System.out.println("  listTables: " + catalogTool.listTablesInvokedCount());
 			System.out.println("  getTableDetails: " + catalogTool.getTableDetailsInvokedCount());
-			System.out.println("  getTableRelationships: " + catalogTool.getRelationshipsInvokedCount());
 		}
 	}
 

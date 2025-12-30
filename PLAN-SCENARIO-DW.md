@@ -387,14 +387,20 @@ The following framework weaknesses have been exposed by analyzing the current da
 |----|------|--------|-----------|
 | 3.1 | Create `SqlCatalogTool` with `listTables()` method | ✅ | 2024-12-30 |
 | 3.2 | Add `getTableDetails(tableName)` method to tool | ✅ | 2024-12-30 |
-| 3.3 | Add `getTableRelationships(tableName)` method to tool | ✅ | 2024-12-30 |
-| 3.4 | Create supporting types: `TableSummary`, `TableDetail`, `ColumnDetail`, `TableRelationship` | ✅ | 2024-12-30 |
+| 3.3 | ~~Add `getTableRelationships(tableName)` method to tool~~ (removed - FK info in column tags) | ❌ | 2024-12-30 |
+| 3.4 | Create supporting types: `TableSummary`, `TableDetail`, `ColumnDetail` | ✅ | 2024-12-30 |
 | 3.5 | Create tool-based variant of scenario test | ✅ | 2024-12-30 |
 | 3.6 | Test: LLM calls `listTables` before formulating query | ✅ | 2024-12-30 |
 | 3.7 | Test: LLM calls `getTableDetails` for relevant tables only | ✅ | 2024-12-30 |
-| 3.8 | Test: LLM correctly joins tables using relationship info | ✅ | 2024-12-30 |
+| 3.8 | Test: LLM correctly joins tables using FK tags from column info | ✅ | 2024-12-30 |
 | 3.9 | Test: System handles tool errors gracefully | ✅ | 2024-12-30 |
 | 3.10 | Document tool call patterns and latency characteristics | 🔲 | — |
+
+### Design Decision: No Separate Relationships Tool
+
+The `getTableRelationships` tool was removed as redundant. FK relationships are fully
+described in column tags (e.g., `fk:dim_customer.id`) returned by `getTableDetails`.
+This simplifies the API and reduces tool calls needed for JOINs.
 
 ### Deliverables
 
@@ -402,7 +408,6 @@ The following framework weaknesses have been exposed by analyzing the current da
 - [x] `actions/sql/TableSummary.java`
 - [x] `actions/sql/TableDetail.java`
 - [x] `actions/sql/ColumnDetail.java`
-- [x] `actions/sql/TableRelationship.java`
 - [x] `SqlCatalogToolTest.java` - Unit tests for the tool
 - [x] `DataWarehouseToolBasedScenarioTest.java` - Tool-based integration tests
 
@@ -581,16 +586,14 @@ The scenario currently uses only **Approach 1** (static prompt contribution). We
        
        @Tool(description = "Get column details for a specific table including data types, constraints, and tags")  
        public TableDetail getTableDetails(String tableName);
-       
-       @Tool(description = "Get relationships (foreign keys) for a table")
-       public List<Relationship> getTableRelationships(String tableName);
+       // Note: No separate getTableRelationships - FK info is in column tags (e.g., fk:dim_customer.id)
    }
    ```
 
 2. **Create supporting types**:
-   - `TableSummary`: name, description, type (fact/dimension)
-   - `TableDetail`: columns with full metadata
-   - `Relationship`: FK definitions
+   - `TableSummary`: name, description, type (fact/dimension), column count, synonyms
+   - `TableDetail`: columns with full metadata including FK tags
+   - `ColumnDetail`: name, type, description, tags, constraints, synonyms
 
 3. **Add scenario test variant** that uses tools instead of prompt contributor
 
