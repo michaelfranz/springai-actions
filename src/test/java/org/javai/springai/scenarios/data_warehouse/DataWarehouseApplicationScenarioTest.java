@@ -157,4 +157,94 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
 		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
 	}
+
+	// ========== Star Schema JOIN Tests (Task 2.4) ==========
+
+	@Test
+	void joinFactToDimensionTable() {
+		// Request requires joining fct_orders to dim_customer
+		String request = "show me a query for order values with customer names";
+
+		ConversationTurnResult turn = conversationManager.converse(request, "join-fact-dim-session");
+		Plan plan = turn.plan();
+
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+
+		PlanExecutionResult executed = executor.execute(plan);
+		assertThat(executed.success()).isTrue();
+		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
+
+		// Verify the generated SQL contains a JOIN
+		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		assertThat(sql).contains("JOIN");
+		assertThat(sql).contains("FCT_ORDERS");
+		assertThat(sql).contains("DIM_CUSTOMER");
+	}
+
+	@Test
+	void joinWithFilterOnDimensionAttribute() {
+		// Request requires JOIN and filter on dimension attribute
+		String request = "run query to get order values for customers named 'Smith'";
+
+		ConversationTurnResult turn = conversationManager.converse(request, "join-filter-session");
+		Plan plan = turn.plan();
+
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+
+		PlanExecutionResult executed = executor.execute(plan);
+		assertThat(executed.success()).isTrue();
+		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
+
+		// Verify JOIN and WHERE clause on dimension attribute
+		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		assertThat(sql).contains("JOIN");
+		assertThat(sql).contains("DIM_CUSTOMER");
+		assertThat(sql).containsAnyOf("WHERE", "CUSTOMER_NAME", "SMITH");
+	}
+
+	@Test
+	void joinMultipleDimensions() {
+		// Request requires joining fact table to multiple dimensions
+		String request = "show me order values with customer names and dates";
+
+		ConversationTurnResult turn = conversationManager.converse(request, "multi-join-session");
+		Plan plan = turn.plan();
+
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+
+		PlanExecutionResult executed = executor.execute(plan);
+		assertThat(executed.success()).isTrue();
+
+		// Verify the SQL contains JOINs to both dimension tables
+		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		assertThat(sql).contains("FCT_ORDERS");
+		assertThat(sql).contains("DIM_CUSTOMER");
+		assertThat(sql).contains("DIM_DATE");
+		// Should have at least 2 JOINs (could be written as multiple JOINs or subqueries)
+		assertThat(sql).contains("JOIN");
+	}
+
+	@Test
+	void joinWithColumnSelection() {
+		// Request specific columns from both fact and dimension
+		String request = "show query for customer_name and order_value from orders joined with customers";
+
+		ConversationTurnResult turn = conversationManager.converse(request, "join-columns-session");
+		Plan plan = turn.plan();
+
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+
+		PlanExecutionResult executed = executor.execute(plan);
+		assertThat(executed.success()).isTrue();
+
+		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		assertThat(sql).contains("JOIN");
+		assertThat(sql).contains("CUSTOMER_NAME");
+		assertThat(sql).contains("ORDER_VALUE");
+	}
 }

@@ -13,11 +13,13 @@ public class DataWarehouseActions {
 	private final AtomicBoolean executeAndDisplaySqlQueryInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean aggregateOrderValueInvoked = new AtomicBoolean(false);
 	private OrderValueQuery lastOrderValueQuery;
+	private Query lastQuery;
 
 	@Action(description = "Show a SQL query as text without executing it against the database.")
 	public void showSqlQuery(
 			@ActionParam(description = "The SQL query to show") Query query) {
 		displaySqlQueryInvoked.set(true);
+		lastQuery = query;
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
@@ -25,6 +27,7 @@ public class DataWarehouseActions {
 	public void runSqlQuery(
 			@ActionParam(description = "The SQL query to run") Query query) {
 		executeAndDisplaySqlQueryInvoked.set(true);
+		lastQuery = query;
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
@@ -56,5 +59,20 @@ public class DataWarehouseActions {
 
 	public OrderValueQuery lastOrderValueQuery() {
 		return lastOrderValueQuery;
+	}
+
+	public Query lastQuery() {
+		return lastQuery;
+	}
+
+	/**
+	 * Resets all invocation flags and captured values for test isolation.
+	 */
+	public void reset() {
+		displaySqlQueryInvoked.set(false);
+		executeAndDisplaySqlQueryInvoked.set(false);
+		aggregateOrderValueInvoked.set(false);
+		lastOrderValueQuery = null;
+		lastQuery = null;
 	}
 }
