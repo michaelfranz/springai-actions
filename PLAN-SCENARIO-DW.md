@@ -22,7 +22,7 @@ Transform natural language query requests into **executable SQL** that, in the b
 | Phase | Name | Status | Completed |
 |-------|------|--------|-----------|
 | 1 | Documentation & Foundation | ✅ Complete | 2024-12-30 |
-| 2 | Static Approach Hardening | 🔲 Not Started | — |
+| 2 | Static Approach Hardening | ✅ Complete | 2024-12-30 |
 | 3 | Tool-Based Dynamic Metadata | 🔲 Not Started | — |
 | 4 | Adaptive Hybrid Approach | 🔲 Not Started | — |
 | 5 | Advanced Query Features | 🔲 Not Started | — |
@@ -343,23 +343,27 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 | ID | Task | Status | Completed |
 |----|------|--------|-----------|
-| 2.11 | Create `TokenGenerator` with hash + semantic prefix strategy | 🔲 | — |
-| 2.12 | Add `withTokenization(boolean)` to `InMemorySqlCatalog` | 🔲 | — |
-| 2.13 | Create `TokenizedSqlCatalogContextContributor` | 🔲 | — |
-| 2.14 | Implement de-tokenization in query post-processing | 🔲 | — |
-| 2.15 | Add `tokenizedSql()` method to `Query` for debugging | 🔲 | — |
+| 2.11 | Create `TokenGenerator` with hash + semantic prefix strategy | ✅ | 2024-12-30 |
+| 2.12 | Add `withTokenization(boolean)` to `InMemorySqlCatalog` | ✅ | 2024-12-30 |
+| 2.13 | Create `TokenizedSqlCatalogContextContributor` | ✅ | 2024-12-30 |
+| 2.14 | Implement de-tokenization in query post-processing | ✅ | 2024-12-30 |
+| 2.15 | Add `tokenizedSql()` method to `Query` for debugging | ✅ | 2024-12-30 |
 | 2.16 | Fix FWK-WEAK-001: Pass catalog during Query creation in resolver | ✅ | 2024-12-30 |
-| 2.17 | Handle table aliases during de-tokenization | 🔲 | — |
-| 2.18 | Add tokenization tests to data warehouse scenario | 🔲 | — |
+| 2.17 | Handle table aliases during de-tokenization | ✅ | 2024-12-30 |
+| 2.18 | Add tokenization tests to data warehouse scenario | ✅ | 2024-12-30 |
+| 2.19 | Implement synonym-based tokenization (first synonym = token) | ✅ | 2024-12-30 |
+
+**Notes**:
+- 2.19: When synonyms are defined, the first synonym becomes the token instead of a cryptic hash. This produces more readable SQL while still hiding the real database object names. Remaining synonyms are shown as "also: ..." in the prompt.
 
 ### Deliverables
 
-- [ ] Expanded `DataWarehouseApplicationScenarioTest.java`
-- [ ] Enhanced `Query.java` validation
-- [ ] Documented findings on LLM query generation quality
-- [ ] `TokenGenerator` and tokenization infrastructure
-- [ ] `TokenizedSqlCatalogContextContributor`
-- [ ] Tokenization integration tests
+- [x] Expanded `DataWarehouseApplicationScenarioTest.java`
+- [x] Enhanced `Query.java` validation
+- [x] Documented findings on LLM query generation quality
+- [x] `TokenGenerator` and tokenization infrastructure
+- [x] Synonym-based tokenization (first synonym as token)
+- [x] Tokenization integration tests
 
 ### Phase 2 Completion Checklist
 
@@ -815,9 +819,9 @@ String sql = query.sqlString();  // Automatically uses POSTGRES
 
 ### FWK-SQL-002: Database Object Tokenization
 
-**Status**: 🔲 Not started
+**Status**: ✅ Complete (2024-12-30)
 
-**Purpose**: Prevent exposure of real database schema names to external LLM providers by replacing table and column names with opaque tokens in the system prompt and LLM responses.
+**Purpose**: Prevent exposure of real database schema names to external LLM providers by replacing table and column names with tokens in the system prompt and LLM responses.
 
 #### Design Decisions
 
@@ -825,11 +829,26 @@ Full design rationale captured in `QUESTIONNAIRE-TOKENIZATION.md`.
 
 | Aspect | Decision |
 |--------|----------|
-| Token format | Hash-based with semantic prefixes: `ft_` (fact), `dt_` (dimension), `c_` (column) |
+| Token format | **Synonym-based** (first synonym becomes token) OR hash-based fallback |
+| Semantic prefixes | `ft_` (fact), `dt_` (dimension), `bt_` (bridge), `t_` (generic), `c_` (column) |
 | Token stability | Stable per catalog instance |
 | Storage | In-memory only |
-| Column scoping | Table-scoped (e.g., `ft_abc123.c_001`) |
+| Column scoping | Table-scoped |
 | Tokenization toggle | Optional via `catalog.withTokenization(true/false)` |
+
+#### Token Strategy (Updated 2024-12-30)
+
+**Synonym-Based Tokenization**: Instead of always using cryptic hash-based tokens, the framework now uses the **first synonym as the token** when synonyms are defined:
+
+| Scenario | Token Example | Advantages |
+|----------|--------------|------------|
+| Synonyms defined | `fct_orders` → `orders` (first synonym) | Readable SQL, self-documenting |
+| No synonyms | `fct_orders` → `ft_abc123` (cryptic hash) | Full obfuscation |
+
+**Key insight**: The LLM connects user input to tables via descriptions and synonyms, not the table name itself. Using `orders` as a token for `fct_orders` achieves:
+- More readable generated SQL (`SELECT value FROM orders` vs `SELECT c_abc123 FROM ft_abc123`)
+- No loss of obfuscation (real schema name `fct_orders` is still hidden)
+- Remaining synonyms still communicated as "also: ..."
 
 #### Processing Pipeline
 
@@ -842,58 +861,55 @@ Step 1b: Verify SELECT statement
     ↓
 Step 1c: Verify valid ANSI SQL syntax
     ↓
-Step 2: De-tokenize table/column names (validates tokens exist)
+Step 2: De-tokenize table/column names (catalog lookup, not pattern-based)
     ↓
-Step 3: Validate schema references (defensive, optional)
+Step 3: Apply synonym substitution (AST-based)
     ↓
-Step 4: Convert to target dialect
+Step 4: Validate schema references (optional column validation)
+    ↓
+Step 5: Convert to target dialect
     ↓
 Query object ready for application
 ```
 
-#### Prompt Format (Tokenized)
+#### Prompt Format (Tokenized with Synonyms)
 
 ```
-FACT TABLES:
-- ft_abc123: Fact table containing order transactions
-  • c_001 (measure; Order total value in USD)
-  • c_002 (fk:dt_def456.c_001; References customer dimension)
-
-DIMENSION TABLES:
-- dt_def456: Customer dimension with demographic attributes
-  • c_001 (pk; Customer identifier)
-  • c_002 (attribute; Customer full name)
+TOKENIZED SQL CATALOG:
+- orders: Order transactions [tags: fact] (also: sales)
+  • value (type=decimal; Order total; also=amount)
+  • c_abc123 (type=integer; FK to customers; tags=fk:customers.id)
+- customers: Customer dimension [tags: dimension] (also: cust)
+  • id (type=integer; Customer PK; tags=pk)
+  • name (type=varchar; Customer name; also=customer_name)
 ```
 
 #### "No Matching Data" Handling
 
-When the user requests data for which no relevant table exists (e.g., "list of planets" when there's no planet table), the LLM should recognize this and return a `PlanStep.PendingActionStep` with a clarification message rather than attempting to formulate an invalid query.
+When the user requests data for which no relevant table exists, the LLM should recognize this and return a `PlanStep.PendingActionStep` with a clarification message rather than attempting to formulate an invalid query.
 
-#### Query Type Enhancements
+#### Query Type
 
 ```java
-public record Query(
-    Select select,
-    SqlCatalog catalog,
-    String tokenizedSql  // Original tokenized SQL for debugging
-) {
-    public String sqlString() { ... }           // De-tokenized, dialect-converted
-    public String tokenizedSql() { ... }        // Original from LLM
+public record Query(Select select, SqlCatalog catalog) {
+    public String sqlString() { ... }     // De-tokenized, dialect-converted
+    public String tokenizedSql() { ... }  // Re-tokenized for debugging
 }
 ```
 
-#### Implementation Tasks
+#### Implementation Tasks (All Complete)
 
-| ID | Task | Phase |
-|----|------|-------|
-| TOK-01 | Create `TokenGenerator` with hash + prefix strategy | 2 |
-| TOK-02 | Add `withTokenization(boolean)` to `InMemorySqlCatalog` | 2 |
-| TOK-03 | Create `TokenizedSqlCatalogContextContributor` | 2 |
-| TOK-04 | Implement de-tokenization in `Query.fromSql()` | 2 |
-| TOK-05 | Add `tokenizedSql()` method to `Query` | 2 |
-| TOK-06 | Update `DefaultPlanResolver` to pass catalog during Query creation | 2 |
-| TOK-07 | Add tokenization tests to data warehouse scenario | 2 |
-| TOK-08 | Handle table aliases during de-tokenization | 2 |
+| ID | Task | Status |
+|----|------|--------|
+| TOK-01 | Create `TokenGenerator` with hash + prefix strategy | ✅ |
+| TOK-02 | Add `withTokenization(boolean)` to `InMemorySqlCatalog` | ✅ |
+| TOK-03 | Update `SqlCatalogContextContributor` for tokenized format | ✅ |
+| TOK-04 | Implement de-tokenization in `Query.fromSql()` | ✅ |
+| TOK-05 | Add `tokenizedSql()` method to `Query` | ✅ |
+| TOK-06 | Update `DefaultPlanResolver` to pass catalog during Query creation | ✅ |
+| TOK-07 | Add tokenization tests | ✅ |
+| TOK-08 | Handle table aliases during de-tokenization | ✅ |
+| TOK-09 | Implement synonym-based tokenization (first synonym = token) | ✅ |
 
 **Priority**: High — Required for production use with external LLM providers
 

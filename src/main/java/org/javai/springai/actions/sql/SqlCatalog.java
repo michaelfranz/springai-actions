@@ -75,6 +75,72 @@ public interface SqlCatalog {
 		return Optional.empty();
 	}
 
+	// ==================== TOKENIZATION ====================
+
+	/**
+	 * Returns whether tokenization is enabled for this catalog.
+	 * 
+	 * <p>When tokenization is enabled, the catalog provides opaque tokens for
+	 * table and column names that hide the real schema from external LLMs.
+	 * The framework will automatically de-tokenize LLM responses before validation.</p>
+	 * 
+	 * @return true if tokenization is enabled
+	 */
+	default boolean isTokenized() {
+		return false;
+	}
+
+	/**
+	 * Gets the token for a table name.
+	 * 
+	 * @param tableName the canonical table name
+	 * @return the token, or empty if tokenization is disabled or table not found
+	 */
+	default Optional<String> getTableToken(String tableName) {
+		return Optional.empty();
+	}
+
+	/**
+	 * Gets the token for a column name.
+	 * 
+	 * @param tableName the canonical table name containing the column
+	 * @param columnName the canonical column name
+	 * @return the token, or empty if tokenization is disabled or column not found
+	 */
+	default Optional<String> getColumnToken(String tableName, String columnName) {
+		return Optional.empty();
+	}
+
+	/**
+	 * Resolves a table token back to the canonical table name.
+	 * 
+	 * @param token the table token
+	 * @return the canonical table name, or empty if token not found
+	 */
+	default Optional<String> resolveTableToken(String token) {
+		return Optional.empty();
+	}
+
+	/**
+	 * Resolves a column token back to the canonical column name.
+	 * 
+	 * @param tableToken the table token (for context)
+	 * @param columnToken the column token
+	 * @return the canonical column name, or empty if token not found
+	 */
+	default Optional<String> resolveColumnToken(String tableToken, String columnToken) {
+		return Optional.empty();
+	}
+
+	/**
+	 * Returns all token mappings for debugging purposes.
+	 * 
+	 * @return map of token to canonical name for all tokenized objects
+	 */
+	default Map<String, String> tokenMappings() {
+		return Map.of();
+	}
+
 	record SqlTable(String name,
 			String description,
 			List<SqlColumn> columns,

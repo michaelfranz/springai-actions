@@ -1920,5 +1920,234 @@ class QueryTest {
 			assertThat(result).contains("'orders pending'");  // String literal preserved
 		}
 	}
+
+	@Nested
+	@DisplayName("De-tokenization")
+	class DeTokenization {
+
+		private InMemorySqlCatalog tokenizedCatalog;
+		private String ordersTableToken;
+		private String customerTableToken;
+		private String orderIdColumnToken;
+		private String customerIdColumnToken;
+		private String orderValueColumnToken;
+		private String customerNameColumnToken;
+
+		@BeforeEach
+		void setUp() {
+			tokenizedCatalog = new InMemorySqlCatalog()
+					.withTokenization(true)
+					.addTable("fct_orders", "Order transactions", "fact")
+					.addColumn("fct_orders", "id", "Order PK", "integer", new String[]{"pk"}, null)
+					.addColumn("fct_orders", "customer_id", "FK to customers", "integer", 
+							new String[]{"fk:dim_customer.id"}, null)
+					.addColumn("fct_orders", "order_value", "Order total", "decimal", 
+							new String[]{"measure"}, null)
+					.addTable("dim_customer", "Customer dimension", "dimension")
+					.addColumn("dim_customer", "id", "Customer PK", "integer", new String[]{"pk"}, null)
+					.addColumn("dim_customer", "customer_name", "Customer name", "varchar", null, null);
+
+			// Get the tokens for testing
+			ordersTableToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
+			customerTableToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
+			orderIdColumnToken = tokenizedCatalog.getColumnToken("fct_orders", "id").orElseThrow();
+			customerIdColumnToken = tokenizedCatalog.getColumnToken("fct_orders", "customer_id").orElseThrow();
+			orderValueColumnToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
+			customerNameColumnToken = tokenizedCatalog.getColumnToken("dim_customer", "customer_name").orElseThrow();
+		}
+
+		@Test
+		@DisplayName("de-tokenizes table name in FROM clause")
+		void deTokenizesTableInFrom() {
+			String tokenizedSql = "SELECT id FROM " + ordersTableToken;
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("FROM fct_orders");
+			assertThat(query.sqlString()).doesNotContain(ordersTableToken);
+		}
+
+		@Test
+		@DisplayName("de-tokenizes table name in JOIN clause")
+		void deTokenizesTableInJoin() {
+			String tokenizedSql = "SELECT o.id FROM " + ordersTableToken + " o JOIN " + customerTableToken 
+					+ " c ON o.customer_id = c.id";
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("FROM fct_orders");
+			assertThat(query.sqlString()).containsIgnoringCase("JOIN dim_customer");
+			assertThat(query.sqlString()).doesNotContain(ordersTableToken);
+			assertThat(query.sqlString()).doesNotContain(customerTableToken);
+		}
+
+		@Test
+		@DisplayName("de-tokenizes column name in SELECT clause")
+		void deTokenizesColumnInSelect() {
+			String tokenizedSql = "SELECT " + orderValueColumnToken + " FROM " + ordersTableToken;
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("order_value");
+			assertThat(query.sqlString()).doesNotContain(orderValueColumnToken);
+		}
+
+		@Test
+		@DisplayName("de-tokenizes qualified column in SELECT clause")
+		void deTokenizesQualifiedColumnInSelect() {
+			String tokenizedSql = "SELECT o." + orderValueColumnToken + " FROM " + ordersTableToken + " o";
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("o.order_value");
+			assertThat(query.sqlString()).doesNotContain(orderValueColumnToken);
+		}
+
+		@Test
+		@DisplayName("de-tokenizes column in WHERE clause")
+		void deTokenizesColumnInWhere() {
+			String tokenizedSql = "SELECT id FROM " + ordersTableToken 
+					+ " WHERE " + orderValueColumnToken + " > 100";
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("WHERE order_value > 100");
+			assertThat(query.sqlString()).doesNotContain(orderValueColumnToken);
+		}
+
+		@Test
+		@DisplayName("de-tokenizes columns in JOIN ON clause")
+		void deTokenizesColumnsInJoinOn() {
+			String customerIdToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
+			String tokenizedSql = "SELECT o.id FROM " + ordersTableToken + " o JOIN " + customerTableToken 
+					+ " c ON o." + customerIdColumnToken + " = c." + customerIdToken;
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("o.customer_id = c.id");
+		}
+
+		@Test
+		@DisplayName("preserves table aliases during de-tokenization")
+		void preservesTableAliases() {
+			String tokenizedSql = "SELECT o." + orderIdColumnToken + ", o." + orderValueColumnToken 
+					+ " FROM " + ordersTableToken + " o";
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("o.id");
+			assertThat(query.sqlString()).containsIgnoringCase("o.order_value");
+			assertThat(query.sqlString()).containsIgnoringCase("FROM fct_orders o");
+		}
+
+		@Test
+		@DisplayName("handles mixed tokens and real names")
+		void handlesMixedTokensAndRealNames() {
+			// LLM might return a mix of tokens and real names
+			String tokenizedSql = "SELECT id, " + orderValueColumnToken + " FROM " + ordersTableToken;
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			assertThat(query.sqlString()).containsIgnoringCase("id");
+			assertThat(query.sqlString()).containsIgnoringCase("order_value");
+			assertThat(query.sqlString()).containsIgnoringCase("FROM fct_orders");
+		}
+
+		@Test
+		@DisplayName("non-tokenized catalog skips de-tokenization")
+		void nonTokenizedCatalogSkipsDeTokenization() {
+			SqlCatalog normalCatalog = new InMemorySqlCatalog()
+					.addTable("orders", "Orders", "fact")
+					.addColumn("orders", "id", "PK", "integer", null, null);
+
+			// Using a token-looking string should fail validation (unknown table)
+			assertThatThrownBy(() -> Query.fromSql("SELECT id FROM ft_abc123", normalCatalog))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown table");
+		}
+
+		@Test
+		@DisplayName("invalid table token is rejected")
+		void invalidTableTokenIsRejected() {
+			// Token that doesn't exist in catalog
+			assertThatThrownBy(() -> Query.fromSql("SELECT id FROM ft_invalid", tokenizedCatalog))
+					.isInstanceOf(QueryValidationException.class)
+					.hasMessageContaining("Unknown table");
+		}
+
+		@Test
+		@DisplayName("complex query with multiple tables de-tokenizes correctly")
+		void complexQueryDeTokenizesCorrectly() {
+			String customerIdToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
+			String tokenizedSql = """
+					SELECT o.%s, c.%s, o.%s 
+					FROM %s o 
+					JOIN %s c ON o.%s = c.%s 
+					WHERE o.%s > 100
+					""".formatted(
+					orderIdColumnToken, customerNameColumnToken, orderValueColumnToken,
+					ordersTableToken,
+					customerTableToken, customerIdColumnToken, customerIdToken,
+					orderValueColumnToken
+			);
+			
+			Query query = Query.fromSql(tokenizedSql, tokenizedCatalog);
+			String result = query.sqlString();
+
+			assertThat(result).containsIgnoringCase("o.id");
+			assertThat(result).containsIgnoringCase("c.customer_name");
+			assertThat(result).containsIgnoringCase("o.order_value");
+			assertThat(result).containsIgnoringCase("FROM fct_orders o");
+			assertThat(result).containsIgnoringCase("JOIN dim_customer c");
+			assertThat(result).containsIgnoringCase("ON o.customer_id = c.id");
+			assertThat(result).containsIgnoringCase("WHERE o.order_value > 100");
+		}
+
+		@Test
+		@DisplayName("tokenizedSql() returns SQL with tokens")
+		void tokenizedSqlReturnsTokens() {
+			// Start with normal SQL (not tokenized)
+			String normalSql = "SELECT order_value FROM fct_orders";
+			Query query = Query.fromSql(normalSql, tokenizedCatalog);
+
+			String tokenized = query.tokenizedSql();
+
+			// Should contain tokens, not real names
+			assertThat(tokenized).contains(ordersTableToken);
+			assertThat(tokenized).contains(orderValueColumnToken);
+			assertThat(tokenized).doesNotContain("fct_orders");
+			assertThat(tokenized).doesNotContain("order_value");
+		}
+
+		@Test
+		@DisplayName("tokenizedSql() handles JOIN queries")
+		void tokenizedSqlHandlesJoins() {
+			String normalSql = "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id";
+			Query query = Query.fromSql(normalSql, tokenizedCatalog);
+
+			String tokenized = query.tokenizedSql();
+
+			assertThat(tokenized).contains(ordersTableToken);
+			assertThat(tokenized).contains(customerTableToken);
+			assertThat(tokenized).contains(orderValueColumnToken);
+			assertThat(tokenized).contains(customerNameColumnToken);
+		}
+
+		@Test
+		@DisplayName("tokenizedSql() returns normal SQL when catalog not tokenized")
+		void tokenizedSqlReturnsNormalWhenNotTokenized() {
+			SqlCatalog normalCatalog = new InMemorySqlCatalog()
+					.addTable("orders", "Orders", "fact")
+					.addColumn("orders", "id", "PK", "integer", null, null);
+
+			String sql = "SELECT id FROM orders";
+			Query query = Query.fromSql(sql, normalCatalog);
+
+			String result = query.tokenizedSql();
+			assertThat(result).isEqualToIgnoringCase("SELECT id FROM orders");
+		}
+
+		@Test
+		@DisplayName("tokenizedSql() returns normal SQL when catalog is null")
+		void tokenizedSqlReturnsNormalWhenCatalogNull() {
+			String sql = "SELECT id FROM orders";
+			Query query = Query.fromSql(sql);
+
+			String result = query.tokenizedSql();
+			assertThat(result).isEqualToIgnoringCase("SELECT id FROM orders");
+		}
+	}
 }
 

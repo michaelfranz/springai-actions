@@ -19,6 +19,7 @@ import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -253,5 +254,186 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(sql).contains("JOIN");
 		assertThat(sql).contains("CUSTOMER_NAME");
 		assertThat(sql).contains("ORDER_VALUE");
+	}
+
+	// ========== Tokenization Unit Tests (Task 2.18) ==========
+	// These tests don't require LLM access - they verify the tokenization infrastructure
+
+	@org.junit.jupiter.api.Nested
+	@DisplayName("Tokenization Infrastructure Tests")
+	class TokenizationTests {
+
+		private InMemorySqlCatalog tokenizedCatalog;
+
+		@org.junit.jupiter.api.BeforeEach
+		void setUp() {
+			// Create a tokenized version of the data warehouse catalog
+			tokenizedCatalog = new InMemorySqlCatalog()
+					.withTokenization(true)
+					.addTable("fct_orders", "Fact table for orders", "fact")
+					.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
+							new String[]{"fk:dim_customer.id"}, null)
+					.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
+							new String[]{"fk:dim_date.id"}, null)
+					.addColumn("fct_orders", "order_value", "Order amount", "double",
+							new String[]{"measure"}, null)
+					.addTable("dim_customer", "Customer dimension", "dimension")
+					.addColumn("dim_customer", "id", "PK", "string",
+							new String[]{"pk"}, new String[]{"unique"})
+					.addColumn("dim_customer", "customer_name", "Customer name", "string",
+							new String[]{"attribute"}, null)
+					.addTable("dim_date", "Date dimension", "dimension")
+					.addColumn("dim_date", "id", "PK", "string",
+							new String[]{"pk"}, new String[]{"unique"})
+					.addColumn("dim_date", "date", "Calendar date", "date",
+							new String[]{"attribute"}, null);
+		}
+
+		@Test
+		@DisplayName("catalog generates correct token prefixes for DW schema")
+		void catalogGeneratesCorrectTokenPrefixes() {
+			// Fact tables should have ft_ prefix
+			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
+			assertThat(ordersToken).startsWith("ft_");
+
+			// Dimension tables should have dt_ prefix
+			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
+			assertThat(customerToken).startsWith("dt_");
+
+			String dateToken = tokenizedCatalog.getTableToken("dim_date").orElseThrow();
+			assertThat(dateToken).startsWith("dt_");
+		}
+
+		@Test
+		@DisplayName("tokenized catalog context contributor hides real names")
+		void tokenizedCatalogContributorHidesRealNames() {
+			// Add synonyms to the tokenized catalog for this test
+			// With synonym-based tokenization, first synonym becomes the displayed name
+			InMemorySqlCatalog catalogWithSynonyms = new InMemorySqlCatalog()
+					.withTokenization(true)
+					.addTable("fct_orders", "Fact table for orders", "fact")
+					.withSynonyms("fct_orders", "orders", "sales")  // "orders" is displayed name
+					.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
+							new String[]{"fk:dim_customer.id"}, null)  // no synonym -> cryptic token
+					.addColumn("fct_orders", "order_value", "Order amount", "double",
+							new String[]{"measure"}, null)
+					.withColumnSynonyms("fct_orders", "order_value", "value", "amount")  // "value" is displayed
+					.addTable("dim_customer", "Customer dimension", "dimension")
+					.withSynonyms("dim_customer", "customers", "cust")  // "customers" is displayed name
+					.addColumn("dim_customer", "id", "PK", "string",
+							new String[]{"pk"}, new String[]{"unique"})  // no synonym -> cryptic token
+					.addColumn("dim_customer", "customer_name", "Customer name", "string",
+							new String[]{"attribute"}, null)
+					.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name");  // "name" is displayed
+
+			SqlCatalogContextContributor contributor = new SqlCatalogContextContributor(catalogWithSynonyms);
+			String prompt = contributor.contribute(null).orElseThrow();
+
+			// LLM sees standard SQL CATALOG (unaware of tokenization)
+			assertThat(prompt).contains("SQL CATALOG:");
+			
+			// Tables with synonyms: first synonym becomes the displayed name
+			assertThat(prompt).contains("- orders:");  // fct_orders -> "orders"
+			assertThat(prompt).contains("- customers:");  // dim_customer -> "customers"
+			
+			// Columns without synonyms: still use cryptic tokens (c_)
+			assertThat(prompt).contains("c_");
+
+			// Real database names should NOT appear as identifiers
+			assertThat(prompt).doesNotContain("fct_orders:");
+			assertThat(prompt).doesNotContain("dim_customer:");
+			assertThat(prompt).doesNotContain("• customer_id");
+			assertThat(prompt).doesNotContain("• order_value");
+
+			// Descriptions should still be present (for LLM understanding)
+			assertThat(prompt).contains("Fact table for orders");
+			assertThat(prompt).contains("Customer dimension");
+			assertThat(prompt).contains("Order amount");
+
+			// Remaining synonyms shown as "also:" (first one is the displayed name)
+			assertThat(prompt).contains("(also: sales)");  // "orders" is displayed, "sales" is remaining
+			assertThat(prompt).contains("(also: cust)");   // "customers" is displayed, "cust" is remaining
+			assertThat(prompt).contains("also=amount");    // "value" is displayed, "amount" is remaining
+			assertThat(prompt).contains("also=cust_name"); // "name" is displayed, "cust_name" is remaining
+		}
+
+		@Test
+		@DisplayName("de-tokenizes simple SELECT from tokenized SQL")
+		void deTokenizesSimpleSelect() {
+			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
+			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
+
+			String tokenizedSql = "SELECT " + orderValueToken + " FROM " + ordersToken;
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(tokenizedSql, tokenizedCatalog);
+
+			String sql = query.sqlString().toUpperCase();
+			assertThat(sql).contains("ORDER_VALUE");
+			assertThat(sql).contains("FCT_ORDERS");
+			assertThat(sql).doesNotContain(ordersToken.toUpperCase());
+			assertThat(sql).doesNotContain(orderValueToken.toUpperCase());
+		}
+
+		@Test
+		@DisplayName("de-tokenizes JOIN query from tokenized SQL")
+		void deTokenizesJoinQuery() {
+			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
+			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
+			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
+			String customerIdToken = tokenizedCatalog.getColumnToken("fct_orders", "customer_id").orElseThrow();
+			String customerPkToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
+			String customerNameToken = tokenizedCatalog.getColumnToken("dim_customer", "customer_name").orElseThrow();
+
+			String tokenizedSql = "SELECT o." + orderValueToken + ", c." + customerNameToken 
+					+ " FROM " + ordersToken + " o JOIN " + customerToken + " c ON o." + customerIdToken 
+					+ " = c." + customerPkToken;
+
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(tokenizedSql, tokenizedCatalog);
+			String sql = query.sqlString().toUpperCase();
+
+			assertThat(sql).contains("O.ORDER_VALUE");
+			assertThat(sql).contains("C.CUSTOMER_NAME");
+			assertThat(sql).contains("FCT_ORDERS O");
+			assertThat(sql).contains("DIM_CUSTOMER C");
+			assertThat(sql).contains("O.CUSTOMER_ID = C.ID");
+		}
+
+		@Test
+		@DisplayName("tokenizedSql() converts real names back to tokens")
+		void tokenizedSqlConvertsBackToTokens() {
+			// Start with canonical SQL
+			String canonicalSql = "SELECT order_value, customer_id FROM fct_orders";
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(canonicalSql, tokenizedCatalog);
+
+			String tokenized = query.tokenizedSql();
+
+			// Should contain tokens
+			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
+			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
+			String customerIdToken = tokenizedCatalog.getColumnToken("fct_orders", "customer_id").orElseThrow();
+
+			assertThat(tokenized).contains(ordersToken);
+			assertThat(tokenized).contains(orderValueToken);
+			assertThat(tokenized).contains(customerIdToken);
+
+			// Real names should NOT appear
+			assertThat(tokenized).doesNotContain("fct_orders");
+			assertThat(tokenized).doesNotContain("order_value");
+			assertThat(tokenized).doesNotContain("customer_id");
+		}
+
+		@Test
+		@DisplayName("FK references in prompt are tokenized")
+		void fkReferencesAreTokenized() {
+			SqlCatalogContextContributor contributor = new SqlCatalogContextContributor(tokenizedCatalog);
+			String prompt = contributor.contribute(null).orElseThrow();
+
+			// FK reference should use tokens, not real names
+			// e.g., "fk:dt_abc123.c_def456" instead of "fk:dim_customer.id"
+			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
+			String customerIdToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
+
+			assertThat(prompt).contains("fk:" + customerToken + "." + customerIdToken);
+			assertThat(prompt).doesNotContain("fk:dim_customer.id");
+		}
 	}
 }

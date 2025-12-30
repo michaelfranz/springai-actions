@@ -2,9 +2,11 @@ package org.javai.springai.actions.sql;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * In-memory SqlCatalog implementation for tests or simple configurations.
@@ -17,6 +19,20 @@ import java.util.Map;
  *     .addTable("orders", "Order fact table", "fact")
  *     .addColumn("orders", "id", "Primary key", "bigint", new String[]{"pk"}, null);
  * }</pre>
+ * 
+ * <h2>Tokenization</h2>
+ * 
+ * <p>When tokenization is enabled, the catalog generates opaque tokens for table
+ * and column names. This prevents exposure of real schema names to external LLMs:</p>
+ * 
+ * <pre>{@code
+ * SqlCatalog catalog = new InMemorySqlCatalog()
+ *     .withTokenization(true)
+ *     .addTable("fct_orders", "Order transactions", "fact")
+ *     .addColumn("fct_orders", "customer_id", "FK to customers", "integer", null, null);
+ * 
+ * // Tokens: ft_abc123, c_def456 (hides real names from LLM)
+ * }</pre>
  */
 public final class InMemorySqlCatalog implements SqlCatalog {
 
@@ -25,6 +41,13 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 	private final Map<String, TableBuilder> tables = new LinkedHashMap<>();
 	private Query.Dialect dialect = Query.Dialect.ANSI;
 	private boolean validateColumns = false;
+	private boolean tokenizationEnabled = false;
+
+	// Token mappings (lazily populated when tokenization is enabled)
+	private Map<String, String> tableNameToToken = null;  // tableName -> token
+	private Map<String, String> tableTokenToName = null;  // token -> tableName
+	private Map<String, String> columnNameToToken = null; // "table.column" -> token
+	private Map<String, String> columnTokenToName = null; // "tableToken.columnToken" -> columnName
 
 	/**
 	 * Sets the target SQL dialect for queries using this catalog.
@@ -65,11 +88,158 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		return validateColumns;
 	}
 
+	/**
+	 * Enables or disables tokenization for this catalog.
+	 * 
+	 * <p>When enabled, the catalog will generate opaque tokens for all table and
+	 * column names. These tokens can be used in system prompts to hide real schema
+	 * names from external LLMs. The framework will automatically de-tokenize
+	 * LLM-generated SQL before validation and execution.</p>
+	 * 
+	 * <p>Tokenization must be enabled <b>before</b> adding tables and columns.
+	 * Token mappings are generated lazily when first accessed.</p>
+	 * 
+	 * @param enabled true to enable tokenization
+	 * @return this catalog for fluent chaining
+	 */
+	public InMemorySqlCatalog withTokenization(boolean enabled) {
+		this.tokenizationEnabled = enabled;
+		// Clear any existing token mappings when toggling
+		this.tableNameToToken = null;
+		this.tableTokenToName = null;
+		this.columnNameToToken = null;
+		this.columnTokenToName = null;
+		return this;
+	}
+
+	@Override
+	public boolean isTokenized() {
+		return tokenizationEnabled;
+	}
+
+	@Override
+	public Optional<String> getTableToken(String tableName) {
+		if (!tokenizationEnabled || tableName == null) {
+			return Optional.empty();
+		}
+		ensureTokenMappingsBuilt();
+		return Optional.ofNullable(tableNameToToken.get(tableName));
+	}
+
+	@Override
+	public Optional<String> getColumnToken(String tableName, String columnName) {
+		if (!tokenizationEnabled || tableName == null || columnName == null) {
+			return Optional.empty();
+		}
+		ensureTokenMappingsBuilt();
+		String key = tableName + "." + columnName;
+		return Optional.ofNullable(columnNameToToken.get(key));
+	}
+
+	@Override
+	public Optional<String> resolveTableToken(String token) {
+		if (!tokenizationEnabled || token == null) {
+			return Optional.empty();
+		}
+		ensureTokenMappingsBuilt();
+		return Optional.ofNullable(tableTokenToName.get(token));
+	}
+
+	@Override
+	public Optional<String> resolveColumnToken(String tableToken, String columnToken) {
+		if (!tokenizationEnabled || tableToken == null || columnToken == null) {
+			return Optional.empty();
+		}
+		ensureTokenMappingsBuilt();
+		String key = tableToken + "." + columnToken;
+		return Optional.ofNullable(columnTokenToName.get(key));
+	}
+
+	@Override
+	public Map<String, String> tokenMappings() {
+		if (!tokenizationEnabled) {
+			return Map.of();
+		}
+		ensureTokenMappingsBuilt();
+		Map<String, String> all = new LinkedHashMap<>();
+		all.putAll(tableTokenToName);
+		// For column tokens, include table context
+		columnTokenToName.forEach((key, value) -> {
+			// key is "tableToken.columnToken", extract just the column token for display
+			String[] parts = key.split("\\.", 2);
+			if (parts.length == 2) {
+				String tableToken = parts[0];
+				String columnToken = parts[1];
+				String tableName = tableTokenToName.get(tableToken);
+				all.put(columnToken, tableName + "." + value);
+			}
+		});
+		return Collections.unmodifiableMap(all);
+	}
+
+	/**
+	 * Invalidates token mappings so they will be rebuilt on next access.
+	 */
+	private void invalidateTokenMappings() {
+		tableNameToToken = null;
+		tableTokenToName = null;
+		columnNameToToken = null;
+		columnTokenToName = null;
+	}
+
+	/**
+	 * Lazily builds token mappings for all tables and columns.
+	 * 
+	 * <p>Token strategy:</p>
+	 * <ul>
+	 *   <li>If synonyms are defined, the first synonym becomes the token (more readable)</li>
+	 *   <li>If no synonyms, falls back to cryptic hash-based token (full obfuscation)</li>
+	 * </ul>
+	 */
+	private void ensureTokenMappingsBuilt() {
+		if (tableNameToToken != null) {
+			return; // Already built
+		}
+
+		tableNameToToken = new HashMap<>();
+		tableTokenToName = new HashMap<>();
+		columnNameToToken = new HashMap<>();
+		columnTokenToName = new HashMap<>();
+
+		for (TableBuilder table : tables.values()) {
+			// Use first synonym as token if available, otherwise generate cryptic token
+			String tableToken;
+			if (!table.synonyms.isEmpty()) {
+				tableToken = table.synonyms.get(0);  // First synonym is the token
+			} else {
+				String[] tagsArray = table.tags.toArray(new String[0]);
+				tableToken = TokenGenerator.tableToken(table.name, tagsArray);  // Cryptic fallback
+			}
+			tableNameToToken.put(table.name, tableToken);
+			tableTokenToName.put(tableToken, table.name);
+
+			// Generate column tokens (same strategy)
+			for (ColumnBuilder column : table.columns.values()) {
+				String columnToken;
+				if (!column.synonyms.isEmpty()) {
+					columnToken = column.synonyms.get(0);  // First synonym is the token
+				} else {
+					columnToken = TokenGenerator.columnToken(table.name, column.name);  // Cryptic fallback
+				}
+				String nameKey = table.name + "." + column.name;
+				String tokenKey = tableToken + "." + columnToken;
+				columnNameToToken.put(nameKey, columnToken);
+				columnTokenToName.put(tokenKey, column.name);
+			}
+		}
+	}
+
 	public InMemorySqlCatalog addTable(String tableName, String description, String... tags) {
 		if (tableName == null || tableName.isBlank()) {
 			return this;
 		}
 		tables.putIfAbsent(tableName, new TableBuilder(tableName, description, tags));
+		invalidateTokenMappings();
 		return this;
 	}
 
@@ -110,8 +280,6 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 	 * Validates that a synonym is not already in use by another table (as a name or synonym).
 	 */
 	private void validateSynonymUniqueness(String synonym, String targetTable) {
-		String lowerSynonym = synonym.toLowerCase();
-		
 		// Check if synonym matches any existing table name
 		for (String existingTableName : tables.keySet()) {
 			if (existingTableName.equalsIgnoreCase(synonym) && !existingTableName.equals(targetTable)) {
@@ -143,6 +311,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		}
 		TableBuilder table = tables.computeIfAbsent(tableName, t -> new TableBuilder(tableName, null, null));
 		table.columns.put(columnName, new ColumnBuilder(columnName, description, dataType, tags, constraints));
+		invalidateTokenMappings();
 		return this;
 	}
 

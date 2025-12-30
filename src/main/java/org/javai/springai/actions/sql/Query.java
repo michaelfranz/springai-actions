@@ -66,10 +66,18 @@ public record Query(Select select, SqlCatalog catalog) {
 	/**
 	 * Creates a Query from a raw SQL string with full validation.
 	 * 
-	 * <p>If the SQL uses table or column synonyms (informal names like "orders" instead of "fct_orders"),
-	 * the framework will automatically substitute them with canonical names from the catalog.
-	 * This substitution is performed on the parsed AST, not via string replacement, ensuring
-	 * SQL keywords and string literals are not accidentally modified.</p>
+	 * <p>Processing steps:</p>
+	 * <ol>
+	 *   <li>Parse SQL into AST</li>
+	 *   <li>Verify it's a SELECT statement</li>
+	 *   <li>De-tokenize table/column tokens (if catalog has tokenization enabled)</li>
+	 *   <li>Substitute synonyms with canonical names</li>
+	 *   <li>Validate schema references</li>
+	 * </ol>
+	 * 
+	 * <p>If the SQL uses tokens (when the catalog has tokenization enabled), the framework
+	 * will automatically replace tokens with canonical names. If the SQL uses synonyms,
+	 * they will be substituted with canonical names from the catalog.</p>
 	 * 
 	 * @param sql the SQL string to parse
 	 * @param catalog optional schema catalog for table/column validation (may be null)
@@ -95,12 +103,17 @@ public record Query(Select select, SqlCatalog catalog) {
 					"Only SELECT statements are allowed, got: " + stmt.getClass().getSimpleName());
 		}
 
-		// 3. Apply synonym substitution on the AST (modifies in place)
+		// 3. De-tokenize if catalog has tokenization enabled
+		if (catalog != null && catalog.isTokenized()) {
+			applyDeTokenization(selectStmt, catalog);
+		}
+
+		// 4. Apply synonym substitution on the AST (modifies in place)
 		if (catalog != null && !catalog.tables().isEmpty()) {
 			applySynonymSubstitution(selectStmt, catalog);
 		}
 
-		// 4. Validate schema references (after synonym substitution)
+		// 5. Validate schema references (after de-tokenization and synonym substitution)
 		if (catalog != null && !catalog.tables().isEmpty()) {
 			validateSchemaReferences(selectStmt, catalog);
 		}
@@ -143,6 +156,237 @@ public record Query(Select select, SqlCatalog catalog) {
 			case ANSI -> select.toString();
 			case POSTGRES -> toPostgres(select);
 		};
+	}
+
+	/**
+	 * Returns the SQL string with tokens instead of canonical names.
+	 * 
+	 * <p>This is useful for debugging what the LLM should produce when 
+	 * tokenization is enabled. The returned SQL will have table and column
+	 * names replaced with their tokens.</p>
+	 * 
+	 * <p>If the catalog does not have tokenization enabled, returns the 
+	 * normal SQL string (same as {@link #sqlString()}).</p>
+	 * 
+	 * @return the SQL string with tokens
+	 */
+	public String tokenizedSql() {
+		if (catalog == null || !catalog.isTokenized()) {
+			return sqlString();
+		}
+		
+		// Create a string-based replacement since we want to show what the LLM would see
+		String sql = sqlString();
+		
+		// Replace table names with tokens (longest first to avoid partial matches)
+		java.util.List<String> tableNames = catalog.tables().keySet().stream()
+				.sorted((a, b) -> Integer.compare(b.length(), a.length()))
+				.toList();
+		
+		for (String tableName : tableNames) {
+			String token = catalog.getTableToken(tableName).orElse(tableName);
+			// Replace as a whole word (case-insensitive)
+			sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(tableName) + "\\b", token);
+		}
+		
+		// Replace column names with tokens (per table)
+		for (var entry : catalog.tables().entrySet()) {
+			String tableName = entry.getKey();
+			var table = entry.getValue();
+			if (table.columns() != null) {
+				// Sort by length descending
+				java.util.List<String> columnNames = table.columns().stream()
+						.map(SqlCatalog.SqlColumn::name)
+						.sorted((a, b) -> Integer.compare(b.length(), a.length()))
+						.toList();
+				
+				for (String columnName : columnNames) {
+					String token = catalog.getColumnToken(tableName, columnName).orElse(columnName);
+					// Replace as a whole word (case-insensitive)
+					sql = sql.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(columnName) + "\\b", token);
+				}
+			}
+		}
+		
+		return sql;
+	}
+
+	/**
+	 * De-tokenizes table and column tokens back to their canonical names.
+	 * 
+	 * <p>This is called when the catalog has tokenization enabled and the LLM returns
+	 * SQL with tokens instead of real names (e.g., "SELECT c_abc123 FROM ft_def456").</p>
+	 * 
+	 * @param select the parsed SELECT statement (modified in place)
+	 * @param catalog the catalog containing token mappings
+	 */
+	private static void applyDeTokenization(Select select, SqlCatalog catalog) {
+		if (select.getPlainSelect() == null) {
+			return;
+		}
+		
+		PlainSelect plainSelect = select.getPlainSelect();
+		
+		// First pass: de-tokenize table names and collect alias -> canonical table mappings
+		Map<String, String> aliasToCanonicalTable = new HashMap<>();
+		deTokenizeTableNames(plainSelect, catalog, aliasToCanonicalTable);
+		
+		// Second pass: de-tokenize column names
+		deTokenizeColumnNames(plainSelect, catalog, aliasToCanonicalTable);
+	}
+
+	/**
+	 * De-tokenizes table names in FROM and JOIN clauses.
+	 */
+	private static void deTokenizeTableNames(PlainSelect plainSelect, SqlCatalog catalog,
+			Map<String, String> aliasToCanonicalTable) {
+		
+		// FROM clause
+		if (plainSelect.getFromItem() instanceof Table fromTable) {
+			String deTokenized = deTokenizeTableName(fromTable.getName(), catalog);
+			if (deTokenized != null) {
+				fromTable.setName(deTokenized);
+			}
+			String tableName = fromTable.getName();
+			String alias = (fromTable.getAlias() != null) 
+					? fromTable.getAlias().getName().toLowerCase() 
+					: tableName.toLowerCase();
+			aliasToCanonicalTable.put(alias, tableName);
+		}
+		
+		// JOINs
+		if (plainSelect.getJoins() != null) {
+			for (Join join : plainSelect.getJoins()) {
+				if (join.getRightItem() instanceof Table joinTable) {
+					String deTokenized = deTokenizeTableName(joinTable.getName(), catalog);
+					if (deTokenized != null) {
+						joinTable.setName(deTokenized);
+					}
+					String tableName = joinTable.getName();
+					String alias = (joinTable.getAlias() != null) 
+							? joinTable.getAlias().getName().toLowerCase() 
+							: tableName.toLowerCase();
+					aliasToCanonicalTable.put(alias, tableName);
+				}
+			}
+		}
+	}
+
+	/**
+	 * De-tokenizes a single table name if it's a token.
+	 * 
+	 * <p>Tokens can be either:</p>
+	 * <ul>
+	 *   <li>A synonym (e.g., "orders" for "fct_orders") - more readable</li>
+	 *   <li>A cryptic hash (e.g., "ft_abc123") - when no synonyms defined</li>
+	 * </ul>
+	 * 
+	 * @return the canonical name if input was a token, null otherwise
+	 */
+	private static String deTokenizeTableName(String tableRef, SqlCatalog catalog) {
+		if (tableRef == null) {
+			return null;
+		}
+		// Let the catalog determine if this is a token - it knows its own mappings
+		return catalog.resolveTableToken(tableRef).orElse(null);
+	}
+
+	/**
+	 * De-tokenizes column names in SELECT, WHERE, and JOIN ON clauses.
+	 */
+	private static void deTokenizeColumnNames(PlainSelect plainSelect, SqlCatalog catalog,
+			Map<String, String> aliasToCanonicalTable) {
+		
+		// SELECT items
+		if (plainSelect.getSelectItems() != null) {
+			for (SelectItem<?> item : plainSelect.getSelectItems()) {
+				if (item.getExpression() instanceof Column col) {
+					deTokenizeColumn(col, catalog, aliasToCanonicalTable);
+				}
+			}
+		}
+		
+		// WHERE clause
+		if (plainSelect.getWhere() != null) {
+			deTokenizeColumnsInExpression(plainSelect.getWhere(), catalog, aliasToCanonicalTable);
+		}
+		
+		// JOIN ON conditions
+		if (plainSelect.getJoins() != null) {
+			for (Join join : plainSelect.getJoins()) {
+				if (join.getOnExpressions() != null) {
+					for (Expression onExpr : join.getOnExpressions()) {
+						deTokenizeColumnsInExpression(onExpr, catalog, aliasToCanonicalTable);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * De-tokenizes columns in an expression tree.
+	 */
+	private static void deTokenizeColumnsInExpression(Expression expr, SqlCatalog catalog,
+			Map<String, String> aliasToCanonicalTable) {
+		if (expr instanceof Column col) {
+			deTokenizeColumn(col, catalog, aliasToCanonicalTable);
+		} else if (expr instanceof BinaryExpression binExpr) {
+			deTokenizeColumnsInExpression(binExpr.getLeftExpression(), catalog, aliasToCanonicalTable);
+			deTokenizeColumnsInExpression(binExpr.getRightExpression(), catalog, aliasToCanonicalTable);
+		}
+	}
+
+	/**
+	 * De-tokenizes a single column if its name is a token.
+	 * 
+	 * <p>Column tokens can be either synonyms or cryptic hashes.
+	 * The catalog is consulted to determine if the column name is a token.</p>
+	 */
+	private static void deTokenizeColumn(Column col, SqlCatalog catalog,
+			Map<String, String> aliasToCanonicalTable) {
+		String columnName = col.getColumnName();
+		if (columnName == null) {
+			return;
+		}
+		
+		// Determine which table this column belongs to
+		String tableRef = (col.getTable() != null && col.getTable().getName() != null)
+				? col.getTable().getName().toLowerCase()
+				: null;
+		
+		// Get the canonical table name (either from alias or by resolving token)
+		String canonicalTable = null;
+		if (tableRef != null) {
+			// First check if tableRef is an alias
+			canonicalTable = aliasToCanonicalTable.get(tableRef);
+			if (canonicalTable == null) {
+				// tableRef might be a token itself (shouldn't happen after deTokenizeTableNames, but be defensive)
+				canonicalTable = catalog.resolveTableToken(tableRef).orElse(null);
+			}
+		}
+		
+		// Find the table token for this canonical table and try to resolve column token
+		if (canonicalTable != null) {
+			String tableToken = catalog.getTableToken(canonicalTable).orElse(null);
+			if (tableToken != null) {
+				String resolved = catalog.resolveColumnToken(tableToken, columnName).orElse(null);
+				if (resolved != null) {
+					col.setColumnName(resolved);
+				}
+			}
+		} else {
+			// Unqualified column - try all tables
+			for (String tableName : aliasToCanonicalTable.values()) {
+				String tableToken = catalog.getTableToken(tableName).orElse(null);
+				if (tableToken != null) {
+					String resolved = catalog.resolveColumnToken(tableToken, columnName).orElse(null);
+					if (resolved != null) {
+						col.setColumnName(resolved);
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	/**
