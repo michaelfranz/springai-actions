@@ -2,7 +2,6 @@ package org.javai.springai.actions.plan;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,24 +10,13 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.javai.springai.actions.api.ActionContext;
-import org.javai.springai.actions.execution.ActionResult;
-import org.javai.springai.actions.execution.DefaultPlanExecutor;
-import org.javai.springai.actions.execution.ExecutableAction;
-import org.javai.springai.actions.execution.ExecutablePlan;
-import org.javai.springai.actions.execution.PlanExecutionException;
-import org.javai.springai.actions.execution.PlanExecutor;
 import org.javai.springai.actions.bind.ActionDescriptor;
 import org.javai.springai.actions.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.bind.ActionRegistry;
 import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
-import org.javai.springai.actions.exec.PlanResolver;
 import org.javai.springai.actions.exec.PlanVerifier;
-import org.javai.springai.actions.exec.ResolvedPlan;
-import org.javai.springai.actions.exec.ResolvedStep;
 import org.javai.springai.actions.prompt.PersonaSpec;
 import org.javai.springai.actions.prompt.PlanActionsContextContributor;
 import org.javai.springai.actions.prompt.PromptContributor;
@@ -74,33 +62,6 @@ public final class Planner {
 		return new Builder();
 	}
 
-	/**
-	 * Convenience: plan, resolve and execute in one step using defaults.
-	 */
-	public PlanRunResult planResolveAndExecute(@NonNull String requestText) throws PlanExecutionException {
-		return planResolveAndExecute(requestText, new DefaultPlanResolver(), new DefaultPlanExecutor());
-	}
-
-	/**
-	 * Convenience: plan, resolve and execute in one step with custom resolver/executor.
-	 */
-	public PlanRunResult planResolveAndExecute(@NonNull String requestText, PlanResolver resolver, PlanExecutor executor)
-			throws PlanExecutionException {
-		Objects.requireNonNull(requestText, "requestText must not be null");
-		Objects.requireNonNull(resolver, "resolver must not be null");
-		Objects.requireNonNull(executor, "executor must not be null");
-
-		PlanFormulationResult planning = formulatePlan(requestText);
-		ResolvedPlan resolution = resolver.resolve(planning.plan(), planning.actionRegistry());
-
-		if (resolution.status() != PlanStatus.READY) {
-			throw new PlanExecutionException("Resolved plan is not READY: " + resolution.status(), null);
-		}
-
-		ExecutablePlan executablePlan = toExecutablePlan(resolution);
-		ActionContext context = executor.execute(executablePlan);
-		return PlanRunResult.success(planning, resolution, context);
-	}
 
 	// Conversation-aware entry point. Supply the rolling conversation state; this is the public API.
 	public PlanFormulationResult formulatePlan(@NonNull String requestText, ConversationState state) {
@@ -424,48 +385,6 @@ public final class Planner {
 		public PlanParseException(String message, Throwable cause) {
 			super(message, cause);
 		}
-	}
-
-	private ExecutablePlan toExecutablePlan(ResolvedPlan resolvedPlan) {
-		List<ExecutableAction> actions = new ArrayList<>();
-		for (ResolvedStep step : resolvedPlan.steps()) {
-			if (step instanceof ResolvedStep.ActionStep actionStep) {
-				actions.add(toExecutableAction(actionStep));
-			}
-		}
-		return new ExecutablePlan(actions);
-	}
-
-	private ExecutableAction toExecutableAction(ResolvedStep.ActionStep actionStep) {
-		return ctx -> {
-			try {
-				var binding = actionStep.binding();
-				var method = binding.method();
-				var params = method.getParameters();
-				Object[] args = new Object[params.length];
-				int argIdx = 0;
-				for (int i = 0; i < params.length; i++) {
-					if (params[i].getType() == ActionContext.class) {
-						args[i] = ctx;
-					}
-					else {
-						args[i] = actionStep.arguments().get(argIdx++).value();
-					}
-				}
-				Object result = method.invoke(binding.bean(), args);
-				if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
-					ctx.put(binding.contextKey(), result);
-				}
-				return new ActionResult.Success(result);
-			}
-			catch (InvocationTargetException ex) {
-				Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-				return new ActionResult.Failure(new String[] { cause.getMessage() });
-			}
-			catch (Exception ex) {
-				return new ActionResult.Failure(new String[] { ex.getMessage() });
-			}
-		};
 	}
 
 	public static final class Builder {
