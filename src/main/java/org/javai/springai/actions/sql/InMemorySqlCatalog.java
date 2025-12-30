@@ -1,4 +1,4 @@
-package org.javai.springai.actions.internal.prompt;
+package org.javai.springai.actions.sql;
 
 import java.util.ArrayList;
 import java.util.Collections;

@@ -1,4 +1,4 @@
-package org.javai.springai.actions.prompt;
+package org.javai.springai.actions.sql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
@@ -8,11 +8,8 @@ import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
-import org.javai.springai.actions.internal.prompt.InMemorySqlCatalog;
-import org.javai.springai.actions.internal.prompt.SqlCatalogContextContributor;
 import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;
 import org.javai.springai.actions.internal.prompt.SystemPromptContext;
-import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

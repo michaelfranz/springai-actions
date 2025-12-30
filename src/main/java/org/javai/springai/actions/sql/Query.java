@@ -6,7 +6,6 @@ import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.util.TablesNamesFinder;
-import org.javai.springai.actions.internal.prompt.SqlCatalog;
 
 /**
  * Represents a validated SQL SELECT query.

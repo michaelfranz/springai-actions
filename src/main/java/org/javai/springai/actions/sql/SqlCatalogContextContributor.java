@@ -1,8 +1,9 @@
-package org.javai.springai.actions.internal.prompt;
+package org.javai.springai.actions.sql;
 
 import java.util.Optional;
 import java.util.StringJoiner;
 import org.javai.springai.actions.PromptContributor;
+import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 
 /**
  * Contributes SQL catalog metadata (tables/columns) to the system prompt.
