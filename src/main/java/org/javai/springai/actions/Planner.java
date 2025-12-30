@@ -25,7 +25,6 @@ import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;
 import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 import org.javai.springai.actions.internal.resolve.DefaultPlanResolver;
 import org.javai.springai.actions.internal.resolve.ResolutionContext;
-import org.javai.springai.actions.sql.SqlCatalog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -358,25 +357,13 @@ public final class Planner {
 	private Plan parseRawPlan(String json, ActionRegistry actionRegistry) {
 		try {
 			RawPlan jsonPlan = JSON_MAPPER.readValue(json, RawPlan.class);
-			// Get SQL catalog from prompt context for schema validation
-			SqlCatalog sqlCatalog = getSqlCatalogFromContext();
-			ResolutionContext context = ResolutionContext.of(actionRegistry, sqlCatalog);
+			// Pass prompt context to resolver for domain-specific validation (e.g., SQL schema)
+			ResolutionContext context = ResolutionContext.of(actionRegistry, promptContext);
 			// Resolve directly to bound Plan (includes validation)
 			return new DefaultPlanResolver().resolve(jsonPlan, context);
 		} catch (JsonProcessingException e) {
 			throw new PlanParseException("Failed to parse JSON plan: " + e.getMessage(), e);
 		}
-	}
-
-	/**
-	 * Retrieves the SQL catalog from the prompt context, if available.
-	 */
-	private SqlCatalog getSqlCatalogFromContext() {
-		Object catalog = promptContext.get("sql");
-		if (catalog instanceof SqlCatalog sqlCatalog) {
-			return sqlCatalog;
-		}
-		return null;
 	}
 
 	/**

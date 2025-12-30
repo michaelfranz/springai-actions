@@ -185,9 +185,10 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName, ResolutionContext context) {
-		// Handle SQL strings for Query targets - now with catalog for validation
+		// Handle SQL strings for Query targets - catalog looked up from context if available
 		if (raw instanceof String s && Query.class.isAssignableFrom(targetType)) {
-			return convertSqlString(s, paramName, context.sqlCatalog());
+			SqlCatalog catalog = context.get("sql", SqlCatalog.class).orElse(null);
+			return convertSqlString(s, paramName, catalog);
 		}
 
 		Object normalized = normalizeRaw(raw, targetType);

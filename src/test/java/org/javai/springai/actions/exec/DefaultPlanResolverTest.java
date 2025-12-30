@@ -282,8 +282,8 @@ class DefaultPlanResolverTest {
 				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithUnknownTable)))
 		);
 
-		// Resolve with catalog context - should fail because table doesn't exist
-		ResolutionContext context = ResolutionContext.of(registry, catalog);
+		// Resolve with catalog in context - should fail because table doesn't exist
+		ResolutionContext context = ResolutionContext.of(registry, Map.of("sql", catalog));
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
@@ -307,8 +307,8 @@ class DefaultPlanResolverTest {
 				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithKnownTable)))
 		);
 
-		// Resolve with catalog context - should succeed
-		ResolutionContext context = ResolutionContext.of(registry, catalog);
+		// Resolve with catalog in context - should succeed
+		ResolutionContext context = ResolutionContext.of(registry, Map.of("sql", catalog));
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
@@ -327,8 +327,8 @@ class DefaultPlanResolverTest {
 				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithAnyTable)))
 		);
 
-		// Resolve without catalog (null) - should succeed (no schema validation)
-		ResolutionContext context = ResolutionContext.of(registry, null);
+		// Resolve without catalog (empty context) - should succeed (no schema validation)
+		ResolutionContext context = ResolutionContext.of(registry, Map.of());
 		Plan result = resolver.resolve(jsonPlan, context);
 		
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
