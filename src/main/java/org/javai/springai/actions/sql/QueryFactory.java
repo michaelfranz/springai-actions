@@ -1,6 +1,6 @@
 package org.javai.springai.actions.sql;
 
-import org.javai.springai.actions.prompt.SqlCatalog;
+import org.javai.springai.actions.internal.prompt.SqlCatalog;
 
 /**
  * Factory for creating validated Query objects from raw SQL strings.

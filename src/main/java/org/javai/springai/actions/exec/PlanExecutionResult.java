@@ -1,6 +1,7 @@
 package org.javai.springai.actions.exec;
 
 import java.util.List;
+import org.javai.springai.actions.internal.exec.StepExecutionResult;
 
 /**
  * Captures the outcome of executing a resolved plan.

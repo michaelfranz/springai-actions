@@ -2,7 +2,8 @@ package org.javai.springai.actions.plan;
 
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.bind.ActionBinding;
+import org.javai.springai.actions.internal.bind.ActionBinding;
+import org.javai.springai.actions.internal.plan.PlanArgument;
 
 /**
  * Represents a single step in a plan. Sealed to ensure all step types are known.

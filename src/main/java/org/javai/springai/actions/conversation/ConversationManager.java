@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.javai.springai.actions.plan.Plan;
-import org.javai.springai.actions.plan.PlanFormulationResult;
+import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.plan.Planner;
 

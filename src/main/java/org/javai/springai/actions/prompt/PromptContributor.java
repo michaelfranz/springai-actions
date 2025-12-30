@@ -1,6 +1,7 @@
 package org.javai.springai.actions.prompt;
 
 import java.util.Optional;
+import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 
 /**
  * Contributes dynamic context to the system prompt.

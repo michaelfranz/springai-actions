@@ -4,6 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.javai.springai.actions.internal.instrument.InvocationEmitter;
+import org.javai.springai.actions.internal.instrument.InvocationEvent;
+import org.javai.springai.actions.internal.instrument.InvocationEventType;
+import org.javai.springai.actions.internal.instrument.InvocationKind;
+import org.javai.springai.actions.internal.instrument.InvocationListener;
+import org.javai.springai.actions.internal.instrument.InvocationSupport;
 import org.junit.jupiter.api.Test;
 
 class InvocationSupportTest {

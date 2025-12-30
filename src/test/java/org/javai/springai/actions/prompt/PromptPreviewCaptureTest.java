@@ -2,7 +2,7 @@ package org.javai.springai.actions.prompt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.javai.springai.actions.plan.Planner;
-import org.javai.springai.actions.plan.PromptPreview;
+import org.javai.springai.actions.internal.plan.PromptPreview;
 import org.javai.springai.scenarios.data_warehouse.DataWarehouseActions;
 import org.junit.jupiter.api.Test;
 

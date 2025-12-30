@@ -2,8 +2,8 @@ package org.javai.springai.scenarios.protocol;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.javai.springai.actions.instrument.InvocationEvent;
-import org.javai.springai.actions.instrument.InvocationListener;
+import org.javai.springai.actions.internal.instrument.InvocationEvent;
+import org.javai.springai.actions.internal.instrument.InvocationListener;
 
 /**
  * Test listener for capturing invocation events during protocol notebook scenario.

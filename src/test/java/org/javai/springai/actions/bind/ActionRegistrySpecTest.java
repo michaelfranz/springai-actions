@@ -4,6 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.internal.bind.ActionDescriptor;
+import org.javai.springai.actions.internal.bind.ActionDescriptorFactory;
+import org.javai.springai.actions.internal.bind.ActionDescriptorJsonMapper;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
+import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.Test;
 

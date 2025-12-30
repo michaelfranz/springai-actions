@@ -3,17 +3,19 @@ package org.javai.springai.actions.plan;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Map;
+import org.javai.springai.actions.internal.parse.RawPlan;
+import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests for JsonPlan parsing.
+ * Tests for RawPlan parsing.
  * <p>
- * Note: Resolution from JsonPlan to bound Plan is tested in {@link org.javai.springai.actions.exec.DefaultPlanResolverTest}.
+ * Note: Resolution from RawPlan to bound Plan is tested in {@link org.javai.springai.actions.exec.DefaultPlanResolverTest}.
  */
-@DisplayName("JsonPlan")
-class JsonPlanTest {
+@DisplayName("RawPlan")
+class RawPlanTest {
 
 	@Nested
 	@DisplayName("JSON Parsing")
@@ -38,7 +40,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.message()).isEqualTo("Searching for products");
 			assertThat(plan.steps()).hasSize(1);
@@ -70,7 +72,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.steps()).hasSize(2);
 			assertThat(plan.steps().getFirst().actionId()).isEqualTo("searchProducts");
@@ -101,7 +103,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.steps()).hasSize(1);
 			@SuppressWarnings("unchecked")
@@ -133,7 +135,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.steps()).hasSize(1);
 			assertThat(plan.steps().getFirst().parameters().get("query"))
@@ -150,7 +152,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.message()).isEqualTo("No actions needed");
 			assertThat(plan.steps()).isEmpty();
@@ -172,7 +174,7 @@ class JsonPlanTest {
 					}
 					""";
 
-			JsonPlan plan = JsonPlan.fromJson(json);
+			RawPlan plan = RawPlan.fromJson(json);
 
 			assertThat(plan.steps().getFirst().parameters()).isEmpty();
 		}

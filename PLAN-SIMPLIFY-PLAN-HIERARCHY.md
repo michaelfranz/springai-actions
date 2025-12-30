@@ -252,12 +252,18 @@ Move to `internal.plan` package.
 
 **Status:** `compileJava` ✅
 
-### Phase 4: Move Internal Types
-1. Move `bind/*` → `internal/bind/*`
-2. Move `instrument/*` → `internal/instrument/*`
-3. Move prompt internals → `internal/prompt/*`
-4. Rename and move `JsonPlan` → `internal/parse/RawPlan`
-5. Rename and move `JsonPlanStep` → `internal/parse/RawPlanStep`
+### Phase 4: Move Internal Types ✅ COMPLETE
+1. ~~Move `bind/*` → `internal/bind/*`~~
+2. ~~Move `instrument/*` → `internal/instrument/*`~~
+3. ~~Move prompt internals → `internal/prompt/*`~~
+4. ~~Rename and move `JsonPlan` → `internal/parse/RawPlan`~~
+5. ~~Rename and move `JsonPlanStep` → `internal/parse/RawPlanStep`~~
+6. ~~Move plan internals → `internal/plan/*`~~
+7. ~~Move exec internals → `internal/exec/*`~~
+8. ~~Move resolve types → `internal/resolve/*`~~
+9. ~~Update all imports throughout codebase~~
+
+**Status:** `compileJava` ✅ | `compileTestJava` ✅ | `test` ✅
 
 ### Phase 5: Promote Public Types
 1. Move `Plan`, `PlanStep`, `PlanStatus` to top-level `actions/`

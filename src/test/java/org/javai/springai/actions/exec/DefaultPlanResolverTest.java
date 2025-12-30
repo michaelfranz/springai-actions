@@ -6,9 +6,10 @@ import java.util.List;
 import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.javai.springai.actions.api.Action;
-import org.javai.springai.actions.bind.ActionRegistry;
-import org.javai.springai.actions.plan.JsonPlan;
-import org.javai.springai.actions.plan.JsonPlanStep;
+import org.javai.springai.actions.internal.bind.ActionRegistry;
+import org.javai.springai.actions.internal.parse.RawPlan;
+import org.javai.springai.actions.internal.resolve.DefaultPlanResolver;
+import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
 import org.javai.springai.actions.plan.PlanStep;
@@ -34,9 +35,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void resolvesHappyPath() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"greeting plan",
-				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", 3)))
+				List.of(new RawPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", 3)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -52,9 +53,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnUnknownAction() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("unknownAction", "Unknown", Map.of()))
+				List.of(new RawPlanStep("unknownAction", "Unknown", Map.of()))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -65,9 +66,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnArityMismatch() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob")))  // missing 'times'
+				List.of(new RawPlanStep("greet", "Say hello", Map.of("name", "Bob")))  // missing 'times'
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -76,9 +77,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnTypeConversionError() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", "not-a-number")))
+				List.of(new RawPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", "not-a-number")))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -87,9 +88,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void resolvesListParameterValue() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("handleList", "Handle bundles", Map.of("bundleIds", List.of("A12345", "A3145"))))
+				List.of(new RawPlanStep("handleList", "Handle bundles", Map.of("bundleIds", List.of("A12345", "A3145"))))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -104,9 +105,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsListToArrayParameterValue() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("handleArray", "Handle array", Map.of("bundleIds", List.of("A12345", "A3145", "B4323"))))
+				List.of(new RawPlanStep("handleArray", "Handle array", Map.of("bundleIds", List.of("A12345", "A3145", "B4323"))))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -119,9 +120,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsStringToNumericTypes() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("useNumbers", "Use numbers", Map.of("amount", "3.14", "count", "42")))
+				List.of(new RawPlanStep("useNumbers", "Use numbers", Map.of("amount", "3.14", "count", "42")))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -133,9 +134,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsStringToEnum() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("usePriority", "Set priority", Map.of("priority", "HIGH")))
+				List.of(new RawPlanStep("usePriority", "Set priority", Map.of("priority", "HIGH")))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -147,9 +148,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsStringsToEnumArray() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("usePriorityArray", "Set priorities", Map.of("priorities", List.of("LOW", "MEDIUM"))))
+				List.of(new RawPlanStep("usePriorityArray", "Set priorities", Map.of("priorities", List.of("LOW", "MEDIUM"))))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -162,9 +163,9 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnInvalidEnumValue() {
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("usePriority", "Set priority", Map.of("priority", "BLUE")))
+				List.of(new RawPlanStep("usePriority", "Set priority", Map.of("priority", "BLUE")))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -176,9 +177,9 @@ class DefaultPlanResolverTest {
 	void convertsMapToRecordWithNestedPeriod() {
 		Map<String, Object> period = Map.of("start", "2024-01-01", "end", "2024-01-31");
 		Map<String, Object> payload = Map.of("customer_name", "Mike", "period", period);
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("useOrderValue", "Calculate order value", Map.of("orderValueQuery", payload)))
+				List.of(new RawPlanStep("useOrderValue", "Calculate order value", Map.of("orderValueQuery", payload)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -198,9 +199,9 @@ class DefaultPlanResolverTest {
 	void convertsSqlStringToQuery() {
 		String sqlString = "SELECT customer_name FROM customers WHERE id = '123'";
 		
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -219,9 +220,9 @@ class DefaultPlanResolverTest {
 	void convertsComplexSqlStringToQuery() {
 		String sqlString = "SELECT o.id, o.status, c.name FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status = 'PENDING'";
 		
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -237,9 +238,9 @@ class DefaultPlanResolverTest {
 	void failsOnInvalidSqlString() {
 		String invalidSql = "SELECT * FROM WHERE"; // Invalid SQL
 		
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", invalidSql)))
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", invalidSql)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);
@@ -251,9 +252,9 @@ class DefaultPlanResolverTest {
 	void failsOnNonSelectStatement() {
 		String insertSql = "INSERT INTO customers (name) VALUES ('Test')";
 		
-		JsonPlan jsonPlan = new JsonPlan(
+		RawPlan jsonPlan = new RawPlan(
 				"",
-				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", insertSql)))
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", insertSql)))
 		);
 
 		Plan result = resolver.resolve(jsonPlan, registry);

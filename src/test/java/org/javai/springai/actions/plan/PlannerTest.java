@@ -2,8 +2,11 @@ package org.javai.springai.actions.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.javai.springai.actions.api.Action;
-import org.javai.springai.actions.prompt.InMemorySqlCatalog;
-import org.javai.springai.actions.prompt.SqlCatalogContextContributor;
+import org.javai.springai.actions.internal.plan.PlanFormulationResult;
+import org.javai.springai.actions.internal.plan.PlannerOptions;
+import org.javai.springai.actions.internal.plan.PromptPreview;
+import org.javai.springai.actions.internal.prompt.InMemorySqlCatalog;
+import org.javai.springai.actions.internal.prompt.SqlCatalogContextContributor;
 import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -36,7 +39,7 @@ class PlannerTest {
 	}
 
 	@Test
-	void systemPromptUsesJsonPlanFormat() {
+	void systemPromptUsesRawPlanFormat() {
 		Planner planner = Planner.builder()
 				.addPromptContribution("system-extra")
 				.actions(new DemoActions())
@@ -95,7 +98,7 @@ class PlannerTest {
 
 	@Test
 	@SuppressWarnings("NullAway")
-	void parsesJsonPlanResponse() {
+	void parsesRawPlanResponse() {
 		String jsonResponse = """
 				{
 					"message": "Executing demo action",

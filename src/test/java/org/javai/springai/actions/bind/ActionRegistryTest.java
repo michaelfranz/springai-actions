@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.internal.bind.ActionBinding;
+import org.javai.springai.actions.internal.bind.ActionDescriptor;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
+import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

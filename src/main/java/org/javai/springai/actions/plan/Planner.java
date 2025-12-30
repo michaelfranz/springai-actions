@@ -10,18 +10,22 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.javai.springai.actions.bind.ActionDescriptor;
-import org.javai.springai.actions.bind.ActionDescriptorFilter;
-import org.javai.springai.actions.bind.ActionParameterDescriptor;
-import org.javai.springai.actions.bind.ActionRegistry;
+import org.javai.springai.actions.internal.bind.ActionDescriptor;
+import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
+import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
+import org.javai.springai.actions.internal.parse.RawPlan;
+import org.javai.springai.actions.internal.plan.PlanFormulationResult;
+import org.javai.springai.actions.internal.plan.PlannerOptions;
+import org.javai.springai.actions.internal.plan.PromptPreview;
+import org.javai.springai.actions.internal.resolve.DefaultPlanResolver;
 import org.javai.springai.actions.prompt.PersonaSpec;
-import org.javai.springai.actions.prompt.PlanActionsContextContributor;
+import org.javai.springai.actions.internal.prompt.PlanActionsContextContributor;
 import org.javai.springai.actions.prompt.PromptContributor;
-import org.javai.springai.actions.prompt.SystemPromptBuilder;
-import org.javai.springai.actions.prompt.SystemPromptContext;
+import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;
+import org.javai.springai.actions.internal.prompt.SystemPromptContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -322,7 +326,7 @@ public final class Planner {
 
 		String jsonContent = extractJsonContent(response);
 		if (jsonContent != null) {
-			return parseJsonPlan(jsonContent, actionRegistry);
+			return parseRawPlan(jsonContent, actionRegistry);
 		}
 
 		throw new PlanParseException("LLM response does not contain valid JSON plan");
@@ -349,11 +353,11 @@ public final class Planner {
 	}
 
 	/**
-	 * Parse JSON plan using JsonPlan DTO.
+	 * Parse JSON plan using RawPlan DTO.
 	 */
-	private Plan parseJsonPlan(String json, ActionRegistry actionRegistry) {
+	private Plan parseRawPlan(String json, ActionRegistry actionRegistry) {
 		try {
-			JsonPlan jsonPlan = JSON_MAPPER.readValue(json, JsonPlan.class);
+			RawPlan jsonPlan = JSON_MAPPER.readValue(json, RawPlan.class);
 			// Resolve directly to bound Plan (includes validation)
 			return new DefaultPlanResolver().resolve(jsonPlan, actionRegistry);
 		} catch (JsonProcessingException e) {

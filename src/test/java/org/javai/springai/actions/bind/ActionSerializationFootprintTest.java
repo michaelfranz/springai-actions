@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+import org.javai.springai.actions.internal.bind.ActionDescriptor;
+import org.javai.springai.actions.internal.bind.ActionDescriptorJsonMapper;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.junit.jupiter.api.Test;
 
 /**
