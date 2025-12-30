@@ -5,7 +5,6 @@ import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.bind.ActionRegistry;
-import org.javai.springai.actions.prompt.SystemPromptBuilder;
 import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.Test;
 

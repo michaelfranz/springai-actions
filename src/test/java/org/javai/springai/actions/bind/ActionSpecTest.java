@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
-import org.javai.springai.actions.bind.ActionDescriptor;
-import org.javai.springai.actions.bind.ActionDescriptorJsonMapper;
-import org.javai.springai.actions.bind.ActionParameterDescriptor;
 import org.junit.jupiter.api.Test;
 
 class ActionSpecTest {

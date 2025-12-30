@@ -1,17 +1,9 @@
 package org.javai.springai.actions.instrument;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import org.javai.springai.actions.instrument.InvocationEmitter;
-import org.javai.springai.actions.instrument.InvocationEvent;
-import org.javai.springai.actions.instrument.InvocationEventType;
-import org.javai.springai.actions.instrument.InvocationKind;
-import org.javai.springai.actions.instrument.InvocationListener;
-import org.javai.springai.actions.instrument.InvocationSupport;
 import org.junit.jupiter.api.Test;
 
 class InvocationSupportTest {

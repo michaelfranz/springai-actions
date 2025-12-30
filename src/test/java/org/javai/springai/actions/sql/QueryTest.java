@@ -2,12 +2,8 @@ package org.javai.springai.actions.sql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import org.javai.springai.actions.prompt.InMemorySqlCatalog;
 import org.javai.springai.actions.prompt.SqlCatalog;
-import org.javai.springai.actions.sql.Query;
-import org.javai.springai.actions.sql.QueryFactory;
-import org.javai.springai.actions.sql.QueryValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

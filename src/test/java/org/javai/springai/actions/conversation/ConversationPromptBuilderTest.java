@@ -3,8 +3,6 @@ package org.javai.springai.actions.conversation;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.conversation.ConversationPromptBuilder;
-import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.plan.PlanStep;
 import org.junit.jupiter.api.Test;
 

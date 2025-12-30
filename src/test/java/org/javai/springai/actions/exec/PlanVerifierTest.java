@@ -5,7 +5,6 @@ import java.util.List;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.bind.ActionRegistry;
-import org.javai.springai.actions.exec.PlanVerifier;
 import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStep;
 import org.junit.jupiter.api.BeforeEach;

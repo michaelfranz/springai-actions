@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Locale;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.bind.ActionPromptContributor;
-import org.javai.springai.actions.bind.ActionRegistry;
 import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.Test;
 

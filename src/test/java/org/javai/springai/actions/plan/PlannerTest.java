@@ -2,13 +2,6 @@ package org.javai.springai.actions.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.javai.springai.actions.api.Action;
-import org.javai.springai.actions.plan.Plan;
-import org.javai.springai.actions.plan.PlanFormulationResult;
-import org.javai.springai.actions.plan.PlanStatus;
-import org.javai.springai.actions.plan.PlanStep;
-import org.javai.springai.actions.plan.Planner;
-import org.javai.springai.actions.plan.PlannerOptions;
-import org.javai.springai.actions.plan.PromptPreview;
 import org.javai.springai.actions.prompt.InMemorySqlCatalog;
 import org.javai.springai.actions.prompt.SqlCatalogContextContributor;
 import org.javai.springai.actions.sql.Query;

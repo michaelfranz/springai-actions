@@ -1,14 +1,8 @@
 package org.javai.springai.actions.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Map;
-import org.javai.springai.actions.plan.JsonPlan;
-import org.javai.springai.actions.plan.JsonPlanStep;
-import org.javai.springai.actions.plan.Plan;
-import org.javai.springai.actions.plan.PlanStatus;
-import org.javai.springai.actions.plan.PlanStep;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

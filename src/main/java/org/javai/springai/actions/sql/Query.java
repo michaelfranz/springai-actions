@@ -1,6 +1,6 @@
 package org.javai.springai.actions.sql;
 
-import java.util.List;
+import java.util.Set;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -115,7 +115,7 @@ public record Query(Select select, SqlCatalog catalog) {
 	private static void validateSchemaReferences(Select select, SqlCatalog catalog) {
 		TablesNamesFinder tablesFinder = new TablesNamesFinder();
 		// Cast to Statement to resolve method ambiguity in JSqlParser
-		List<String> tables = tablesFinder.getTableList((Statement) select);
+		Set<String> tables = tablesFinder.getTables((Statement) select);
 
 		for (String table : tables) {
 			// Handle potential aliases (e.g., "orders o" -> "orders")
