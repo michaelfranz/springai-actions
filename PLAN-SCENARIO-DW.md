@@ -324,16 +324,20 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 | ID | Task | Status | Completed |
 |----|------|--------|-----------|
-| 2.1 | Add test for large schema (15+ tables, 100+ columns) | 🔲 | — |
-| 2.2 | Add test for complex constraints (composite FKs, check constraints) | 🔲 | — |
-| 2.3 | Add test for ambiguous column names across tables | 🔲 | — |
-| 2.4 | Add star schema JOIN pattern tests (fact-to-dimension) | 🔲 | — |
-| 2.5 | Add multi-dimension JOIN tests | 🔲 | — |
-| 2.6 | Add aggregation tests (SUM, COUNT, GROUP BY, HAVING) | 🔲 | — |
-| 2.7 | Add time intelligence tests (date ranges, period comparison) | 🔲 | — |
-| 2.8 | Add error handling tests (non-existent tables/columns) | 🔲 | — |
-| 2.9 | Add security tests (DDL/DML rejection, injection attempts) | 🔲 | — |
-| 2.10 | Enhance `Query` type with column-level validation | 🔲 | — |
+| 2.1 | Add test for large schema (15+ tables, 100+ columns) | ✅ | 2024-12-30 |
+| 2.2 | Add test for complex constraints (composite FKs, check constraints) | ✅ | 2024-12-30 |
+| 2.3 | Add test for ambiguous column names across tables | ✅ | 2024-12-30 |
+| 2.4 | Add star schema JOIN pattern tests (fact-to-dimension) | ✅ | 2024-12-30 |
+| 2.5 | Add multi-dimension JOIN tests | ✅ | 2024-12-30 |
+| 2.6 | Add aggregation tests (SUM, COUNT, GROUP BY, HAVING) | ✅ | 2024-12-30 |
+| 2.7 | Add time intelligence tests (date ranges, period comparison) | ✅ | 2024-12-30 |
+| 2.8 | Add error handling tests (non-existent tables/columns) | ✅ | 2024-12-30 |
+| 2.9 | Add security tests (DDL/DML rejection, injection attempts) | ✅ | 2024-12-30 |
+| 2.10 | Enhance `Query` type with column-level validation | ✅ | 2024-12-30 |
+
+**Notes**:
+- 2.4, 2.5: `joinFactToDimensionTable`, `joinMultipleDimensions`, `joinWithColumnSelection`, `joinWithFilterOnDimensionAttribute` tests in `DataWarehouseApplicationScenarioTest`
+- 2.10: Implemented as FWK-WEAK-002 with optional column validation and column synonyms
 
 ### Tasks — Tokenization (FWK-SQL-002)
 
