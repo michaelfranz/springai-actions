@@ -13,7 +13,10 @@ import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.javai.springai.actions.internal.resolve.DefaultPlanResolver;
+import org.javai.springai.actions.internal.resolve.ResolutionContext;
+import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.Query;
+import org.javai.springai.actions.sql.SqlCatalog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -260,6 +263,75 @@ class DefaultPlanResolverTest {
 		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
 		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+	}
+
+	@Test
+	void validatesQueryAgainstCatalogWhenProvided() {
+		// Create a catalog with known tables
+		SqlCatalog catalog = new InMemorySqlCatalog()
+				.addTable("orders", "Order table")
+				.addColumn("orders", "id", "PK", "integer", null, null)
+				.addTable("customers", "Customer table")
+				.addColumn("customers", "id", "PK", "integer", null, null);
+
+		// Query referencing a table NOT in the catalog
+		String sqlWithUnknownTable = "SELECT id FROM unknown_table";
+		
+		RawPlan jsonPlan = new RawPlan(
+				"",
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithUnknownTable)))
+		);
+
+		// Resolve with catalog context - should fail because table doesn't exist
+		ResolutionContext context = ResolutionContext.of(registry, catalog);
+		Plan result = resolver.resolve(jsonPlan, context);
+		
+		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+		PlanStep.ErrorStep errorStep = (PlanStep.ErrorStep) result.planSteps().getFirst();
+		assertThat(errorStep.reason()).contains("Unknown table");
+	}
+
+	@Test
+	void acceptsQueryWithValidTableReference() {
+		// Create a catalog with known tables
+		SqlCatalog catalog = new InMemorySqlCatalog()
+				.addTable("orders", "Order table")
+				.addColumn("orders", "id", "PK", "integer", null, null);
+
+		// Query referencing a table that IS in the catalog
+		String sqlWithKnownTable = "SELECT id FROM orders";
+		
+		RawPlan jsonPlan = new RawPlan(
+				"",
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithKnownTable)))
+		);
+
+		// Resolve with catalog context - should succeed
+		ResolutionContext context = ResolutionContext.of(registry, catalog);
+		Plan result = resolver.resolve(jsonPlan, context);
+		
+		assertThat(result.status()).isEqualTo(PlanStatus.READY);
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
+		Query query = (Query) step.arguments().getFirst().value();
+		assertThat(query.sqlString()).contains("orders");
+	}
+
+	@Test
+	void queryWithoutCatalogSkipsSchemaValidation() {
+		// Query referencing any table - no catalog provided
+		String sqlWithAnyTable = "SELECT id FROM any_table_name";
+		
+		RawPlan jsonPlan = new RawPlan(
+				"",
+				List.of(new RawPlanStep("runQuery", "Execute query", Map.of("query", sqlWithAnyTable)))
+		);
+
+		// Resolve without catalog (null) - should succeed (no schema validation)
+		ResolutionContext context = ResolutionContext.of(registry, null);
+		Plan result = resolver.resolve(jsonPlan, context);
+		
+		assertThat(result.status()).isEqualTo(PlanStatus.READY);
 	}
 
 	private static class SampleActions {

@@ -18,6 +18,7 @@ import org.javai.springai.actions.internal.parse.RawPlanStep;
 import org.javai.springai.actions.internal.plan.PlanArgument;
 import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.QueryValidationException;
+import org.javai.springai.actions.sql.SqlCatalog;
 
 /**
  * Default resolver that converts a RawPlan to a bound Plan.
@@ -28,6 +29,7 @@ import org.javai.springai.actions.sql.QueryValidationException;
  *   <li>Checks parameter counts match</li>
  *   <li>Binds actions to their method implementations</li>
  *   <li>Converts parameter values to their target types</li>
+ *   <li>Validates SQL queries against the schema catalog (if provided)</li>
  * </ul>
  * <p>
  * Resolution issues are captured as {@link PlanStep.ErrorStep} entries.
@@ -37,9 +39,9 @@ public class DefaultPlanResolver implements PlanResolver {
 	private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
 	@Override
-	public Plan resolve(RawPlan jsonPlan, ActionRegistry registry) {
-		if (jsonPlan == null || registry == null) {
-			return new Plan(null, List.of(new PlanStep.ErrorStep("RawPlan or registry is null")));
+	public Plan resolve(RawPlan jsonPlan, ResolutionContext context) {
+		if (jsonPlan == null || context == null || context.registry() == null) {
+			return new Plan(null, List.of(new PlanStep.ErrorStep("RawPlan or resolution context is null")));
 		}
 
 		if (jsonPlan.steps() == null || jsonPlan.steps().isEmpty()) {
@@ -47,18 +49,18 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		List<PlanStep> resolved = jsonPlan.steps().stream()
-				.map(step -> resolveStep(step, registry))
+				.map(step -> resolveStep(step, context))
 				.toList();
 		return new Plan(jsonPlan.message(), resolved);
 	}
 
-	private PlanStep resolveStep(RawPlanStep step, ActionRegistry registry) {
+	private PlanStep resolveStep(RawPlanStep step, ResolutionContext context) {
 		String actionId = step.actionId();
 		if (actionId == null || actionId.isBlank()) {
 			return new PlanStep.ErrorStep("Step has no actionId");
 		}
 
-		ActionBinding binding = registry.getActionBinding(actionId);
+		ActionBinding binding = context.registry().getActionBinding(actionId);
 		if (binding == null) {
 			return new PlanStep.ErrorStep("Unknown action id: " + actionId);
 		}
@@ -77,7 +79,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		List<PlanArgument> arguments = new ArrayList<>();
 		for (ActionParameterDescriptor param : params) {
 			Object raw = stepParams.get(param.name());
-			ConversionOutcome outcome = convert(raw, param, actionId);
+			ConversionOutcome outcome = convert(raw, param, actionId, context);
 			if (!outcome.success()) {
 				return new PlanStep.ErrorStep(outcome.errorMessage());
 			}
@@ -136,7 +138,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		return null;
 	}
 
-	private ConversionOutcome convert(Object raw, ActionParameterDescriptor param, String actionId) {
+	private ConversionOutcome convert(Object raw, ActionParameterDescriptor param, String actionId, ResolutionContext context) {
 		Class<?> targetType = resolveType(param.typeName());
 		if (targetType == null) {
 			return ConversionOutcome.failure(
@@ -150,7 +152,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		if (targetType.isArray()) {
-			return convertArray(raw, targetType.componentType(), param.dslId(), actionId, param.name());
+			return convertArray(raw, targetType.componentType(), param.dslId(), actionId, param.name(), context);
 		}
 
 		if (Collection.class.isAssignableFrom(targetType)) {
@@ -162,10 +164,10 @@ public class DefaultPlanResolver implements PlanResolver {
 			return ConversionOutcome.success(asList);
 		}
 
-		return convertScalar(raw, targetType, param.dslId(), actionId, param.name());
+		return convertScalar(raw, targetType, param.dslId(), actionId, param.name(), context);
 	}
 
-	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String dslId, String actionId, String paramName) {
+	private ConversionOutcome convertArray(Object raw, Class<?> componentType, String dslId, String actionId, String paramName, ResolutionContext context) {
 		Object[] elements = toObjectArray(raw);
 		if (elements == null) {
 			return ConversionOutcome.failure("Expected an array or collection value for parameter " + paramName);
@@ -173,7 +175,7 @@ public class DefaultPlanResolver implements PlanResolver {
 
 		Object array = Array.newInstance(componentType, elements.length);
 		for (int i = 0; i < elements.length; i++) {
-			ConversionOutcome converted = convertScalar(elements[i], componentType, dslId, actionId, paramName);
+			ConversionOutcome converted = convertScalar(elements[i], componentType, dslId, actionId, paramName, context);
 			if (!converted.success()) {
 				return converted;
 			}
@@ -182,10 +184,10 @@ public class DefaultPlanResolver implements PlanResolver {
 		return ConversionOutcome.success(array);
 	}
 
-	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName) {
-		// Handle SQL strings for Query targets
+	private ConversionOutcome convertScalar(Object raw, Class<?> targetType, String dslId, String actionId, String paramName, ResolutionContext context) {
+		// Handle SQL strings for Query targets - now with catalog for validation
 		if (raw instanceof String s && Query.class.isAssignableFrom(targetType)) {
-			return convertSqlString(s, paramName);
+			return convertSqlString(s, paramName, context.sqlCatalog());
 		}
 
 		Object normalized = normalizeRaw(raw, targetType);
@@ -223,9 +225,10 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 	}
 
-	private ConversionOutcome convertSqlString(String sql, String paramName) {
+	private ConversionOutcome convertSqlString(String sql, String paramName, SqlCatalog catalog) {
 		try {
-			Query query = Query.fromSql(sql);
+			// Pass catalog for schema validation (table/column references)
+			Query query = Query.fromSql(sql, catalog);
 			return ConversionOutcome.success(query);
 		} catch (QueryValidationException e) {
 			return ConversionOutcome.failure(

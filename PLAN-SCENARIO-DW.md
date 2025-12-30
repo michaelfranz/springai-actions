@@ -163,23 +163,18 @@ Transform natural language query requests into **executable SQL** that, in the b
 
 The following framework weaknesses have been exposed by analyzing the current data warehouse scenario implementation:
 
-#### FWK-WEAK-001: Catalog Not Used During Query Resolution (Critical)
+#### FWK-WEAK-001: Catalog Not Used During Query Resolution (Critical) — ✅ FIXED
 
 **Location**: `DefaultPlanResolver.convertSqlString()` (line 228)
 
 **Issue**: When the LLM returns SQL in a plan, the resolver calls `Query.fromSql(sql)` **without the catalog**, bypassing schema validation entirely.
 
-```java
-// Current code in DefaultPlanResolver:
-Query query = Query.fromSql(sql);  // No catalog passed!
-```
-
-**Impact**: Invalid table/column references are not caught at plan resolution time. The validation in `Query` that checks against the catalog is never invoked during the plan-to-execution pipeline.
-
-**Recommended Fix**: 
-1. Pass catalog through resolution context, OR
-2. Store catalog reference in a parameter-level annotation that resolver can access, OR
-3. Make `SqlCatalog` available via a global/contextual registry
+**Resolution (2024-12-30)**:
+1. Created `ResolutionContext` record bundling `ActionRegistry` + `SqlCatalog`
+2. Updated `PlanResolver.resolve()` to accept `ResolutionContext`
+3. Updated `DefaultPlanResolver.convertSqlString()` to pass catalog to `Query.fromSql()`
+4. Updated `Planner.parseRawPlan()` to extract catalog from `promptContext` and pass to resolver
+5. Added 3 tests validating schema validation during resolution
 
 ---
 
@@ -294,10 +289,10 @@ if (!catalog.tables().containsKey(tableName)) {
 
 #### Weakness Summary
 
-| ID | Severity | Area | Effort to Fix |
-|----|----------|------|---------------|
-| FWK-WEAK-001 | **Critical** | Resolution | Medium |
-| FWK-WEAK-002 | High | Validation | Medium |
+| ID | Severity | Area | Effort to Fix | Status |
+|----|----------|------|---------------|--------|
+| FWK-WEAK-001 | **Critical** | Resolution | Medium | ✅ Fixed |
+| FWK-WEAK-002 | High | Validation | Medium | 🔲 |
 | FWK-WEAK-003 | Medium | Reliability | High |
 | FWK-WEAK-004 | Medium | Testing | Low |
 | FWK-WEAK-005 | Medium | Testing | Low |
@@ -347,7 +342,7 @@ if (!catalog.tables().containsKey(tableName)) {
 | 2.13 | Create `TokenizedSqlCatalogContextContributor` | 🔲 | — |
 | 2.14 | Implement de-tokenization in query post-processing | 🔲 | — |
 | 2.15 | Add `tokenizedSql()` method to `Query` for debugging | 🔲 | — |
-| 2.16 | Fix FWK-WEAK-001: Pass catalog during Query creation in resolver | 🔲 | — |
+| 2.16 | Fix FWK-WEAK-001: Pass catalog during Query creation in resolver | ✅ | 2024-12-30 |
 | 2.17 | Handle table aliases during de-tokenization | 🔲 | — |
 | 2.18 | Add tokenization tests to data warehouse scenario | 🔲 | — |
 
