@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import java.util.Map;
+import org.javai.springai.actions.PromptContributor;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.internal.bind.ActionPromptContributor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
-import org.javai.springai.actions.PromptContributor;
 
 /**
  * Builds system prompts for the LLM containing action specifications.

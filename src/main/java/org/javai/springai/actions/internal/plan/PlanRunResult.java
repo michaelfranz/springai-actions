@@ -1,8 +1,8 @@
 package org.javai.springai.actions.internal.plan;
 
-import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanStatus;
+import org.javai.springai.actions.api.ActionContext;
 
 /**
  * Aggregate result for plan + execute flows.

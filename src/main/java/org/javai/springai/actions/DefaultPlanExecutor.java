@@ -10,9 +10,6 @@ import org.javai.springai.actions.internal.exec.StepExecutionResult;
 import org.javai.springai.actions.internal.instrument.InvocationEmitter;
 import org.javai.springai.actions.internal.instrument.InvocationEventType;
 import org.javai.springai.actions.internal.instrument.InvocationKind;
-import org.javai.springai.actions.Plan;
-import org.javai.springai.actions.PlanStatus;
-import org.javai.springai.actions.PlanStep;
 
 /**
  * Default sequential executor for plans.

@@ -1,8 +1,8 @@
 package org.javai.springai.actions.internal.resolve;
 
+import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
-import org.javai.springai.actions.Plan;
 
 /**
  * Resolves a parsed JSON plan into a bound Plan ready for execution.

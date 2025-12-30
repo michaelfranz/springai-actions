@@ -1,7 +1,5 @@
 package org.javai.springai.actions;
 
-import org.javai.springai.actions.Plan;
-
 /**
  * Executes a bound plan.
  * <p>

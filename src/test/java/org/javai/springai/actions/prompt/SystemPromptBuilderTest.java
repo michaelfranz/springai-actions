@@ -3,7 +3,6 @@ package org.javai.springai.actions.prompt;
 import static org.assertj.core.api.Assertions.assertThat;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.prompt.SystemPromptBuilder;

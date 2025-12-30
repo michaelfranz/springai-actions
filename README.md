@@ -1,71 +1,270 @@
-Spring AI Actions
-=================
+# Spring AI Actions
 
-Purpose
--------
-- Framework for building Java agentic applications where LLM calls are side-effect free. The model returns a declarative plan; the framework executes it and reports any missing pieces instead of making direct world changes during inference.
-- Uses S-expression–based DSLs (SXL) for plans, SQL, and other artifacts to communicate complex structures compactly, reducing token usage versus JSON while preserving full expressiveness.
-- Focused on robustness: if a full plan cannot be produced, the response includes structured diagnostics so callers or users can address gaps and retry safely.
+A framework for building robust, side-effect-free agentic applications with Spring AI. The LLM returns declarative plans; the framework validates and executes them safely.
 
-Intended application
---------------------
-- Targets data scientists and engineers in the auto industry who need to statistically analyze warehouse data for FDX modeling.
-- Supports rapid requests for common statistical work (e.g., SPC readiness checks, SPC control charts) and arbitrary SQL SELECTs against a star-schema warehouse.
-- Provides both a traditional “platform” UI and a chat interface; in chat, the LLM is always instructed to respond with a Plan (never execute directly).
+## Key Features
 
-Why S-expressions here
-----------------------
-- Compact: smaller prompts/responses than JSON for nested plans and structured queries, lowering token costs and latency.
-- Structured: explicit grammar-backed DSLs reduce ambiguity and help contain hallucinations by constraining allowed symbols.
-- Composable: plan steps can embed other DSL fragments (e.g., SQL) without bloating specs.
-- Efficient parsing: simple LL(1)-style parsing enables fast conversion into typed Java objects.
+- **Plan/Execution Separation**: LLM produces a structured plan; your code decides when and how to execute it
+- **Type-Safe Actions**: Define actions with annotations; the framework handles parameter binding and validation
+- **Conversation Support**: Built-in multi-turn conversation management with state tracking
+- **Structured Error Handling**: Missing parameters and errors are surfaced as structured data, not exceptions
+- **Clean API**: Core types (`Plan`, `PlanStep`, `Planner`, `PlanExecutor`) in one top-level package
 
-Core ideas
-----------
-- Plan/execution separation: LLM produces a plan; runtime executes it and enforces side-effect boundaries.
-- Grammar-backed guidance: universal SXL guidance plus domain grammars (plan, SQL, etc.) keep outputs well-formed across models.
-- Tokenization pipeline: optional schema/PII tokenization and detokenization protect sensitive data while keeping LLM outputs valid and reversible.
-- Chain-of-responsibility pipeline: pluggable layers (validation, PII scan, tokenization, prompt assembly, LLM call, detokenization) configured per deployment.
-- Typed results: plans and nested DSL outputs are instantiated into strongly typed Java objects for reliability and downstream execution.
+## Quick Start
 
-Project layout (high level)
----------------------------
-- `src/main/java/org/javai/springai/` — framework code for actions, DSLs, SXL parsing/guidance, pipeline, tokenization.
-- `src/main/resources/` — SXL grammars and prompt templates (plan, SQL, universal guidance).
-- `src/test/java/` — tests; use AssertJ `assertThat` in new tests per project style.
-- Design docs: `action-plan.md`, `PLAN-*`, `TOKENIZATION_AND_PIPELINE_DESIGN.md`, `TOKENIZATION_IMPLEMENTATION_PLAN.md`, `scalability.md`, etc.
+### 1. Define Actions
 
-Scenarios (examples, not shipped apps)
---------------------------------------
-- `DataWarehouseApplicationScenarioTest`: simulates a user asking for a SQL SELECT plan against a warehouse (demonstrates plan/execution separation).
-- `StatsApplicationScenarioTest`: simulates predefined statistical tests whose DAO inputs would drive subsequent queries.
-- `ProtocolNotebookScenarioTest`: simulates selecting a statistical protocol (via a tool that lists protocol files) and planning a Marimo notebook that follows it.
-- These scenarios illustrate how to exercise the framework for real-world patterns without embedding a full application in the repo.
+```java
+public class ShoppingActions {
 
-Quick start
------------
-- Build & test: `./gradlew test`
-- Run (Spring Boot): `./gradlew bootRun`
-- Explore prompts/grammars: see `src/main/resources/META-INF/` for SXL meta-grammars and `build/prompt-samples/` for sample outputs.
+    @Action(description = "Add a product and quantity to the basket")
+    public void addItem(
+            @ActionParam(description = "Product name") String product,
+            @ActionParam(description = "Quantity") int quantity) {
+        // Implementation
+    }
 
-Conceptual workflow
--------------------
-1) User input enters the processing pipeline.  
-2) Optional validation + PII scanning + schema tokenization run via pluggable layers.  
-3) System prompt is assembled using SXL grammars and (optionally) tokenized schema hints.  
-4) LLM returns an S-expression plan/SQL; the framework parses into typed objects.  
-5) Detokenization (if enabled) restores real identifiers; execution engine runs the plan.  
-6) On incomplete planning, the framework returns structured diagnostics instead of acting.
+    @Action(description = "Checkout the basket and end the session")
+    public void checkout() {
+        // Implementation
+    }
+}
+```
 
-Roadmap highlights
-------------------
-- Production-grade token mapping stores, versioning, and audit trails.
-- End-to-end tokenized SQL flow with detokenizing visitors.
-- Extended guardrails (hallucination risk scoring, injection detection) as additional pipeline layers.
+### 2. Configure the Planner
 
-Contributing
-------------
-- Keep LLM interactions side-effect free; all actions flow from validated plans.
-- Prefer S-expression DSLs over ad-hoc JSON for structured exchanges.
-- Follow existing style in tests with AssertJ `assertThat`.
+```java
+// Create a persona for your assistant
+PersonaSpec persona = PersonaSpec.builder()
+        .name("shopping-assistant")
+        .role("Helpful shopping assistant")
+        .principles(List.of("Confirm quantities before adding items"))
+        .build();
 
+// Build the planner with Spring AI ChatClient
+Planner planner = Planner.builder()
+        .withChatClient(chatClient)
+        .persona(persona)
+        .actions(new ShoppingActions())
+        .build();
+```
+
+### 3. Formulate and Execute Plans
+
+```java
+// Create a conversation manager for multi-turn support
+ConversationManager manager = new ConversationManager(
+        planner, 
+        new InMemoryConversationStateStore()
+);
+
+// Process user input
+ConversationTurnResult turn = manager.converse(
+        "add 6 bottles of Coke Zero", 
+        "session-123"
+);
+
+Plan plan = turn.plan();
+
+// Check plan status before execution
+switch (plan.status()) {
+    case READY -> {
+        PlanExecutionResult result = new DefaultPlanExecutor().execute(plan);
+        // Handle success
+    }
+    case PENDING -> {
+        // Ask user for missing information
+        List<PlanStep.PendingParam> missing = plan.pendingParams();
+    }
+    case ERROR -> {
+        // Handle error gracefully
+        PlanStep.ErrorStep error = (PlanStep.ErrorStep) plan.planSteps().getFirst();
+    }
+}
+```
+
+## Core Concepts
+
+### Plans and Steps
+
+A `Plan` contains a list of `PlanStep` instances. Each step can be:
+
+| Step Type | Description |
+|-----------|-------------|
+| `ActionStep` | Fully bound action ready for execution |
+| `PendingActionStep` | Action missing required parameters |
+| `ErrorStep` | Error encountered during planning |
+
+### Plan Status
+
+| Status | Meaning |
+|--------|---------|
+| `READY` | All steps are bound and executable |
+| `PENDING` | One or more steps need additional information |
+| `ERROR` | Plan contains errors and cannot be executed |
+
+### Actions and Parameters
+
+Actions are annotated methods that the LLM can include in plans:
+
+```java
+@Action(
+    description = "Send email to customer",
+    contextKey = "emailResult"  // Store return value in context
+)
+public String sendEmail(
+        @ActionParam(description = "Recipient email") String to,
+        @ActionParam(description = "Email body") String body,
+        ActionContext context) {  // Optional: access execution context
+    // ...
+}
+```
+
+### ActionContext
+
+Share data between action executions within a plan:
+
+```java
+@Action(description = "Fetch user profile")
+public UserProfile getProfile(String userId, ActionContext context) {
+    UserProfile profile = userService.find(userId);
+    context.put("profile", profile);  // Available to subsequent actions
+    return profile;
+}
+
+@Action(description = "Send personalized greeting")
+public void greet(@FromContext("profile") UserProfile profile) {
+    // profile injected from context
+}
+```
+
+## Package Structure
+
+```
+org.javai.springai.actions/
+├── Plan.java              ← Immutable plan with steps
+├── PlanStep.java          ← ActionStep, PendingActionStep, ErrorStep
+├── PlanStatus.java        ← READY, PENDING, ERROR
+├── Planner.java           ← Fluent builder for LLM planning
+├── PlanExecutor.java      ← Interface for plan execution
+├── DefaultPlanExecutor.java
+├── PlanExecutionResult.java
+├── PersonaSpec.java       ← Define assistant personality
+├── PromptContributor.java ← Extend system prompts
+│
+├── api/                   ← Annotations
+│   ├── @Action
+│   ├── @ActionParam
+│   ├── @ContextKey
+│   ├── @FromContext
+│   └── ActionContext
+│
+├── conversation/          ← Multi-turn support
+│   ├── ConversationManager.java
+│   ├── ConversationState.java
+│   └── ConversationTurnResult.java
+│
+├── sql/                   ← SQL query support
+│   └── Query.java
+│
+└── internal/              ← Implementation details (not public API)
+```
+
+## Conversation Management
+
+The framework tracks conversation state across turns, enabling:
+
+- **Context accumulation**: Previously provided information is preserved
+- **Pending parameter resolution**: Users can supply missing info in follow-up messages
+- **Session isolation**: Each session ID maintains independent state
+
+```java
+// Turn 1: Missing quantity
+ConversationTurnResult turn1 = manager.converse("add coke zero", sessionId);
+// turn1.plan().status() == PENDING
+// turn1.pendingParams() contains "quantity"
+
+// Turn 2: User provides missing info
+ConversationTurnResult turn2 = manager.converse("make it 6 bottles", sessionId);
+// turn2.plan().status() == READY
+// Framework merged context from previous turn
+```
+
+## Extending the System Prompt
+
+Add custom context to the system prompt:
+
+```java
+Planner planner = Planner.builder()
+        .withChatClient(chatClient)
+        .addPromptContributor(context -> 
+            Optional.of("Current date: " + LocalDate.now()))
+        .actions(myActions)
+        .build();
+```
+
+## SQL Support
+
+For data warehouse applications, the framework includes SQL query support:
+
+```java
+@Action(description = "Execute a SQL query against the warehouse")
+public ResultSet executeQuery(Query query) {
+    return jdbcTemplate.query(query.sql(), ...);
+}
+```
+
+## Build & Test
+
+```bash
+# Build and run tests
+./gradlew test
+
+# Run with Spring Boot
+./gradlew bootRun
+```
+
+### Integration Tests
+
+LLM integration tests require environment variables:
+
+```bash
+export OPENAI_API_KEY=your-key
+export RUN_LLM_TESTS=true
+./gradlew test
+```
+
+## Example Scenarios
+
+The `src/test/java/org/javai/springai/scenarios/` directory contains complete examples:
+
+| Scenario | Description |
+|----------|-------------|
+| `shopping/` | Shopping cart with add/remove/checkout actions |
+| `data_warehouse/` | SQL queries against a star schema |
+| `stats_app/` | Statistical analysis workflows |
+| `protocol/` | Protocol-driven notebook generation |
+
+## Design Principles
+
+1. **Side-Effect Free Planning**: LLM calls never modify state directly
+2. **Structured Responses**: Errors and missing info are data, not exceptions
+3. **Type Safety**: Actions and parameters are strongly typed
+4. **Composability**: Mix actions, tools, and custom prompt contributors
+5. **Testability**: Plans can be inspected before execution
+
+## Contributing
+
+- Use AssertJ `assertThat` in tests
+- Keep LLM interactions side-effect free
+- Follow existing code style and patterns
+
+## License
+
+Licensed under the Apache License, Version 2.0 (Apache-2.0). See `LICENSE`.
+
+### Attribution / credits
+
+If you redistribute a product that includes this framework (source or binary), you must retain the attribution notices in `NOTICE` as required by Apache-2.0.
+Suggested credit line:
+> Includes Spring AI Actions by Mike Mannion.
