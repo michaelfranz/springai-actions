@@ -7,11 +7,8 @@ import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.javai.springai.actions.exec.DefaultPlanExecutor;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
 import org.javai.springai.actions.exec.PlanExecutionResult;
-import org.javai.springai.actions.exec.PlanResolver;
-import org.javai.springai.actions.exec.ResolvedPlan;
-import org.javai.springai.actions.exec.ResolvedStep;
+import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
 import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.plan.Planner;
@@ -30,7 +27,6 @@ public class ShoppingApplicationScenarioTest {
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	Planner planner;
-	PlanResolver resolver;
 	DefaultPlanExecutor executor;
 	ConversationManager conversationManager;
 	ShoppingActions shoppingActions;
@@ -81,24 +77,23 @@ public class ShoppingApplicationScenarioTest {
 				.tools(specialOfferTool)
 				.actions(shoppingActions)
 				.build();
-		resolver = new DefaultPlanResolver();
 		executor = new DefaultPlanExecutor();
-		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
+		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
 	@Test
 	void startSessionAndOffersTest() {
 		String request = "I want to start a new shopping basket";
 		ConversationTurnResult turn = conversationManager.converse(request, "display-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		Plan plan = turn.plan();
 
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(shoppingActions.startSessionInvoked()).isTrue();
 		assertThat(shoppingActions.presentOffersInvoked()).isTrue();
@@ -109,14 +104,14 @@ public class ShoppingApplicationScenarioTest {
 	void addCokeZeroTest() {
 		String request = "add 6 bottles of Coke Zero to my basket";
 		ConversationTurnResult turn = conversationManager.converse(request, "export-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(shoppingActions.addItemInvoked()).isTrue();
 		assertThat(shoppingActions.lastAddItem()).isNotNull();
@@ -128,12 +123,12 @@ public class ShoppingApplicationScenarioTest {
 	void addSnacksForTenTest() {
 		String request = "add crisps and nuts for around 10 people";
 		ConversationTurnResult turn = conversationManager.converse(request, "snacks-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(shoppingActions.addPartySnacksInvoked()).isTrue();
 	}
@@ -143,12 +138,12 @@ public class ShoppingApplicationScenarioTest {
 		// No action supports arbitrary vehicle maintenance
 		String request = "change the oil in my car";
 		ConversationTurnResult turn = conversationManager.converse(request, "anova-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ErrorStep.class);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	@Test
@@ -156,9 +151,9 @@ public class ShoppingApplicationScenarioTest {
 		// Add item requires quantity
 		String request = "add coke zero";
 		ConversationTurnResult turn = conversationManager.converse(request, "pending-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.PENDING);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(turn.pendingParams()).isNotEmpty();
 		assertThat(turn.pendingParams().stream().map(PlanStep.PendingParam::name))
 				.anyMatch(name -> name.equals("quantity") || name.equals("product"));
@@ -171,19 +166,19 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: missing quantity -> expect pending
 		ConversationTurnResult firstTurn = conversationManager
 				.converse("add coke zero", sessionId);
-		ResolvedPlan firstResolved = firstTurn.resolvedPlan();
-		assertThat(firstResolved).isNotNull();
-		assertThat(firstResolved.status()).isEqualTo(PlanStatus.PENDING);
+		Plan firstPlan = firstTurn.plan();
+		assertThat(firstPlan).isNotNull();
+		assertThat(firstPlan.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(firstTurn.pendingParams()).isNotEmpty();
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
 		// the system merges context and produces an executable step (documented scenario)
 		ConversationTurnResult secondTurn = conversationManager
 				.converse("add 4 bottles", sessionId);
-		ResolvedPlan secondPlan = secondTurn.resolvedPlan();
+		Plan secondPlan = secondTurn.plan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending
-		assertThat(secondPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(secondPlan);
 		assertThat(executed.success()).isTrue();
@@ -197,22 +192,22 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start session
 		ConversationTurnResult startTurn = conversationManager
 				.converse("I want to start shopping", sessionId);
-		executor.execute(startTurn.resolvedPlan());
+		executor.execute(startTurn.plan());
 
 		// Turn 2: Add an item
 		ConversationTurnResult addTurn = conversationManager
 				.converse("add 3 bottles of Coke Zero", sessionId);
-		executor.execute(addTurn.resolvedPlan());
+		executor.execute(addTurn.plan());
 
 		// Turn 3: View basket
 		ConversationTurnResult viewTurn = conversationManager
 				.converse("show me my basket", sessionId);
-		ResolvedPlan viewPlan = viewTurn.resolvedPlan();
+		Plan viewPlan = viewTurn.plan();
 
 		assertThat(viewPlan).isNotNull();
 		assertThat(viewPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(viewPlan.steps()).hasSize(1);
-		assertThat(viewPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(viewPlan.planSteps()).hasSize(1);
+		assertThat(viewPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(viewPlan);
 		assertThat(executed.success()).isTrue();
@@ -227,17 +222,17 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start session
 		ConversationTurnResult startTurn = conversationManager
 				.converse("start shopping", sessionId);
-		executor.execute(startTurn.resolvedPlan());
+		executor.execute(startTurn.plan());
 
 		// Turn 2: Add item
 		ConversationTurnResult addTurn = conversationManager
 				.converse("add 2 bottles of Coke Zero", sessionId);
-		executor.execute(addTurn.resolvedPlan());
+		executor.execute(addTurn.plan());
 
 		// Turn 3: Remove the item
 		ConversationTurnResult removeTurn = conversationManager
 				.converse("remove Coke Zero from my basket", sessionId);
-		ResolvedPlan removePlan = removeTurn.resolvedPlan();
+		Plan removePlan = removeTurn.plan();
 
 		assertThat(removePlan).isNotNull();
 		assertThat(removePlan.status()).isEqualTo(PlanStatus.READY);
@@ -254,22 +249,22 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start
 		ConversationTurnResult turn1 = conversationManager
 				.converse("start shopping", sessionId);
-		executor.execute(turn1.resolvedPlan());
+		executor.execute(turn1.plan());
 
 		// Turn 2: Add first item
 		ConversationTurnResult turn2 = conversationManager
 				.converse("add 2 bottles of Coke Zero", sessionId);
-		executor.execute(turn2.resolvedPlan());
+		executor.execute(turn2.plan());
 
 		// Turn 3: Add second item (different session context check)
 		ConversationTurnResult turn3 = conversationManager
 				.converse("add crisps and nuts for 5 people", sessionId);
-		executor.execute(turn3.resolvedPlan());
+		executor.execute(turn3.plan());
 
 		// Turn 4: View basket - should have BOTH items
 		ConversationTurnResult turn4 = conversationManager
 				.converse("what's in my basket", sessionId);
-		executor.execute(turn4.resolvedPlan());
+		executor.execute(turn4.plan());
 
 		Map<String, Integer> basket = shoppingActions.getBasketState();
 		assertThat(basket).containsEntry("Coke Zero", 2);
@@ -284,23 +279,23 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start
 		ConversationTurnResult turn1 = conversationManager
 				.converse("start shopping", sessionId);
-		executor.execute(turn1.resolvedPlan());
+		executor.execute(turn1.plan());
 
 		// Turn 2: Add item
 		ConversationTurnResult turn2 = conversationManager
 				.converse("add 3 bottles of Coke Zero", sessionId);
-		executor.execute(turn2.resolvedPlan());
+		executor.execute(turn2.plan());
 
 		// Turn 3: Compute total
 		ConversationTurnResult turn3 = conversationManager
 				.converse("what's the total", sessionId);
-		executor.execute(turn3.resolvedPlan());
+		executor.execute(turn3.plan());
 		assertThat(shoppingActions.computeTotalInvoked()).isTrue();
 
 		// Turn 4: Checkout
 		ConversationTurnResult turn4 = conversationManager
 				.converse("I'm ready to checkout", sessionId);
-		ResolvedPlan checkoutPlan = turn4.resolvedPlan();
+		Plan checkoutPlan = turn4.plan();
 
 		assertThat(checkoutPlan).isNotNull();
 		assertThat(checkoutPlan.status()).isEqualTo(PlanStatus.READY);
@@ -316,12 +311,12 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start
 		ConversationTurnResult turn1 = conversationManager
 				.converse("start shopping", sessionId);
-		executor.execute(turn1.resolvedPlan());
+		executor.execute(turn1.plan());
 
 		// Turn 2: Try to add out-of-stock item (UnavailableProduct is not in inventory)
 		ConversationTurnResult turn2 = conversationManager
 				.converse("add 10 bottles of UnavailableProduct", sessionId);
-		ResolvedPlan plan2 = turn2.resolvedPlan();
+		Plan plan2 = turn2.plan();
 
 		// System should either:
 		// - Reject with ERROR status, OR
@@ -337,28 +332,28 @@ public class ShoppingApplicationScenarioTest {
 		// Turn 1: Start
 		ConversationTurnResult turn1 = conversationManager
 				.converse("help me shop for a dinner party", sessionId);
-		executor.execute(turn1.resolvedPlan());
+		executor.execute(turn1.plan());
 
 		// Turn 2: Add items
 		ConversationTurnResult turn2 = conversationManager
 				.converse("add crisps and nuts for 8 people", sessionId);
-		executor.execute(turn2.resolvedPlan());
+		executor.execute(turn2.plan());
 
 		// Turn 3: View basket
 		ConversationTurnResult turn3 = conversationManager
 				.converse("show me what I have", sessionId);
-		executor.execute(turn3.resolvedPlan());
+		executor.execute(turn3.plan());
 
 		// Turn 4: Checkout
 		ConversationTurnResult turn4 = conversationManager
 				.converse("let's checkout", sessionId);
-		executor.execute(turn4.resolvedPlan());
+		executor.execute(turn4.plan());
 		assertThat(shoppingActions.checkoutInvoked()).isTrue();
 
 		// Turn 5: Request feedback
 		ConversationTurnResult turn5 = conversationManager
 				.converse("how was your experience", sessionId);
-		ResolvedPlan feedbackPlan = turn5.resolvedPlan();
+		Plan feedbackPlan = turn5.plan();
 
 		assertThat(feedbackPlan).isNotNull();
 		PlanExecutionResult executed = executor.execute(feedbackPlan);
@@ -366,4 +361,3 @@ public class ShoppingApplicationScenarioTest {
 		assertThat(shoppingActions.requestFeedbackInvoked()).isTrue();
 	}
 }
-

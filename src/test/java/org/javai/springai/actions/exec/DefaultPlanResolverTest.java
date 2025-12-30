@@ -7,6 +7,8 @@ import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.bind.ActionRegistry;
+import org.javai.springai.actions.plan.JsonPlan;
+import org.javai.springai.actions.plan.JsonPlanStep;
 import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
 import org.javai.springai.actions.plan.PlanStep;
@@ -32,16 +34,16 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void resolvesHappyPath() {
-		Plan plan = new Plan(
-				"",
-				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", 3 }))
+		JsonPlan jsonPlan = new JsonPlan(
+				"greeting plan",
+				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", 3)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 
-		assertThat(result.steps()).hasSize(1);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		assertThat(result.planSteps()).hasSize(1);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.binding().id()).isEqualTo("greet");
 		assertThat(step.arguments()).hasSize(2);
 		assertThat(step.arguments().get(0).value()).isEqualTo("Bob");
@@ -50,49 +52,49 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnUnknownAction() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "unknownAction", new Object[] {}))
+				List.of(new JsonPlanStep("unknownAction", "Unknown", Map.of()))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(result.steps()).hasSize(1);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
+		assertThat(result.planSteps()).hasSize(1);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	@Test
 	void failsOnArityMismatch() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob" }))
+				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob")))  // missing 'times'
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
 	}
 
 	@Test
 	void failsOnTypeConversionError() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "greet", new Object[] { "Bob", "not-a-number" }))
+				List.of(new JsonPlanStep("greet", "Say hello", Map.of("name", "Bob", "times", "not-a-number")))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
 	}
 
 	@Test
 	void resolvesListParameterValue() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "handleList", new Object[] { List.of("A12345", "A3145") }))
+				List.of(new JsonPlanStep("handleList", "Handle bundles", Map.of("bundleIds", List.of("A12345", "A3145"))))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.arguments()).hasSize(1);
 		assertThat(step.arguments().getFirst().value()).isInstanceOf(List.class);
 		assertThat(step.arguments().getFirst().value())
@@ -102,71 +104,57 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsListToArrayParameterValue() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "handleArray", new Object[] { List.of("A12345", "A3145", "B4323") }))
+				List.of(new JsonPlanStep("handleArray", "Handle array", Map.of("bundleIds", List.of("A12345", "A3145", "B4323"))))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		Object value = step.arguments().getFirst().value();
 		assertThat(value).isInstanceOf(String[].class);
 		assertThat((String[]) value).containsExactly("A12345", "A3145", "B4323");
 	}
 
 	@Test
-	void failsOnPendingStep() {
-		Plan plan = new Plan(
-				"",
-				List.of(new PlanStep.PendingActionStep("", "greet",
-						new PlanStep.PendingParam[] { new PlanStep.PendingParam("name", "missing name") },
-						Map.of()))
-		);
-
-		ResolvedPlan result = resolver.resolve(plan, registry);
-		assertThat(result.status()).isEqualTo(PlanStatus.PENDING);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.PendingActionStep.class);
-	}
-
-	@Test
 	void convertsStringToNumericTypes() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "useNumbers", new Object[] { "3.14", "42" }))
+				List.of(new JsonPlanStep("useNumbers", "Use numbers", Map.of("amount", "3.14", "count", "42")))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.arguments().get(0).value()).isInstanceOf(Double.class).isEqualTo(3.14d);
 		assertThat(step.arguments().get(1).value()).isInstanceOf(Integer.class).isEqualTo(42);
 	}
 
 	@Test
 	void convertsStringToEnum() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "usePriority", new Object[] { "HIGH" }))
+				List.of(new JsonPlanStep("usePriority", "Set priority", Map.of("priority", "HIGH")))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.arguments().getFirst().value()).isInstanceOf(SampleActions.Priority.class)
 				.isEqualTo(SampleActions.Priority.HIGH);
 	}
 
 	@Test
 	void convertsStringsToEnumArray() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "usePriorityArray", new Object[] { List.of("LOW", "MEDIUM") }))
+				List.of(new JsonPlanStep("usePriorityArray", "Set priorities", Map.of("priorities", List.of("LOW", "MEDIUM"))))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		Object value = step.arguments().getFirst().value();
 		assertThat(value).isInstanceOf(SampleActions.Priority[].class);
 		assertThat((SampleActions.Priority[]) value).containsExactly(SampleActions.Priority.LOW, SampleActions.Priority.MEDIUM);
@@ -174,29 +162,29 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnInvalidEnumValue() {
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "usePriority", new Object[] { "BLUE" }))
+				List.of(new JsonPlanStep("usePriority", "Set priority", Map.of("priority", "BLUE")))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	@Test
 	void convertsMapToRecordWithNestedPeriod() {
 		Map<String, Object> period = Map.of("start", "2024-01-01", "end", "2024-01-31");
 		Map<String, Object> payload = Map.of("customer_name", "Mike", "period", period);
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "useOrderValue", new Object[] { payload }))
+				List.of(new JsonPlanStep("useOrderValue", "Calculate order value", Map.of("orderValueQuery", payload)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
 
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.arguments()).hasSize(1);
 		assertThat(step.arguments().getFirst().value()).isInstanceOf(SampleActions.OrderValueQuery.class);
 
@@ -208,43 +196,38 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void convertsSqlStringToQuery() {
-		// This test verifies that when a JSON plan contains a SQL string for a Query parameter,
-		// the resolver correctly parses it into a Query object.
-		
 		String sqlString = "SELECT customer_name FROM customers WHERE id = '123'";
 		
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { sqlString }))
+				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
 
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		assertThat(step.arguments()).hasSize(1);
 		assertThat(step.arguments().getFirst().value()).isInstanceOf(Query.class);
 
 		Query query = (Query) step.arguments().getFirst().value();
 		assertThat(query).isNotNull();
-		// Verify the Query can generate SQL (proves it was parsed correctly)
 		assertThat(query.sqlString()).contains("customers").contains("customer_name");
 	}
 
 	@Test
 	void convertsComplexSqlStringToQuery() {
-		// More complex SQL string as would appear in a JSON plan
 		String sqlString = "SELECT o.id, o.status, c.name FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status = 'PENDING'";
 		
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { sqlString }))
+				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", sqlString)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.READY);
 
-		ResolvedStep.ActionStep step = (ResolvedStep.ActionStep) result.steps().getFirst();
+		PlanStep.ActionStep step = (PlanStep.ActionStep) result.planSteps().getFirst();
 		Query query = (Query) step.arguments().getFirst().value();
 		assertThat(query).isNotNull();
 		assertThat(query.sqlString()).contains("orders").contains("customers");
@@ -252,32 +235,30 @@ class DefaultPlanResolverTest {
 
 	@Test
 	void failsOnInvalidSqlString() {
-		// Invalid SQL should result in an error
 		String invalidSql = "SELECT * FROM WHERE"; // Invalid SQL
 		
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { invalidSql }))
+				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", invalidSql)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	@Test
 	void failsOnNonSelectStatement() {
-		// Non-SELECT statements should result in an error
 		String insertSql = "INSERT INTO customers (name) VALUES ('Test')";
 		
-		Plan plan = new Plan(
+		JsonPlan jsonPlan = new JsonPlan(
 				"",
-				List.of(new PlanStep.ActionStep("", "runQuery", new Object[] { insertSql }))
+				List.of(new JsonPlanStep("runQuery", "Execute query", Map.of("query", insertSql)))
 		);
 
-		ResolvedPlan result = resolver.resolve(plan, registry);
+		Plan result = resolver.resolve(jsonPlan, registry);
 		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(result.steps().getFirst()).isInstanceOf(ResolvedStep.ErrorStep.class);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	private static class SampleActions {

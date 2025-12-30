@@ -6,88 +6,134 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-import org.apache.commons.lang3.stream.Streams;
 import org.javai.springai.actions.bind.ActionBinding;
 import org.javai.springai.actions.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.bind.ActionRegistry;
+import org.javai.springai.actions.plan.JsonPlan;
+import org.javai.springai.actions.plan.JsonPlanStep;
 import org.javai.springai.actions.plan.Plan;
+import org.javai.springai.actions.plan.PlanArgument;
 import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.QueryValidationException;
 
 /**
- * Default resolver that maps Plan steps to ActionBindings and resolves arguments.
- * Resolution issues are captured as ResolvedStep.ErrorStep entries.
+ * Default resolver that converts a JsonPlan to a bound Plan.
+ * <p>
+ * This resolver:
+ * <ul>
+ *   <li>Validates action IDs exist in the registry</li>
+ *   <li>Checks parameter counts match</li>
+ *   <li>Binds actions to their method implementations</li>
+ *   <li>Converts parameter values to their target types</li>
+ * </ul>
+ * <p>
+ * Resolution issues are captured as {@link PlanStep.ErrorStep} entries.
  */
 public class DefaultPlanResolver implements PlanResolver {
 
 	private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
 	@Override
-	public ResolvedPlan resolve(Plan plan, ActionRegistry registry) {
-		if (plan == null || registry == null) {
-			return new ResolvedPlan(List.of(new ResolvedStep.ErrorStep("Plan or registry is null")));
+	public Plan resolve(JsonPlan jsonPlan, ActionRegistry registry) {
+		if (jsonPlan == null || registry == null) {
+			return new Plan(null, List.of(new PlanStep.ErrorStep("JsonPlan or registry is null")));
 		}
 
-		List<ResolvedStep> resolved = plan.planSteps()
-				.stream()
+		if (jsonPlan.steps() == null || jsonPlan.steps().isEmpty()) {
+			return new Plan(jsonPlan.message(), List.of());
+		}
+
+		List<PlanStep> resolved = jsonPlan.steps().stream()
 				.map(step -> resolveStep(step, registry))
 				.toList();
-		return new ResolvedPlan(resolved);
+		return new Plan(jsonPlan.message(), resolved);
 	}
 
-	private ResolvedStep resolveStep(PlanStep step, ActionRegistry registry) {
-		return switch (step) {
-			case PlanStep.ErrorStep errorStep -> resolveErrorStep(errorStep.assistantMessage());
-			case PlanStep.PendingActionStep pendingStep -> resolvePendingActionStep(pendingStep);
-			case PlanStep.ActionStep actionStep -> resolveActionStep(actionStep, registry);
-		};
-	}
+	private PlanStep resolveStep(JsonPlanStep step, ActionRegistry registry) {
+		String actionId = step.actionId();
+		if (actionId == null || actionId.isBlank()) {
+			return new PlanStep.ErrorStep("Step has no actionId");
+		}
 
-	private static ResolvedStep.ErrorStep resolveErrorStep(String errorStep) {
-		return new ResolvedStep.ErrorStep(errorStep);
-	}
-
-	private ResolvedStep.PendingActionStep resolvePendingActionStep(PlanStep.PendingActionStep pendingStep) {
-		return new ResolvedStep.PendingActionStep(
-				pendingStep.assistantMessage(),
-				pendingStep.actionId(),
-				Streams.of(pendingStep.pendingParams())
-						.map(ps -> new ResolvedStep.PendingParam(ps.name(), ps.message()))
-						.toArray(ResolvedStep.PendingParam[]::new),
-				pendingStep.providedParams());
-	}
-
-	private ResolvedStep resolveActionStep(PlanStep.ActionStep actionStep, ActionRegistry registry) {
-		String actionId = actionStep.actionId();
 		ActionBinding binding = registry.getActionBinding(actionId);
 		if (binding == null) {
-			return new ResolvedStep.ErrorStep("Unknown action id: " + actionId);
+			return new PlanStep.ErrorStep("Unknown action id: " + actionId);
 		}
 
 		List<ActionParameterDescriptor> params = binding.parameters();
-		Object[] args = actionStep.actionArguments();
-		if (args == null) {
-			args = new Object[0];
-		}
-		if (args.length != params.size()) {
-			return new ResolvedStep.ErrorStep(
-					"Argument count mismatch for action " + actionId + ": expected " + params.size() + " got "
-							+ args.length);
+		Map<String, Object> stepParams = step.parameters() != null ? step.parameters() : Map.of();
+
+		// Check arity
+		if (stepParams.size() != params.size()) {
+			return new PlanStep.ErrorStep(
+					"Argument count mismatch for action " + actionId + ": expected " + params.size() 
+					+ " got " + stepParams.size());
 		}
 
-		List<ResolvedArgument> resolvedArgs = new ArrayList<>();
-		for (int i = 0; i < params.size(); i++) {
-			ActionParameterDescriptor param = params.get(i);
-			Object raw = args[i];
+		// Convert each parameter
+		List<PlanArgument> arguments = new ArrayList<>();
+		for (ActionParameterDescriptor param : params) {
+			Object raw = stepParams.get(param.name());
 			ConversionOutcome outcome = convert(raw, param, actionId);
 			if (!outcome.success()) {
-				return new ResolvedStep.ErrorStep(outcome.errorMessage());
+				return new PlanStep.ErrorStep(outcome.errorMessage());
 			}
-			resolvedArgs.add(new ResolvedArgument(param.name(), outcome.value(), resolveType(param.typeName())));
+			
+			// Validate constraints (allowed values, regex)
+			String constraintError = validateConstraint(param, outcome.value());
+			if (constraintError != null) {
+				return new PlanStep.ErrorStep(constraintError);
+			}
+			
+			arguments.add(new PlanArgument(param.name(), outcome.value(), resolveType(param.typeName())));
 		}
-		return new ResolvedStep.ActionStep(binding, resolvedArgs);
+
+		return new PlanStep.ActionStep(binding, arguments);
+	}
+
+	/**
+	 * Validate parameter constraints (allowed values, regex patterns).
+	 * Returns null if valid, error message if invalid.
+	 */
+	private String validateConstraint(ActionParameterDescriptor param, Object value) {
+		if (value == null) {
+			return null; // Let downstream handle nulls
+		}
+		String stringValue = value.toString();
+		
+		if (param.allowedValues() != null && param.allowedValues().length > 0) {
+			boolean match = false;
+			for (String allowed : param.allowedValues()) {
+				if (param.caseInsensitive()) {
+					if (stringValue.equalsIgnoreCase(allowed)) {
+						match = true;
+						break;
+					}
+				} else if (stringValue.equals(allowed)) {
+					match = true;
+					break;
+				}
+			}
+			if (!match) {
+				return "Value for parameter '" + param.name() + "' must be one of: "
+						+ String.join(", ", param.allowedValues());
+			}
+		}
+		
+		if (param.allowedRegex() != null && !param.allowedRegex().isBlank()) {
+			String pattern = param.allowedRegex();
+			boolean matches = param.caseInsensitive()
+					? stringValue.toLowerCase().matches(pattern.toLowerCase())
+					: stringValue.matches(pattern);
+			if (!matches) {
+				return "Value for parameter '" + param.name() + "' must match pattern: " + pattern;
+			}
+		}
+		
+		return null;
 	}
 
 	private ConversionOutcome convert(Object raw, ActionParameterDescriptor param, String actionId) {
@@ -177,10 +223,6 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 	}
 
-	/**
-	 * Convert a SQL string to a Query object.
-	 * This handles the case where plans contain SQL strings for Query parameters.
-	 */
 	private ConversionOutcome convertSqlString(String sql, String paramName) {
 		try {
 			Query query = Query.fromSql(sql);
@@ -191,12 +233,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 	}
 
-	/**
-	 * Normalize raw values before conversion.
-	 * Handles JSON strings → parsed to Map/List.
-	 */
 	private Object normalizeRaw(Object raw, Class<?> targetType) {
-		// Handle JSON strings
 		if (raw instanceof String s && looksLikeJson(s)) {
 			try {
 				return mapper.readValue(s, Object.class);
@@ -205,7 +242,6 @@ public class DefaultPlanResolver implements PlanResolver {
 				// Fall through
 			}
 		}
-		
 		return raw;
 	}
 
@@ -294,4 +330,3 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 	}
 }
-

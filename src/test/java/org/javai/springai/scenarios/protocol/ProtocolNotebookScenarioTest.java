@@ -7,10 +7,7 @@ import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.javai.springai.actions.exec.DefaultPlanExecutor;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
 import org.javai.springai.actions.exec.PlanExecutionResult;
-import org.javai.springai.actions.exec.PlanResolver;
-import org.javai.springai.actions.exec.ResolvedPlan;
 import org.javai.springai.actions.instrument.InMemoryTokenStore;
 import org.javai.springai.actions.instrument.InvocationEmitter;
 import org.javai.springai.actions.instrument.InvocationEvent;
@@ -19,6 +16,7 @@ import org.javai.springai.actions.instrument.InvocationKind;
 import org.javai.springai.actions.instrument.PayloadAugmentor;
 import org.javai.springai.actions.instrument.PiiTokenizingAugmentor;
 import org.javai.springai.actions.instrument.TokenStore;
+import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
 import org.javai.springai.actions.plan.Planner;
 import org.javai.springai.actions.prompt.PersonaSpec;
@@ -36,7 +34,6 @@ public class ProtocolNotebookScenarioTest {
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	Planner planner;
-	PlanResolver resolver;
 	DefaultPlanExecutor executor;
 	ConversationManager conversationManager;
 	ProtocolNotebookActions protocolNotebookActions;
@@ -88,9 +85,8 @@ public class ProtocolNotebookScenarioTest {
 				.tools(protocolCatalogTool)
 				.actions(protocolNotebookActions)
 				.build();
-		resolver = new DefaultPlanResolver();
 		executor = new DefaultPlanExecutor(emitter);
-		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
+		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
 	@Test
@@ -107,12 +103,12 @@ public class ProtocolNotebookScenarioTest {
 		assertThat(protocolCatalogTool.getInvoked()).isTrue(); // Protocol content was retrieved
 		assertThat(protocolNotebookActions.invoked()).isFalse(); // Actions not called at this point
 
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		Plan plan = turn.plan();
 
-		resolvedPlan.steps().forEach(step -> System.out.println(step.toString()));
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		plan.planSteps().forEach(step -> System.out.println(step.toString()));
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		PlanExecutionResult executed = executor.execute(plan);
 		executed.steps().forEach(step -> System.out.println(step.toString()));
 		assertThat(executed.success()).isTrue();
 		assertThat(protocolNotebookActions.invoked()).isTrue(); // Now an action was called
@@ -147,4 +143,3 @@ public class ProtocolNotebookScenarioTest {
 		);
 	}
 }
-

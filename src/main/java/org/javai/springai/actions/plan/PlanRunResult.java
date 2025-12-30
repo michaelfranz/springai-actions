@@ -1,28 +1,36 @@
 package org.javai.springai.actions.plan;
 
 import org.javai.springai.actions.api.ActionContext;
-import org.javai.springai.actions.exec.ResolvedPlan;
 
 /**
- * Aggregate result for plan + resolve (+ optional execute) flows.
+ * Aggregate result for plan + execute flows.
+ *
+ * @param planning the plan formulation result
+ * @param plan the bound plan (same as planning.plan())
+ * @param executionContext the execution context after running the plan
  */
 public record PlanRunResult(
 		PlanFormulationResult planning,
-		ResolvedPlan resolvedPlan,
+		Plan plan,
 		ActionContext executionContext
 ) {
 
-	public static PlanRunResult success(PlanFormulationResult planning, ResolvedPlan resolvedPlan,
+	public static PlanRunResult success(PlanFormulationResult planning, Plan plan,
 			ActionContext executionContext) {
-		return new PlanRunResult(planning, resolvedPlan, executionContext);
+		return new PlanRunResult(planning, plan, executionContext);
 	}
 
-	public boolean resolvedSuccessfully() {
-		return resolvedPlan != null && resolvedPlan.status() == PlanStatus.READY;
+	/**
+	 * Check if the plan was successfully created and is ready.
+	 */
+	public boolean isReady() {
+		return plan != null && plan.status() == PlanStatus.READY;
 	}
 
+	/**
+	 * Check if the plan was executed.
+	 */
 	public boolean executed() {
-		return resolvedSuccessfully() && executionContext != null;
+		return isReady() && executionContext != null;
 	}
 }
-

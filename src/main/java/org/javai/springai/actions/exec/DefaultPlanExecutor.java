@@ -9,11 +9,15 @@ import org.javai.springai.actions.bind.ActionBinding;
 import org.javai.springai.actions.instrument.InvocationEmitter;
 import org.javai.springai.actions.instrument.InvocationEventType;
 import org.javai.springai.actions.instrument.InvocationKind;
+import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
+import org.javai.springai.actions.plan.PlanStep;
 
 /**
- * Default sequential executor for resolved plans. Executes {@link ResolvedStep.ActionStep}
- * via reflection and fails fast on the first error step or invocation failure.
+ * Default sequential executor for plans.
+ * <p>
+ * Executes {@link PlanStep.ActionStep} steps via reflection and fails fast
+ * on the first error step or invocation failure.
  */
 public class DefaultPlanExecutor implements PlanExecutor {
 
@@ -27,31 +31,32 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		this.emitter = emitter;
 	}
 
-	public PlanExecutionResult execute(ResolvedPlan plan) {
+	@Override
+	public PlanExecutionResult execute(Plan plan) {
 		return execute(plan, new ActionContext());
 	}
 
-	public PlanExecutionResult execute(ResolvedPlan plan, ActionContext context) {
+	public PlanExecutionResult execute(Plan plan, ActionContext context) {
 		if (plan == null) {
 			return new PlanExecutionResult(false, List.of(
 					new StepExecutionResult(null, false, null, null, "Plan is null")), context);
 		}
 		if (plan.status() != PlanStatus.READY) {
-			throw new IllegalStateException("ResolvedPlan is not READY; status=" + plan.status());
+			throw new IllegalStateException("Plan is not READY; status=" + plan.status());
 		}
 
 		List<StepExecutionResult> results = new ArrayList<>();
 		boolean success = true;
 
-		for (ResolvedStep step : plan.steps()) {
-			if (step instanceof ResolvedStep.ErrorStep(String reason)) {
+		for (PlanStep step : plan.planSteps()) {
+			if (step instanceof PlanStep.ErrorStep errorStep) {
 				success = false;
 				results.add(new StepExecutionResult(null, false, null, null,
-						"Plan contains error step: " + reason));
+						"Plan contains error step: " + errorStep.reason()));
 				break; // stop execution on error
 			}
 
-			if (step instanceof ResolvedStep.ActionStep actionStep) {
+			if (step instanceof PlanStep.ActionStep actionStep) {
 				StepExecutionResult result = executeActionStep(actionStep, context);
 				results.add(result);
 				if (!result.success()) {
@@ -64,7 +69,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		return new PlanExecutionResult(success, results, context);
 	}
 
-	private StepExecutionResult executeActionStep(ResolvedStep.ActionStep step, ActionContext context) {
+	private StepExecutionResult executeActionStep(PlanStep.ActionStep step, ActionContext context) {
 		ActionBinding binding = step.binding();
 		if (binding == null || binding.method() == null || binding.bean() == null) {
 			return new StepExecutionResult(null, false, null, null, "Action binding is incomplete");
@@ -107,19 +112,20 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			}
 			if (emitter != null) {
 				long durationMs = (System.nanoTime() - start) / 1_000_000;
+				String contextKeyValue = binding.contextKey() != null ? binding.contextKey() : "";
 				emitter.emit(InvocationKind.ACTION, InvocationEventType.SUCCEEDED, actionId, invocationId, null, durationMs,
-						Map.of("actionId", actionId, "contextKey", binding.contextKey()));
+						Map.of("actionId", actionId, "contextKey", contextKeyValue));
 			}
 			return new StepExecutionResult(actionId, true, returnValue, null, null);
 		}
 		catch (Exception ex) {
 			if (emitter != null) {
 				long durationMs = (System.nanoTime() - start) / 1_000_000;
+				String errorMessage = ex.getMessage() != null ? ex.getMessage() : "Unknown error";
 				emitter.emit(InvocationKind.ACTION, InvocationEventType.FAILED, actionId, invocationId, null, durationMs,
-						Map.of("actionId", actionId, "error", ex.getMessage()));
+						Map.of("actionId", actionId, "error", errorMessage));
 			}
 			return new StepExecutionResult(actionId, false, null, ex, "Execution failed: " + ex.getMessage());
 		}
 	}
 }
-

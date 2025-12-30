@@ -223,20 +223,27 @@ Move to `internal.plan` package.
 
 ## Implementation Steps
 
-### Phase 1: Fix Compile Errors
-1. Remove broken imports from `Planner.java` referencing deleted `execution` package
-2. Remove or stub the `toExecutablePlan()` and `toExecutableAction()` methods
-3. Verify build compiles
+### Phase 1: Fix Compile Errors ✅ COMPLETE
+1. ~~Remove broken imports from `Planner.java` referencing deleted `execution` package~~
+2. ~~Remove or stub the `toExecutablePlan()` and `toExecutableAction()` methods~~
+3. ~~Verify build compiles~~
+4. ~~Remove stale test files referencing deleted `execution` package~~
 
-### Phase 2: Merge ResolvedPlan/ResolvedStep into Plan/PlanStep
-1. Update `PlanStep.ActionStep` to include `ActionBinding` and `List<PlanArgument>`
-2. Update `Plan` to incorporate `ResolvedPlan` functionality
-3. Update `DefaultPlanResolver` to return `Plan` instead of `ResolvedPlan`
-4. Update `DefaultPlanExecutor` to work with unified `Plan`/`PlanStep`
-5. Update `ConversationManager` and `ConversationTurnResult`
-6. Delete `ResolvedPlan.java`, `ResolvedStep.java`
-7. Rename `ResolvedArgument` → `PlanArgument`
-8. Merge `PlanVerifier` logic into `DefaultPlanResolver`
+**Status:** `compileJava` ✅ | `compileTestJava` ✅
+
+### Phase 2: Merge ResolvedPlan/ResolvedStep into Plan/PlanStep ✅ COMPLETE
+1. ~~Update `PlanStep.ActionStep` to include `ActionBinding` and `List<PlanArgument>`~~
+2. ~~Update `Plan` to incorporate `ResolvedPlan` functionality~~
+3. ~~Update `DefaultPlanResolver` to return `Plan` instead of `ResolvedPlan`~~
+4. ~~Update `DefaultPlanExecutor` to work with unified `Plan`/`PlanStep`~~
+5. ~~Update `ConversationManager` and `ConversationTurnResult`~~
+6. ~~Delete `ResolvedPlan.java`, `ResolvedStep.java`, `ResolvedArgument.java`, `PlanVerifier.java`~~
+7. ~~Rename `ResolvedArgument` → `PlanArgument`~~
+8. ~~Merge `PlanVerifier` logic into `DefaultPlanResolver`~~
+9. ~~Update all tests to use new type structure~~
+10. ~~Remove obsolete `JsonPlan.toPlan()` and `JsonPlanStep.toActionStep()` methods~~
+
+**Status:** `compileJava` ✅ | `compileTestJava` ✅ | `test` ✅
 
 ### Phase 3: Create Package Structure
 1. Create `internal/` directory structure

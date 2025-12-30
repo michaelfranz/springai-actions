@@ -7,11 +7,8 @@ import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.javai.springai.actions.exec.DefaultPlanExecutor;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
 import org.javai.springai.actions.exec.PlanExecutionResult;
-import org.javai.springai.actions.exec.PlanResolver;
-import org.javai.springai.actions.exec.ResolvedPlan;
-import org.javai.springai.actions.exec.ResolvedStep;
+import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
 import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.plan.Planner;
@@ -30,7 +27,6 @@ public class StatsApplicationScenarioTest {
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	Planner planner;
-	PlanResolver resolver;
 	DefaultPlanExecutor executor;
 	ConversationManager conversationManager;
 	StatsActions statsActions;
@@ -42,60 +38,59 @@ public class StatsApplicationScenarioTest {
 		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
 				"OPENAI_API_KEY must be set for this integration test");
 
-	OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-	OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-	OpenAiChatOptions options = OpenAiChatOptions.builder()
-			.model("gpt-4.1-mini")
-			.temperature(0.0)
-			.topP(1.0)
-			.build();
+		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
+		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
+		OpenAiChatOptions options = OpenAiChatOptions.builder()
+				.model("gpt-4.1-mini")
+				.temperature(0.0)
+				.topP(1.0)
+				.build();
 		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
 				.defaultOptions(Objects.requireNonNull(options))
 				.build();
 
-	statsActions = new StatsActions();
+		statsActions = new StatsActions();
 
-	PersonaSpec spcAssistantPersona = PersonaSpec.builder()
-			.name("StatisticalProcessControlAssistant")
-			.role("Assistant for statistical process control analysis and charting")
-			.principles(List.of(
-					"Understand SPC concepts: control charts, readiness evaluation",
-					"Map user requests to appropriate actions based on measurement parameters",
-					"Extract measurement concept and bundle ID from user requests",
-					"CRITICAL: If any required parameter is missing or unclear, use PENDING instead of guessing"))
-			.constraints(List.of(
-					"Required parameters: measurementConcept (e.g., 'displacement', 'force'), bundleId (e.g., 'A12345')",
-					"NEVER invent or guess values; if bundleId is not provided, emit (PENDING bundleId \"what is the bundle ID?\") instead",
-					"Only use available actions: displayControlChart, exportControlChartToExcel, evaluateSpcReadiness"))
-			.styleGuidance(List.of(
-					"Emit S-expression plans only, no prose",
-					"Example PENDING: (P \"desc\" (PS action (PENDING paramName \"what is param?\") (PA other \"value\")))",
-					"Use PENDING for any required parameter not clearly provided by user"))
-			.build();
+		PersonaSpec spcAssistantPersona = PersonaSpec.builder()
+				.name("StatisticalProcessControlAssistant")
+				.role("Assistant for statistical process control analysis and charting")
+				.principles(List.of(
+						"Understand SPC concepts: control charts, readiness evaluation",
+						"Map user requests to appropriate actions based on measurement parameters",
+						"Extract measurement concept and bundle ID from user requests",
+						"CRITICAL: If any required parameter is missing or unclear, use PENDING instead of guessing"))
+				.constraints(List.of(
+						"Required parameters: measurementConcept (e.g., 'displacement', 'force'), bundleId (e.g., 'A12345')",
+						"NEVER invent or guess values; if bundleId is not provided, emit (PENDING bundleId \"what is the bundle ID?\") instead",
+						"Only use available actions: displayControlChart, exportControlChartToExcel, evaluateSpcReadiness"))
+				.styleGuidance(List.of(
+						"Emit S-expression plans only, no prose",
+						"Example PENDING: (P \"desc\" (PS action (PENDING paramName \"what is param?\") (PA other \"value\")))",
+						"Use PENDING for any required parameter not clearly provided by user"))
+				.build();
 
-	planner = Planner.builder()
-			.withChatClient(chatClient)
-			.persona(spcAssistantPersona)
-			.actions(statsActions)
-			.build();
-		resolver = new DefaultPlanResolver();
+		planner = Planner.builder()
+				.withChatClient(chatClient)
+				.persona(spcAssistantPersona)
+				.actions(statsActions)
+				.build();
 		executor = new DefaultPlanExecutor();
-		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
+		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
 	@Test
 	void displayControlChartPlanTest() {
 		String request = "show me a control chart for displacement values in elasticity bundle A12345";
 		ConversationTurnResult turn = conversationManager.converse(request, "display-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		Plan plan = turn.plan();
 
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(statsActions.displayControlChartInvoked()).isTrue();
 	}
@@ -104,14 +99,14 @@ public class StatsApplicationScenarioTest {
 	void exportToExcelTest() {
 		String request = "export a displacement control chart to excel for bundle A12345";
 		ConversationTurnResult turn = conversationManager.converse(request, "export-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
@@ -120,12 +115,12 @@ public class StatsApplicationScenarioTest {
 	void evaluateSpcReadinessTest() {
 		String request = "evaluate spc readiness for displacement values in bundle A12345";
 		ConversationTurnResult turn = conversationManager.converse(request, "spc-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(statsActions.evaluateSpcReadinessInvoked()).isTrue();
 	}
@@ -135,12 +130,12 @@ public class StatsApplicationScenarioTest {
 		// No action supports ANOVA
 		String request = "perform a 2-way ANOVA on vehicle elasticity for bundle A12345";
 		ConversationTurnResult turn = conversationManager.converse(request, "anova-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.ERROR);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ErrorStep.class);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ErrorStep.class);
 	}
 
 	@Test
@@ -148,9 +143,9 @@ public class StatsApplicationScenarioTest {
 		// Export to excel requires bundle ID
 		String request = "export a control chart to excel for displacement values";
 		ConversationTurnResult turn = conversationManager.converse(request, "pending-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.PENDING);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(turn.pendingParams()).isNotEmpty();
 		assertThat(turn.pendingParams().stream().map(PlanStep.PendingParam::name))
 				.anyMatch(name -> name.equals("bundleId") || name.equals("domainEntity"));
@@ -163,23 +158,22 @@ public class StatsApplicationScenarioTest {
 		// Turn 1: missing bundle id -> expect pending
 		ConversationTurnResult firstTurn = conversationManager
 				.converse("export a control chart to excel for displacement values", sessionId);
-		ResolvedPlan firstResolved = firstTurn.resolvedPlan();
-		assertThat(firstResolved).isNotNull();
-		assertThat(firstResolved.status()).isEqualTo(PlanStatus.PENDING);
+		Plan firstPlan = firstTurn.plan();
+		assertThat(firstPlan).isNotNull();
+		assertThat(firstPlan.status()).isEqualTo(PlanStatus.PENDING);
 		assertThat(firstTurn.pendingParams()).isNotEmpty();
 
 		// Turn 2: user supplies only the missing info; desired behavior is that
 		// the system merges context and produces an executable step (documented scenario)
 		ConversationTurnResult secondTurn = conversationManager
 				.converse("the bundle id is A12345", sessionId);
-		ResolvedPlan secondPlan = secondTurn.resolvedPlan();
+		Plan secondPlan = secondTurn.plan();
 		assertThat(secondPlan).isNotNull();
 		// Ideal outcome after context merge: actionable step, no pending
-		assertThat(secondPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(secondPlan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
 		PlanExecutionResult executed = executor.execute(secondPlan);
 		assertThat(executed.success()).isTrue();
 		assertThat(statsActions.exportControlChartToExcelInvoked()).isTrue();
 	}
 }
-

@@ -90,7 +90,7 @@ class PlannerTest {
 		assertThat(result.plan().planSteps()).hasSize(1);
 		assertThat(result.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 		PlanStep.ErrorStep error = (PlanStep.ErrorStep) result.plan().planSteps().getFirst();
-		assertThat(error.assistantMessage()).contains("Failed to parse");
+		assertThat(error.reason()).contains("Failed to parse");
 	}
 
 	@Test
@@ -125,7 +125,8 @@ class PlannerTest {
 
 		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
 		assertThat(step.actionId()).isEqualTo("demoAction");
-		assertThat(step.actionArguments()).containsExactly("test value");
+		assertThat(step.arguments()).hasSize(1);
+		assertThat(step.arguments().getFirst().value()).isEqualTo("test value");
 	}
 
 	@Test
@@ -161,7 +162,8 @@ class PlannerTest {
 
 		PlanStep.ActionStep step = (PlanStep.ActionStep) result.plan().planSteps().getFirst();
 		assertThat(step.actionId()).isEqualTo("demoAction");
-		assertThat(step.actionArguments()).containsExactly("from markdown");
+		assertThat(step.arguments()).hasSize(1);
+		assertThat(step.arguments().getFirst().value()).isEqualTo("from markdown");
 	}
 
 	@Test
@@ -184,7 +186,7 @@ class PlannerTest {
 		assertThat(result.plan().planSteps()).hasSize(1);
 		assertThat(result.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
 		PlanStep.ErrorStep error = (PlanStep.ErrorStep) result.plan().planSteps().getFirst();
-		assertThat(error.assistantMessage()).contains("Failed to parse");
+		assertThat(error.reason()).contains("Failed to parse");
 	}
 
 	@Test

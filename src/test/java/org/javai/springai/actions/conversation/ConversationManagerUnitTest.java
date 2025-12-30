@@ -9,9 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import org.javai.springai.actions.exec.PlanResolver;
-import org.javai.springai.actions.exec.ResolvedPlan;
-import org.javai.springai.actions.exec.ResolvedStep;
+import org.javai.springai.actions.bind.ActionBinding;
 import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanFormulationResult;
 import org.javai.springai.actions.plan.PlanStatus;
@@ -28,10 +26,10 @@ class ConversationManagerUnitTest {
 	private Planner mockPlanner;
 
 	@Mock
-	private PlanResolver mockResolver;
+	private ConversationStateStore mockStore;
 
 	@Mock
-	private ConversationStateStore mockStore;
+	private ActionBinding mockBinding;
 
 	ConversationManagerUnitTest() {
 		MockitoAnnotations.openMocks(this);
@@ -39,18 +37,14 @@ class ConversationManagerUnitTest {
 
 	@Test
 	void constructorRequiresDependencies() {
-		assertThatThrownBy(() -> new ConversationManager(null, mockResolver, mockStore)).isInstanceOf(NullPointerException.class);
-		assertThatThrownBy(() -> new ConversationManager(mockPlanner, null, mockStore)).isInstanceOf(NullPointerException.class);
-		assertThatThrownBy(() -> new ConversationManager(mockPlanner, mockResolver, null)).isInstanceOf(NullPointerException.class);
+		assertThatThrownBy(() -> new ConversationManager(null, mockStore)).isInstanceOf(NullPointerException.class);
+		assertThatThrownBy(() -> new ConversationManager(mockPlanner, null)).isInstanceOf(NullPointerException.class);
 	}
 
 	@Test
 	@SuppressWarnings("NullAway")
 	void conversationFlowPendingThenResolved() {
-		// Illustrative API showing desired flow; will not compile/run until ConversationManager,
-		// Planner, and PlanResolver support ConversationState-based planning.
-
-		ConversationManager manager = new ConversationManager(mockPlanner, mockResolver, mockStore);
+		ConversationManager manager = new ConversationManager(mockPlanner, mockStore);
 
 		// Turn 1: missing bundleId -> pending
 		Plan pendingPlan = new Plan("desc",
@@ -61,26 +55,20 @@ class ConversationManagerUnitTest {
 		when(mockPlanner.formulatePlan(eq("export control chart to excel for displacement values"), argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", pendingPlan, null, false, null));
 		when(mockStore.load("session-1")).thenReturn(Optional.of(ConversationState.initial("export control chart to excel for displacement values")));
-		when(mockResolver.resolve(pendingPlan, null)).thenReturn(new ResolvedPlan(
-				List.of(new ResolvedStep.ErrorStep("Pending parameter"))));
 
 		ConversationTurnResult first = manager.converse("export control chart to excel for displacement values", "session-1");
 		assertThat(first.state().pendingParams()).hasSize(1);
-		assertThat(first.resolvedPlan().status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(first.plan().status()).isEqualTo(PlanStatus.PENDING);
 
-		// Turn 2: user provides bundleId -> action
+		// Turn 2: user provides bundleId -> action step with binding
+		when(mockBinding.id()).thenReturn("exportControlChartToExcel");
 		Plan resolvedPlan = new Plan("desc",
-				List.of(new PlanStep.ActionStep("",
-						"exportControlChartToExcel",
-						new Object[] { "displacement", "values", "A12345" })));
+				List.of(new PlanStep.ActionStep(mockBinding, List.of())));
 		when(mockPlanner.formulatePlan(eq("bundle id is A12345"), argThat(Objects::nonNull)))
 				.thenReturn(new PlanFormulationResult("", resolvedPlan, null, false, null));
-		when(mockResolver.resolve(resolvedPlan, null))
-				.thenReturn(new ResolvedPlan(List.of(new ResolvedStep.ActionStep(null, List.of()))));
 
 		ConversationTurnResult second = manager.converse("bundle id is A12345", "session-1");
-		assertThat(second.resolvedPlan().status()).isEqualTo(PlanStatus.READY);
+		assertThat(second.plan().status()).isEqualTo(PlanStatus.READY);
 		assertThat(second.state().pendingParams()).isEmpty();
 	}
 }
-

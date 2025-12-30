@@ -16,7 +16,7 @@ import org.javai.springai.actions.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.bind.ActionRegistry;
 import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
-import org.javai.springai.actions.exec.PlanVerifier;
+import org.javai.springai.actions.exec.DefaultPlanResolver;
 import org.javai.springai.actions.prompt.PersonaSpec;
 import org.javai.springai.actions.prompt.PlanActionsContextContributor;
 import org.javai.springai.actions.prompt.PromptContributor;
@@ -105,7 +105,6 @@ public final class Planner {
 		String response = invokeModel(preview);
 		try {
 			Plan plan = parsePlan(response, actionContext.registry());
-			plan = new PlanVerifier(actionContext.registry()).verify(plan);
 			maybeFirePromptHook(preview, effective);
 			return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
 		}
@@ -355,20 +354,8 @@ public final class Planner {
 	private Plan parseJsonPlan(String json, ActionRegistry actionRegistry) {
 		try {
 			JsonPlan jsonPlan = JSON_MAPPER.readValue(json, JsonPlan.class);
-
-			// Build parameter order map from action registry
-			Map<String, String[]> parameterOrders = new HashMap<>();
-			for (ActionDescriptor descriptor : actionRegistry.getActionDescriptors()) {
-				List<ActionParameterDescriptor> params = descriptor.actionParameterSpecs();
-				if (params != null && !params.isEmpty()) {
-					String[] orderedNames = params.stream()
-							.map(ActionParameterDescriptor::name)
-							.toArray(String[]::new);
-					parameterOrders.put(descriptor.id(), orderedNames);
-				}
-			}
-
-			return jsonPlan.toPlan(parameterOrders);
+			// Resolve directly to bound Plan (includes validation)
+			return new DefaultPlanResolver().resolve(jsonPlan, actionRegistry);
 		} catch (JsonProcessingException e) {
 			throw new PlanParseException("Failed to parse JSON plan: " + e.getMessage(), e);
 		}

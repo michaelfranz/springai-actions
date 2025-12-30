@@ -8,12 +8,10 @@ import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.javai.springai.actions.exec.DefaultPlanExecutor;
-import org.javai.springai.actions.exec.DefaultPlanResolver;
 import org.javai.springai.actions.exec.PlanExecutionResult;
-import org.javai.springai.actions.exec.PlanResolver;
-import org.javai.springai.actions.exec.ResolvedPlan;
-import org.javai.springai.actions.exec.ResolvedStep;
+import org.javai.springai.actions.plan.Plan;
 import org.javai.springai.actions.plan.PlanStatus;
+import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.plan.Planner;
 import org.javai.springai.actions.prompt.InMemorySqlCatalog;
 import org.javai.springai.actions.prompt.PersonaSpec;
@@ -32,7 +30,6 @@ public class DataWarehouseApplicationScenarioTest {
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
 	Planner planner;
-	PlanResolver resolver;
 	DefaultPlanExecutor executor;
 	ConversationManager conversationManager;
 	DataWarehouseActions dataWarehouseActions;
@@ -45,96 +42,92 @@ public class DataWarehouseApplicationScenarioTest {
 		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
 				"OPENAI_API_KEY must be set for this integration test");
 
-	OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-	OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-	OpenAiChatOptions options = OpenAiChatOptions.builder()
-			.model("gpt-4.1-mini")
-			.temperature(0.0)
-			.topP(1.0)
-			.build();
+		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
+		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
+		OpenAiChatOptions options = OpenAiChatOptions.builder()
+				.model("gpt-4.1-mini")
+				.temperature(0.0)
+				.topP(1.0)
+				.build();
 		chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
 				.defaultOptions(Objects.requireNonNull(options))
 				.build();
 
-	dataWarehouseActions = new DataWarehouseActions();
+		dataWarehouseActions = new DataWarehouseActions();
 
-	// Create SQL catalog once in setUp - consistent context for all tests
-	InMemorySqlCatalog catalog = new InMemorySqlCatalog()
-			.addTable("fct_orders", "Fact table for orders", "fact")
-			.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
-					new String[] { "fk:dim_customer.id" }, null)
-			.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
-					new String[] { "fk:dim_date.id" }, null)
-			.addColumn("fct_orders", "order_value", "Order amount", "double",
-					new String[] { "measure" }, null)
-			.addTable("dim_customer", "Customer dimension", "dimension")
-			.addColumn("dim_customer", "id", "PK", "string",
-					new String[] { "pk" }, new String[] { "unique" })
-			.addColumn("dim_customer", "customer_name", "Customer name", "string",
-					new String[] { "attribute" }, null)
-			.addTable("dim_date", "Date dimension", "dimension")
-			.addColumn("dim_date", "id", "PK", "string",
-					new String[] { "pk" }, new String[] { "unique" })
-			.addColumn("dim_date", "date", "Calendar date", "date",
-					new String[] { "attribute" }, null);
+		// Create SQL catalog once in setUp - consistent context for all tests
+		InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+				.addTable("fct_orders", "Fact table for orders", "fact")
+				.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
+						new String[] { "fk:dim_customer.id" }, null)
+				.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
+						new String[] { "fk:dim_date.id" }, null)
+				.addColumn("fct_orders", "order_value", "Order amount", "double",
+						new String[] { "measure" }, null)
+				.addTable("dim_customer", "Customer dimension", "dimension")
+				.addColumn("dim_customer", "id", "PK", "string",
+						new String[] { "pk" }, new String[] { "unique" })
+				.addColumn("dim_customer", "customer_name", "Customer name", "string",
+						new String[] { "attribute" }, null)
+				.addTable("dim_date", "Date dimension", "dimension")
+				.addColumn("dim_date", "id", "PK", "string",
+						new String[] { "pk" }, new String[] { "unique" })
+				.addColumn("dim_date", "date", "Calendar date", "date",
+						new String[] { "attribute" }, null);
 
-	PersonaSpec sqlAnalystPersona = PersonaSpec.builder()
-			.name("SQLDataWarehouseAssistant")
-			.role("Assistant for data warehouse query planning and order value analysis")
-			.principles(List.of(
-					"Understand what the user wants to accomplish from a domain perspective",
-					"Select the action whose purpose best matches the user's intent"))
-			.constraints(List.of(
-					"Only use the available actions",
-					"If any required parameter is unclear, use PENDING"))
-			.build();
+		PersonaSpec sqlAnalystPersona = PersonaSpec.builder()
+				.name("SQLDataWarehouseAssistant")
+				.role("Assistant for data warehouse query planning and order value analysis")
+				.principles(List.of(
+						"Understand what the user wants to accomplish from a domain perspective",
+						"Select the action whose purpose best matches the user's intent"))
+				.constraints(List.of(
+						"Only use the available actions",
+						"If any required parameter is unclear, use PENDING"))
+				.build();
 
-	// Base planner with catalog context always available
-	// Note: SqlCatalogContextContributor now instructs LLM to return standard ANSI SQL
-	// instead of S-expression DSL syntax
-	planner = Planner.builder()
-			.withChatClient(chatClient)
-			.persona(sqlAnalystPersona)
-			.actions(dataWarehouseActions)
-			.addPromptContributor(new SqlCatalogContextContributor(catalog))
-			.addPromptContext("sql", catalog)
-			.build();
-		resolver = new DefaultPlanResolver();
+		// Base planner with catalog context always available
+		planner = Planner.builder()
+				.withChatClient(chatClient)
+				.persona(sqlAnalystPersona)
+				.actions(dataWarehouseActions)
+				.addPromptContributor(new SqlCatalogContextContributor(catalog))
+				.addPromptContext("sql", catalog)
+				.build();
 		executor = new DefaultPlanExecutor();
-		conversationManager = new ConversationManager(planner, resolver, new InMemoryConversationStateStore());
+		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
 	@Test
 	void selectWithoutDatabaseObjectConstraintsTest() {
 		String request = "show me a query for customer names from dim_customer";
 		ConversationTurnResult turn = conversationManager.converse(request, "select-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		Plan plan = turn.plan();
 
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 		assertThat(executed.success()).isTrue();
 		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 	}
 
 	@Test
 	void selectWithDatabaseObjectConstraintsTest() {
-		// Use base planner - catalog is already set up in setUp()
 		String request = "run query: select order_value from fct_orders";
 		ConversationTurnResult turn = conversationManager.converse(request, "constrained-select-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		ResolvedStep step = resolvedPlan.steps().getFirst();
-		assertThat(step).isInstanceOf(ResolvedStep.ActionStep.class);
+		Plan plan = turn.plan();
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		PlanStep step = plan.planSteps().getFirst();
+		assertThat(step).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
- 		assertThat(executed.success()).isTrue();
+		PlanExecutionResult executed = executor.execute(plan);
+		assertThat(executed.success()).isTrue();
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 	}
 
@@ -145,14 +138,14 @@ public class DataWarehouseApplicationScenarioTest {
 				""";
 
 		ConversationTurnResult turn = conversationManager.converse(request, "order-value-session");
-		ResolvedPlan resolvedPlan = turn.resolvedPlan();
+		Plan plan = turn.plan();
 
-		assertThat(resolvedPlan).isNotNull();
-		assertThat(resolvedPlan.status()).isEqualTo(PlanStatus.READY);
-		assertThat(resolvedPlan.steps()).hasSize(1);
-		assertThat(resolvedPlan.steps().getFirst()).isInstanceOf(ResolvedStep.ActionStep.class);
+		assertThat(plan).isNotNull();
+		assertThat(plan.status()).isEqualTo(PlanStatus.READY);
+		assertThat(plan.planSteps()).hasSize(1);
+		assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 
-		PlanExecutionResult executed = executor.execute(resolvedPlan);
+		PlanExecutionResult executed = executor.execute(plan);
 
 		assertThat(executed.success()).isTrue();
 		assertThat(dataWarehouseActions.aggregateOrderValueInvoked()).isTrue();
@@ -165,4 +158,3 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
 	}
 }
-

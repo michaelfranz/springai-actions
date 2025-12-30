@@ -6,9 +6,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
+import org.javai.springai.actions.bind.ActionBinding;
 import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.plan.Plan;
+import org.javai.springai.actions.plan.PlanArgument;
 import org.javai.springai.actions.plan.PlanFormulationResult;
 import org.javai.springai.actions.plan.PlanStep;
 import org.javai.springai.actions.plan.Planner;
@@ -28,9 +30,13 @@ class StatsApplicationConversationUnitTest {
 	@Mock
 	private Planner mockPlanner;
 
+	@Mock
+	private ActionBinding mockBinding;
+
 	@BeforeEach
 	void setUp() {
 		MockitoAnnotations.openMocks(this);
+		when(mockBinding.id()).thenReturn("exportControlChartToExcel");
 	}
 
 	@Test
@@ -46,11 +52,14 @@ class StatsApplicationConversationUnitTest {
 						Map.of("domainEntity", "displacement", "measurementConcept", "values"))));
 		PlanFormulationResult pendingResult = new PlanFormulationResult(
 				"", pendingPlan, null, false, null);
-		// Turn 2: planner returns resolved action
+
+		// Turn 2: planner returns resolved action with binding
 		Plan resolvedPlan = new Plan("Export control chart",
-				List.of(new PlanStep.ActionStep("",
-						"exportControlChartToExcel",
-						new Object[] { "displacement", "values", "A12345" })));
+				List.of(new PlanStep.ActionStep(mockBinding, List.of(
+						new PlanArgument("domainEntity", "displacement", String.class),
+						new PlanArgument("measurementConcept", "values", String.class),
+						new PlanArgument("bundleId", "A12345", String.class)
+				))));
 		PlanFormulationResult resolvedResult = new PlanFormulationResult(
 				"", resolvedPlan, null, false, null);
 
@@ -78,4 +87,3 @@ class StatsApplicationConversationUnitTest {
 		assertThat(secondTurn.plan().planSteps().getFirst()).isInstanceOf(PlanStep.ActionStep.class);
 	}
 }
-
