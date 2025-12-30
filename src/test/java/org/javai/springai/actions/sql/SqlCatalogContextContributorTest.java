@@ -54,8 +54,8 @@ class SqlCatalogContextContributorTest {
 		String content = contribution.get();
 
 		// Verify catalog footer note is included
-		assertThat(content).contains("Use ONLY the exact table and column names");
-		assertThat(content).contains("JOINs based on FK relationships");
+		assertThat(content).contains("CRITICAL: SQL table/column names MUST be taken from this catalog");
+		assertThat(content).contains("For JOINs, use FK relationships");
 	}
 
 	@Test

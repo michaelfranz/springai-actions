@@ -208,7 +208,7 @@ public final class Planner {
 			- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS (e.g., "query" for SQL, "orderValueQuery" for aggregates)
 			- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
 			- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
-			- SQL MUST use exact table/column names from SQL CATALOG
+			- SQL MUST derive exact table/column names from the descriptions in the SQL CATALOG
 			- NEVER invent columns - only use columns listed in the SQL CATALOG
 			
 			STOP after the closing brace. Emit nothing else.""";
@@ -470,7 +470,6 @@ public final class Planner {
 
 		/**
 		 * Register custom type handlers for schema generation and resolution.
-		 * Use {@link TypeHandlerRegistry#withSqlSupport()} for SQL Query support.
 		 */
 		public Builder withTypeHandlers(TypeHandlerRegistry registry) {
 			this.typeHandlerRegistry = registry;

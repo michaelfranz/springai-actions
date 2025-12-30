@@ -987,6 +987,127 @@ throw new IllegalStateException(
 
 ---
 
+### FWK-SQL-003: Table Synonyms for Automatic Mapping
+
+**Status**: ✅ Complete (2024-12-30)
+
+**Purpose**: Reduce LLM retry roundtrips by providing table synonyms that the framework can automatically substitute when the LLM uses informal/common table names instead of exact catalog names.
+
+#### Problem Statement
+
+The LLM occasionally uses informal table names (e.g., "orders", "customers") instead of the exact catalog names (e.g., "fct_orders", "dim_customer"). While the catalog description provides semantic context, the exact table name may be tokenized or use conventions unfamiliar to the LLM.
+
+#### Solution
+
+Add an optional array of **synonyms** to each table definition. When validating a query:
+1. If a table name matches a catalog table exactly → proceed normally
+2. If a table name matches a synonym for any table → automatically substitute with the catalog table name
+3. If no match → raise validation error (or retry with LLM if retry mechanism is enabled)
+
+This is a **local, fast correction** that avoids a roundtrip to the LLM.
+
+#### API Design
+
+```java
+TableDefinition table = TableDefinition.create("fct_orders")
+    .description("Fact table for order transactions")
+    .withSynonyms("orders", "order", "sales", "transactions")
+    .withColumn(...)
+    .build();
+```
+
+#### Implementation
+
+| ID | Task | Status |
+|----|------|--------|
+| SYN-01 | Add `synonyms` field to `SqlTable` record | ✅ |
+| SYN-02 | Add `withSynonyms(String...)` builder method to `InMemorySqlCatalog` | ✅ |
+| SYN-03 | Add `resolveTableName()` and `matchesName()` methods to catalog | ✅ |
+| SYN-04 | Integrate synonym resolution into `Query.fromSql()` | ✅ |
+| SYN-05 | Add tests for synonym substitution (11 tests) | ✅ |
+
+**Priority**: High — Immediate fix for LLM indeterminism without requiring retry roundtrip
+
+**Implementation Summary**:
+- Added `synonyms` field to `SqlCatalog.SqlTable` record
+- Added `matchesName(String)` method to `SqlTable` for case-insensitive synonym matching
+- Added `resolveTableName(String)` method to `SqlCatalog` interface
+- Added `withSynonyms(String tableName, String... synonyms)` to `InMemorySqlCatalog`
+- Added `applySynonymSubstitution()` to `Query.fromSql()` that rewrites SQL before parsing
+- Uses regex word-boundary matching to avoid partial replacements (e.g., "order" won't match "order_items")
+- 11 comprehensive tests in `QueryTest.SynonymSubstitution`
+- Updated data warehouse scenario tests to use synonyms
+
+---
+
+### FWK-PLAN-001: Generic Retry/Correction Mechanism
+
+**Status**: 🔲 Not Started
+
+**Purpose**: Provide a generic mechanism for retrying failed plan steps or validations by re-prompting the LLM with specific error context.
+
+#### Problem Statement
+
+LLMs occasionally generate responses that fail validation (syntax errors, schema violations, wrong table names). A single retry with clear error context often produces a correct response. This should be:
+- Transparent to the application developer
+- Configurable (enable/disable, max retries)
+- Extensible for different correction strategies
+
+#### Design
+
+```java
+public interface CorrectionStrategy<T> {
+    boolean canHandle(ValidationError error);
+    String buildCorrectionPrompt(T failedValue, ValidationError error, Map<String, Object> context);
+    T parseCorrection(String llmResponse, Map<String, Object> context);
+}
+```
+
+The `Planner` would orchestrate retries:
+1. Initial response fails validation
+2. Find applicable `CorrectionStrategy`
+3. Build correction prompt with error details
+4. Send to LLM
+5. Parse correction response
+6. Retry validation (max N times)
+7. Return corrected value or final error
+
+#### SQL-Specific Implementation
+
+```java
+public class QueryCorrectionStrategy implements CorrectionStrategy<Query> {
+    @Override
+    public String buildCorrectionPrompt(Query failed, ValidationError error, Map<String, Object> context) {
+        SqlCatalog catalog = (SqlCatalog) context.get("sql");
+        return """
+            The following SQL has an error:
+            ```sql
+            %s
+            ```
+            Error: %s
+            
+            Available tables: %s
+            
+            Please provide a corrected SQL query.
+            """.formatted(failed.tokenizedSql(), error.getMessage(), catalog.tableNames());
+    }
+}
+```
+
+#### Configuration
+
+```java
+Planner planner = Planner.builder()
+    .withChatClient(chatClient)
+    .withMaxRetries(2)
+    .addCorrectionStrategy(new QueryCorrectionStrategy())
+    .build();
+```
+
+**Priority**: Medium — Layered on top of synonym substitution for remaining edge cases
+
+---
+
 ## Notes
 
 - The star schema assumption is powerful but not universal. Consider how to handle other warehouse patterns (snowflake, data vault) in future iterations.

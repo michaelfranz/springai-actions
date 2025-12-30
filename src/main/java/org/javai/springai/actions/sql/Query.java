@@ -56,6 +56,9 @@ public record Query(Select select, SqlCatalog catalog) {
 	/**
 	 * Creates a Query from a raw SQL string with full validation.
 	 * 
+	 * <p>If the SQL uses table synonyms (informal names like "orders" instead of "fct_orders"),
+	 * the framework will automatically substitute them with canonical table names from the catalog.</p>
+	 * 
 	 * @param sql the SQL string to parse
 	 * @param catalog optional schema catalog for table/column validation (may be null)
 	 * @return a validated Query object
@@ -66,21 +69,24 @@ public record Query(Select select, SqlCatalog catalog) {
 			throw new QueryValidationException("SQL string cannot be null or blank");
 		}
 
-		// 1. Parse the SQL
+		// 1. Apply synonym substitution if catalog is available
+		String normalizedSql = (catalog != null) ? applySynonymSubstitution(sql, catalog) : sql;
+
+		// 2. Parse the SQL
 		Statement stmt;
 		try {
-			stmt = CCJSqlParserUtil.parse(sql);
+			stmt = CCJSqlParserUtil.parse(normalizedSql);
 		} catch (JSQLParserException e) {
 			throw new QueryValidationException("Invalid SQL syntax: " + e.getMessage(), e);
 		}
 
-		// 2. Verify it's a SELECT statement only
+		// 3. Verify it's a SELECT statement only
 		if (!(stmt instanceof Select selectStmt)) {
 			throw new QueryValidationException(
 					"Only SELECT statements are allowed, got: " + stmt.getClass().getSimpleName());
 		}
 
-		// 3. Validate schema references if catalog is provided
+		// 4. Validate schema references if catalog is provided
 		if (catalog != null && !catalog.tables().isEmpty()) {
 			validateSchemaReferences(selectStmt, catalog);
 		}
@@ -123,6 +129,37 @@ public record Query(Select select, SqlCatalog catalog) {
 			case ANSI -> select.toString();
 			case POSTGRES -> toPostgres(select);
 		};
+	}
+
+	/**
+	 * Applies synonym substitution to the SQL, replacing informal table names with canonical names.
+	 * 
+	 * <p>For example, if "orders" is a synonym for "fct_orders", this method will rewrite:</p>
+	 * <pre>SELECT * FROM orders</pre>
+	 * <p>to:</p>
+	 * <pre>SELECT * FROM fct_orders</pre>
+	 * 
+	 * @param sql the original SQL string
+	 * @param catalog the catalog containing synonym mappings
+	 * @return the SQL with synonyms replaced by canonical table names
+	 */
+	private static String applySynonymSubstitution(String sql, SqlCatalog catalog) {
+		String result = sql;
+		
+		// Build a map of all synonyms to their canonical names
+		for (SqlCatalog.SqlTable table : catalog.tables().values()) {
+			if (table.synonyms() != null) {
+				for (String synonym : table.synonyms()) {
+					// Use word boundary matching to avoid replacing substrings
+					// The pattern handles: FROM synonym, JOIN synonym, synonym alias, etc.
+					// Case-insensitive replacement
+					String pattern = "(?i)\\b" + java.util.regex.Pattern.quote(synonym) + "\\b";
+					result = result.replaceAll(pattern, table.name());
+				}
+			}
+		}
+		
+		return result;
 	}
 
 	/**

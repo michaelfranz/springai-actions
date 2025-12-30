@@ -19,8 +19,11 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 
 	private static final String SQL_CATALOG_FOOTER = """
 			
-			Note: Use ONLY the exact table and column names shown above.
-			For data across tables, use JOINs based on FK relationships.
+			🔴 CRITICAL: SQL table/column names MUST be taken from this catalog exactly as shown.
+			- Use the table NAME shown before the colon (e.g., "fct_orders", "dim_customer"), NOT user's informal terms
+			- Use the column NAME shown after the bullet (e.g., "customer_id", "order_value"), NOT invented names
+			- For JOINs, use FK relationships shown in column tags (e.g., fk:dim_customer.id means JOIN dim_customer ON ... = dim_customer.id)
+			- If a name doesn't appear in this catalog, DON'T use it in SQL
 			""";
 
 	private final SqlCatalog catalog;

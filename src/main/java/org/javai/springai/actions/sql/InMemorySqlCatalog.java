@@ -52,6 +52,69 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		return this;
 	}
 
+	/**
+	 * Adds synonyms (alternative names) for a table.
+	 * 
+	 * <p>Synonyms allow the framework to automatically map informal table names 
+	 * (e.g., "orders", "customers") to canonical catalog names (e.g., "fct_orders", 
+	 * "dim_customer") without requiring an LLM retry.</p>
+	 * 
+	 * <p>Example:</p>
+	 * <pre>{@code
+	 * catalog.addTable("fct_orders", "Order transactions", "fact")
+	 *        .withSynonyms("fct_orders", "orders", "order", "sales");
+	 * }</pre>
+	 * 
+	 * @param tableName the canonical table name (must already exist in catalog)
+	 * @param synonyms alternative names that should map to this table
+	 * @return this catalog for fluent chaining
+	 */
+	public InMemorySqlCatalog withSynonyms(String tableName, String... synonyms) {
+		if (tableName == null || tableName.isBlank() || synonyms == null || synonyms.length == 0) {
+			return this;
+		}
+		TableBuilder builder = tables.get(tableName);
+		if (builder != null) {
+			for (String synonym : synonyms) {
+				if (synonym != null && !synonym.isBlank()) {
+					validateSynonymUniqueness(synonym, tableName);
+					builder.synonyms.add(synonym);
+				}
+			}
+		}
+		return this;
+	}
+
+	/**
+	 * Validates that a synonym is not already in use by another table (as a name or synonym).
+	 */
+	private void validateSynonymUniqueness(String synonym, String targetTable) {
+		String lowerSynonym = synonym.toLowerCase();
+		
+		// Check if synonym matches any existing table name
+		for (String existingTableName : tables.keySet()) {
+			if (existingTableName.equalsIgnoreCase(synonym) && !existingTableName.equals(targetTable)) {
+				throw new IllegalArgumentException(
+						"Synonym '%s' conflicts with existing table name '%s'"
+								.formatted(synonym, existingTableName));
+			}
+		}
+		
+		// Check if synonym is already used by another table
+		for (TableBuilder existingTable : tables.values()) {
+			if (existingTable.name.equals(targetTable)) {
+				continue; // Skip the table we're adding synonyms to
+			}
+			for (String existingSynonym : existingTable.synonyms) {
+				if (existingSynonym.equalsIgnoreCase(synonym)) {
+					throw new IllegalArgumentException(
+							"Synonym '%s' is already defined for table '%s'"
+									.formatted(synonym, existingTable.name));
+				}
+			}
+		}
+	}
+
 	public InMemorySqlCatalog addColumn(String tableName, String columnName, String description, String dataType,
 			String[] tags, String[] constraints) {
 		if (tableName == null || tableName.isBlank() || columnName == null || columnName.isBlank()) {
@@ -77,15 +140,25 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		return Collections.unmodifiableMap(copy);
 	}
 
-	private record TableBuilder(String name, String description, List<String> tags, List<SqlCatalog.SqlColumn> columns,
-			List<String> constraints) {
+	private static final class TableBuilder {
+		private final String name;
+		private final String description;
+		private final List<String> tags;
+		private final List<SqlCatalog.SqlColumn> columns;
+		private final List<String> constraints;
+		private final List<String> synonyms;
 
 		TableBuilder(String name, String description, String[] tags) {
-			this(name, description, tags != null ? List.of(tags) : EMPTY, new ArrayList<>(), EMPTY);
+			this.name = name;
+			this.description = description;
+			this.tags = tags != null ? List.of(tags) : EMPTY;
+			this.columns = new ArrayList<>();
+			this.constraints = EMPTY;
+			this.synonyms = new ArrayList<>();
 		}
 
 		SqlTable build() {
-			return new SqlTable(name, description, List.copyOf(columns), tags, constraints);
+			return new SqlTable(name, description, List.copyOf(columns), tags, constraints, List.copyOf(synonyms));
 		}
 	}
 }

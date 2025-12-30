@@ -373,5 +373,198 @@ class QueryTest {
 			assertThat(factory.getType()).isEqualTo(Query.class);
 		}
 	}
+
+	@Nested
+	@DisplayName("Table synonym substitution")
+	class SynonymSubstitution {
+
+		private SqlCatalog catalogWithSynonyms;
+
+		@BeforeEach
+		void setUp() {
+			catalogWithSynonyms = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Order transactions fact table", "fact")
+					.withSynonyms("fct_orders", "orders", "order", "sales")
+					.addColumn("fct_orders", "id", "Primary key", "integer", new String[]{"pk"}, null)
+					.addColumn("fct_orders", "customer_id", "FK to customer", "integer", new String[]{"fk"}, null)
+					.addColumn("fct_orders", "order_value", "Order value", "decimal", null, null)
+					.addTable("dim_customer", "Customer dimension table", "dimension")
+					.withSynonyms("dim_customer", "customers", "customer", "cust")
+					.addColumn("dim_customer", "id", "Primary key", "integer", new String[]{"pk"}, null)
+					.addColumn("dim_customer", "customer_name", "Customer name", "varchar", null, null);
+		}
+
+		@Test
+		@DisplayName("substitutes single synonym in simple SELECT")
+		void substitutesSingleSynonym() {
+			String sql = "SELECT id FROM orders";
+			Query query = Query.fromSql(sql, catalogWithSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("fct_orders");
+			assertThat(query.sqlString()).doesNotContainIgnoringCase("FROM orders");
+		}
+
+		@Test
+		@DisplayName("substitutes synonym with table alias")
+		void substitutesSynonymWithAlias() {
+			String sql = "SELECT o.id, o.order_value FROM orders o";
+			Query query = Query.fromSql(sql, catalogWithSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("fct_orders o");
+			// Check the full FROM clause to ensure "orders" was replaced with "fct_orders"
+			assertThat(query.sqlString()).doesNotContain("FROM orders ");
+		}
+
+		@Test
+		@DisplayName("substitutes synonyms in JOIN")
+		void substitutesSynonymsInJoin() {
+			String sql = "SELECT o.order_value, c.customer_name FROM orders o JOIN customers c ON o.customer_id = c.id";
+			Query query = Query.fromSql(sql, catalogWithSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("fct_orders");
+			assertThat(query.sqlString()).containsIgnoringCase("dim_customer");
+			assertThat(query.sqlString()).containsIgnoringCase("JOIN");
+		}
+
+		@Test
+		@DisplayName("case-insensitive synonym matching")
+		void caseInsensitiveSynonymMatching() {
+			String sql = "SELECT id FROM ORDERS";
+			Query query = Query.fromSql(sql, catalogWithSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("fct_orders");
+		}
+
+		@Test
+		@DisplayName("does not substitute partial matches")
+		void doesNotSubstitutePartialMatches() {
+			// Create catalog with a table named "order_items" to ensure "order" synonym doesn't replace it
+			SqlCatalog catalogWithOrderItems = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "order")
+					.addTable("order_items", "Order line items", "fact")
+					.addColumn("fct_orders", "id", "PK", "integer", null, null)
+					.addColumn("order_items", "id", "PK", "integer", null, null);
+
+			String sql = "SELECT id FROM order_items";
+			Query query = Query.fromSql(sql, catalogWithOrderItems);
+
+			// Should NOT replace "order_items" because it's not a word boundary match
+			assertThat(query.sqlString()).containsIgnoringCase("order_items");
+			assertThat(query.sqlString()).doesNotContainIgnoringCase("fct_orders_items");
+		}
+
+		@Test
+		@DisplayName("preserves canonical table names")
+		void preservesCanonicalNames() {
+			String sql = "SELECT id FROM fct_orders";
+			Query query = Query.fromSql(sql, catalogWithSynonyms);
+
+			assertThat(query.sqlString()).containsIgnoringCase("fct_orders");
+		}
+
+		@Test
+		@DisplayName("multiple synonyms for same table all work")
+		void multipleSynonymsAllWork() {
+			// Test "sales" synonym
+			Query q1 = Query.fromSql("SELECT id FROM sales", catalogWithSynonyms);
+			assertThat(q1.sqlString()).containsIgnoringCase("fct_orders");
+
+			// Test "order" synonym
+			Query q2 = Query.fromSql("SELECT id FROM order", catalogWithSynonyms);
+			assertThat(q2.sqlString()).containsIgnoringCase("fct_orders");
+
+			// Test "cust" synonym for dim_customer
+			Query q3 = Query.fromSql("SELECT id FROM cust", catalogWithSynonyms);
+			assertThat(q3.sqlString()).containsIgnoringCase("dim_customer");
+		}
+
+		@Test
+		@DisplayName("resolveTableName returns canonical name for synonym")
+		void resolveTableNameReturnsCatalogName() {
+			assertThat(catalogWithSynonyms.resolveTableName("orders"))
+					.isPresent()
+					.hasValue("fct_orders");
+
+			assertThat(catalogWithSynonyms.resolveTableName("customers"))
+					.isPresent()
+					.hasValue("dim_customer");
+		}
+
+		@Test
+		@DisplayName("resolveTableName returns canonical name directly")
+		void resolveTableNameReturnsCanonicalName() {
+			assertThat(catalogWithSynonyms.resolveTableName("fct_orders"))
+					.isPresent()
+					.hasValue("fct_orders");
+		}
+
+		@Test
+		@DisplayName("resolveTableName returns empty for unknown name")
+		void resolveTableNameReturnsEmptyForUnknown() {
+			assertThat(catalogWithSynonyms.resolveTableName("unknown_table"))
+					.isEmpty();
+		}
+
+		@Test
+		@DisplayName("SqlTable.matchesName works for synonyms")
+		void sqlTableMatchesNameWorks() {
+			SqlCatalog.SqlTable ordersTable = catalogWithSynonyms.tables().get("fct_orders");
+
+			assertThat(ordersTable.matchesName("fct_orders")).isTrue();
+			assertThat(ordersTable.matchesName("orders")).isTrue();
+			assertThat(ordersTable.matchesName("ORDERS")).isTrue();  // case-insensitive
+			assertThat(ordersTable.matchesName("sales")).isTrue();
+			assertThat(ordersTable.matchesName("unknown")).isFalse();
+		}
+
+		@Test
+		@DisplayName("rejects duplicate synonym across tables")
+		void rejectsDuplicateSynonymAcrossTables() {
+			assertThatThrownBy(() -> new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "orders")
+					.addTable("order_items", "Order items", "fact")
+					.withSynonyms("order_items", "orders"))  // duplicate!
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("Synonym 'orders' is already defined for table 'fct_orders'");
+		}
+
+		@Test
+		@DisplayName("rejects synonym that matches existing table name")
+		void rejectsSynonymMatchingTableName() {
+			assertThatThrownBy(() -> new InMemorySqlCatalog()
+					.addTable("orders", "Orders table", "fact")
+					.addTable("fct_orders", "Orders fact", "fact")
+					.withSynonyms("fct_orders", "orders"))  // conflicts with table name!
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("Synonym 'orders' conflicts with existing table name 'orders'");
+		}
+
+		@Test
+		@DisplayName("allows same synonym to be added to same table multiple times")
+		void allowsRedundantSynonymOnSameTable() {
+			// This should not throw - just a no-op or adds duplicate to list
+			InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "orders")
+					.withSynonyms("fct_orders", "orders");  // same table, same synonym
+
+			// Should work normally
+			assertThat(catalog.resolveTableName("orders")).hasValue("fct_orders");
+		}
+
+		@Test
+		@DisplayName("case-insensitive duplicate detection")
+		void caseInsensitiveDuplicateDetection() {
+			assertThatThrownBy(() -> new InMemorySqlCatalog()
+					.addTable("fct_orders", "Orders", "fact")
+					.withSynonyms("fct_orders", "orders")
+					.addTable("order_items", "Order items", "fact")
+					.withSynonyms("order_items", "ORDERS"))  // case-insensitive duplicate!
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessageContaining("already defined");
+		}
+	}
 }
 
