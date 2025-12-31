@@ -25,9 +25,10 @@ Transform natural language query requests into **executable SQL** that, in the b
 | 2 | Static Approach Hardening | ✅ Complete | 2024-12-30 |
 | 3 | Tool-Based Dynamic Metadata | ✅ Complete | 2024-12-31 |
 | 4 | Adaptive Hybrid Approach | ✅ Complete | 2024-12-31 |
-| 5 | Advanced Query Features | 🔲 Not Started | — |
+| 5 | Multi-Turn Context Tracking | 🔄 In Progress | — |
+| 6 | SQL Module Positioning | 🔲 Deferred | — |
 
-**Status Legend**: 🔲 Not Started | 🔄 In Progress | ✅ Complete
+**Status Legend**: 🔲 Not Started | 🔄 In Progress | ✅ Complete | ⏸️ Deferred
 
 ---
 
@@ -475,38 +476,485 @@ information while maintaining low-latency access to common patterns.
 
 ---
 
-## Phase 5: Advanced Query Features
+## Phase 5: Multi-Turn Context Tracking & Query Refinement
 
-**Goal**: Enable sophisticated query capabilities including multi-turn refinement.
+**Goal**: Enable sophisticated multi-turn conversations where users can incrementally refine queries and the framework maintains context across turns.
 
-### Tasks
+### Design Overview
+
+#### Core Concept: Working Context
+
+The framework tracks a **working context** — the current object being refined across turns:
+
+| Scenario | Working Object | Example Refinements |
+|----------|---------------|---------------------|
+| SQL | `Query` | "filter that by...", "add column..." |
+| Shopping | `BasketRef` (reference) | "add 2 more", "remove the milk" |
+
+Both share:
+- A primary object that persists across turns
+- Incremental operations that modify it
+- Pronouns/references ("that", "those", "it") pointing to prior context
+
+#### Key Design Decision: Application-Owned Persistence
+
+The **application** owns persistence of conversation state, not the framework. This is because:
+- Only the application knows what the conversation context is associated with (session, user, basket, etc.)
+- Only the application knows the persistence infrastructure in use
+- Transactional consistency between conversation state and domain data requires application control
+
+The **framework** provides:
+- An opaque, persistable **blob** that the application can request and restore
+- Versioning and migration for schema evolution
+- Integrity verification (hash) to detect tampering
+- Compression for efficient storage
+
+#### Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Application                           Framework                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Owns:                                 Provides:                 │
+│  - Storage infrastructure              - Opaque blob             │
+│  - Transaction boundaries              - Serialization           │
+│  - Session lifecycle                   - Versioning/migration    │
+│  - Domain data (Basket, etc.)          - Integrity verification  │
+│                                                                  │
+│  app.saveSession(sessionId, basket,    blob = manager            │
+│                  result.blob())            .toBlob(state)        │
+│                                                                  │
+│  state = manager.fromBlob(blob)        framework validates,      │
+│                                        migrates, deserializes    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Framework Core                               │
+│                   (conversation pkg)                             │
+├─────────────────────────────────────────────────────────────────┤
+│  WorkingContext<T>              - holds the working object       │
+│  WorkingContextContributor<T>   - renders context for prompt     │
+│  WorkingContextExtractor<T>     - extracts context after exec    │
+│  ConversationState              - stores WorkingContext          │
+│  ConversationTurnResult         - includes blob for persistence  │
+│  ConversationStateConfig        - history size configuration     │
+│  ConversationStateMigration     - schema version upgrades        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┴───────────────────┐
+          ▼                                       ▼
+┌───────────────────────────┐         ┌───────────────────────────┐
+│     SQL Layer             │         │    Shopping Layer         │
+│     (sql pkg)             │         │    (future)               │
+├───────────────────────────┤         ├───────────────────────────┤
+│ SqlWorkingContextContrib  │         │ BasketWorkingContextContrib│
+│ SqlWorkingContextExtractor│         │ BasketWorkingContextExtract│
+│ Query (working object)    │         │ BasketRef (reference only) │
+└───────────────────────────┘         └───────────────────────────┘
+```
+
+---
+
+### Tasks — Generic Framework (conversation pkg)
 
 | ID | Task | Status | Completed |
 |----|------|--------|-----------|
-| 5.1 | Implement query context tracking across turns | 🔲 | — |
-| 5.2 | Test: "Now filter that by region = 'West'" (incremental refinement) | 🔲 | — |
-| 5.3 | Test: "Add the customer name to those results" (column addition) | 🔲 | — |
-| 5.4 | Test: "Show me the same query for last year" (parameter substitution) | 🔲 | — |
-| 5.5 | Implement synonym/alias handling | 🔲 | — |
-| 5.6 | Test: "sales" interpreted as "order_value" | 🔲 | — |
-| 5.7 | Implement natural language → SQL explanation mode | 🔲 | — |
-| 5.8 | Document conversation patterns for query refinement | 🔲 | — |
+| 5.1a | Create `WorkingContext<T>` record | ✅ | 2024-12-31 |
+| 5.1b | Create `WorkingContextContributor<T>` interface | ✅ | 2024-12-31 |
+| 5.1c | Create `WorkingContextExtractor<T>` interface | ✅ | 2024-12-31 |
+| 5.1d | Create `PayloadTypeRegistry` for polymorphic deserialization | ✅ | 2024-12-31 |
+| 5.1e | Add `workingContext` field to `ConversationState` | ✅ | 2024-12-31 |
+| 5.1f | Add `turnHistory` list to `ConversationState` | ✅ | 2024-12-31 |
+| 5.1g | Add `blob` field to `ConversationTurnResult` | ✅ | 2024-12-31 |
+| 5.1h | Create `ConversationStateConfig` (history size) | ✅ | 2024-12-31 |
+| 5.1i | Update `ConversationManager.converse()` to accept/return blobs | ✅ | 2024-12-31 |
+| 5.1j | Add `toBlob()` and `fromBlob()` methods to `ConversationManager` | ✅ | 2024-12-31 |
+| 5.1k | Add `expire()` method to `ConversationManager` | ✅ | 2024-12-31 |
+
+### Tasks — Blob Serialization & Versioning
+
+| ID | Task | Status | Completed |
+|----|------|--------|-----------|
+| 5.2a | Create blob format with header (version, flags, hash) + compressed payload | ✅ | 2024-12-31 |
+| 5.2b | Implement gzip compression for payload | ✅ | 2024-12-31 |
+| 5.2c | Implement SHA-256 integrity hash | ⏸️ | — |
+| 5.2d | Add `toReadableJson()` for debugging (decompresses blob to pretty JSON) | ✅ | 2024-12-31 |
+| 5.2e | Create `ConversationStateMigration` interface | ✅ | 2024-12-31 |
+| 5.2f | Create `ConversationStateMigrationRegistry` | ✅ | 2024-12-31 |
+| 5.2g | Integrate versioning into blob deserialization | ✅ | 2024-12-31 |
+| 5.2h | Add migration tests (v1→v2 simulation) | ✅ | 2024-12-31 |
+
+### Tasks — SQL Layer (sql pkg)
+
+| ID | Task | Status | Completed |
+|----|------|--------|-----------|
+| 5.3a | Create `SqlWorkingContextContributor` | 🔲 | — |
+| 5.3b | Create `SqlWorkingContextExtractor` | 🔲 | — |
+| 5.3c | Add `referencedTables()` helper to `Query` | 🔲 | — |
+| 5.3d | Add `selectedColumns()` helper to `Query` | 🔲 | — |
+| 5.3e | Add `whereClause()` helper to `Query` (if extractable) | 🔲 | — |
+| 5.3f | Register `Query.class` in `PayloadTypeRegistry` | 🔲 | — |
+
+### Tasks — Integration Tests (Data Warehouse)
+
+| ID | Task | Status | Completed |
+|----|------|--------|-----------|
+| 5.4a | Test: "Now filter that by region = 'West'" (incremental refinement) | 🔲 | — |
+| 5.4b | Test: "Add the customer name to those results" (column addition) | 🔲 | — |
+| 5.4c | Test: "Show me the same query for last year" (parameter substitution) | 🔲 | — |
+| 5.4d | Test: Context persists across multiple turns via blob | 🔲 | — |
+| 5.4e | Test: `expire()` returns empty state | 🔲 | — |
+| 5.4f | Test: History is capped at configured size | 🔲 | — |
+| 5.4g | Test: Tampered blob is rejected (integrity check) | 🔲 | — |
+| 5.4h | Test: Old version blob is migrated on load | 🔲 | — |
+
+### Tasks — Documentation
+
+| ID | Task | Status | Completed |
+|----|------|--------|-----------|
+| 5.5a | Document conversation patterns for query refinement | 🔲 | — |
+| 5.5b | Add multi-turn examples to README | 🔲 | — |
+| 5.5c | Document blob persistence pattern for applications | 🔲 | — |
+| 5.5d | Document migration authoring for framework maintainers | 🔲 | — |
+
+---
+
+### Key Type Definitions
+
+#### WorkingContext
+
+```java
+/**
+ * The current working object in a multi-turn conversation.
+ * Domain-agnostic: holds a typed payload plus metadata.
+ */
+public record WorkingContext<T>(
+    String contextType,           // e.g., "sql.query", "shopping.basket"
+    T payload,                    // The working object
+    Instant lastModified,
+    Map<String, Object> metadata  // Domain-specific extras
+) {
+    public static <T> WorkingContext<T> of(String type, T payload) {
+        return new WorkingContext<>(type, payload, Instant.now(), Map.of());
+    }
+}
+```
+
+#### ConversationState (Enhanced)
+
+```java
+public record ConversationState(
+    String originalInstruction,
+    List<PendingParam> pendingParams,
+    Map<String, Object> providedParams,
+    String latestUserMessage,
+    WorkingContext<?> workingContext,  // Current working object
+    List<WorkingContext<?>> turnHistory // Prior turns (capped)
+) { ... }
+```
+
+#### ConversationStateConfig
+
+```java
+public record ConversationStateConfig(
+    int maxHistorySize       // Default: 10
+) {
+    public static ConversationStateConfig defaults() {
+        return new ConversationStateConfig(10);
+    }
+    
+    public static Builder builder() { return new Builder(); }
+    
+    public static class Builder {
+        private int maxHistorySize = 10;
+        public Builder maxHistorySize(int size) { this.maxHistorySize = size; return this; }
+        public ConversationStateConfig build() { return new ConversationStateConfig(maxHistorySize); }
+    }
+}
+```
+
+#### ConversationTurnResult (Enhanced)
+
+```java
+public record ConversationTurnResult(
+    Plan plan,
+    ConversationState state,
+    byte[] blob,                    // Ready-to-persist opaque blob
+    List<PendingParam> pendingParams,
+    Map<String, Object> providedParams
+) { ... }
+```
+
+#### ConversationManager API (Revised)
+
+```java
+public class ConversationManager {
+    
+    /**
+     * Process a conversation turn.
+     * @param userMessage the user's input
+     * @param priorBlob the previously stored blob (null for new conversation)
+     * @return result including new blob to persist
+     */
+    public ConversationTurnResult converse(String userMessage, byte[] priorBlob);
+    
+    /**
+     * Restore state from a blob (for inspection/debugging).
+     * Verifies integrity, migrates if needed.
+     * @throws IntegrityException if blob has been tampered with
+     * @throws MigrationException if migration fails
+     */
+    public ConversationState fromBlob(byte[] blob);
+    
+    /**
+     * Get readable JSON from blob (for debugging).
+     */
+    public String toReadableJson(byte[] blob);
+    
+    /**
+     * Create an expired/empty state.
+     * Use case: User cancels, logs out, starts over.
+     */
+    public ConversationTurnResult expire();
+}
+```
+
+---
+
+### Blob Format
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Header (fixed size)                │  Payload (variable)       │
+├─────────────────────────────────────┼───────────────────────────┤
+│  magic: 4 bytes ("CVST")            │  gzip(JSON state)         │
+│  version: 2 bytes                   │                           │
+│  flags: 2 bytes                     │                           │
+│  hash: 32 bytes (SHA-256 of payload)│                           │
+│  payload_length: 4 bytes            │                           │
+├─────────────────────────────────────┴───────────────────────────┤
+│  Total header: 44 bytes                                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- **Magic**: Identifies blob type, enables quick rejection of invalid data
+- **Version**: Schema version for migration
+- **Flags**: Reserved (compression type, encryption, etc.)
+- **Hash**: SHA-256 of compressed payload for integrity
+- **Payload**: gzip-compressed JSON
+
+---
+
+### Schema Versioning & Migration
+
+#### Migration Interface
+
+```java
+/**
+ * Migrates persisted ConversationState from one schema version to the next.
+ */
+public interface ConversationStateMigration {
+    int fromVersion();
+    int toVersion();
+    ObjectNode migrate(ObjectNode json);
+}
+```
+
+#### Migration Registry
+
+```java
+public interface ConversationStateMigrationRegistry {
+    void register(ConversationStateMigration migration);
+    List<ConversationStateMigration> getMigrationPath(int fromVersion, int toVersion);
+    int currentVersion();
+}
+```
+
+#### Migration on Load
+
+When deserializing a blob:
+1. Read version from header
+2. If version < current, apply migrations sequentially (v1→v2→v3...)
+3. Verify hash after decompression
+4. Parse migrated JSON to `ConversationState`
+
+---
+
+### SQL Working Context Contribution
+
+```java
+public class SqlWorkingContextContributor implements WorkingContextContributor<Query> {
+    
+    @Override
+    public String contextType() { return "sql.query"; }
+    
+    @Override
+    public String renderForPrompt(WorkingContext<Query> ctx) {
+        Query query = ctx.payload();
+        return """
+            PREVIOUS QUERY CONTEXT:
+            SQL: %s
+            Tables: %s
+            Columns: %s
+            
+            User may refine with:
+            - "filter by X" → Add WHERE clause
+            - "add column Y" → Extend SELECT
+            - "for last month" → Substitute date parameters
+            """.formatted(
+                query.sqlString(),
+                String.join(", ", query.referencedTables()),
+                String.join(", ", query.selectedColumns())
+            );
+    }
+}
+```
+
+---
+
+### Application Usage Example
+
+```java
+public class ShoppingSessionService {
+    
+    private final ConversationManager conversationManager;
+    private final SessionRepository sessionRepository;  // Application's storage
+    
+    public ShoppingResponse processUserMessage(String sessionId, String message) {
+        // Load prior blob from application's storage
+        SessionEntity session = sessionRepository.findById(sessionId).orElse(null);
+        byte[] priorBlob = session != null ? session.getConversationBlob() : null;
+        
+        // Framework processes the turn
+        ConversationTurnResult result = conversationManager.converse(message, priorBlob);
+        
+        // Execute the plan
+        PlanExecutionResult executed = executor.execute(result.plan());
+        
+        // Application saves everything in ONE transaction
+        session = session != null ? session : new SessionEntity(sessionId);
+        session.setConversationBlob(result.blob());  // Framework's opaque blob
+        session.setBasket(basketService.getBasket(sessionId));  // Application's data
+        sessionRepository.save(session);
+        
+        return buildResponse(executed);
+    }
+    
+    public void cancelShopping(String sessionId) {
+        SessionEntity session = sessionRepository.findById(sessionId).orElseThrow();
+        ConversationTurnResult expired = conversationManager.expire();
+        session.setConversationBlob(expired.blob());  // Or set to null
+        session.setBasket(null);
+        sessionRepository.save(session);
+    }
+}
+```
+
+---
+
+### What Gets Removed (vs. previous design)
+
+| Component | Status |
+|-----------|--------|
+| `ConversationStateStore` interface | **Remove** |
+| `InMemoryConversationStateStore` | **Remove** |
+| TTL management in framework | **Remove** (application's concern) |
+| `cleanupExpired()` | **Remove** |
+| `expire(sessionId)` | **Replaced** by `expire()` returning empty state |
+
+---
 
 ### Deliverables
 
-- [ ] Query context tracking mechanism
-- [ ] Synonym registry or mapping capability
-- [ ] Multi-turn query tests
-- [ ] Explanation mode feature
+#### Generic Framework (conversation pkg)
+- [ ] `WorkingContext.java`
+- [ ] `WorkingContextContributor.java`
+- [ ] `WorkingContextExtractor.java`
+- [ ] `PayloadTypeRegistry.java`
+- [ ] `ConversationStateConfig.java`
+- [ ] `ConversationStateMigration.java`
+- [ ] `ConversationStateMigrationRegistry.java`
+- [ ] `DefaultConversationStateMigrationRegistry.java`
+- [ ] Enhanced `ConversationState.java`
+- [ ] Enhanced `ConversationTurnResult.java`
+- [ ] Enhanced `ConversationManager.java` with blob API
+- [ ] Blob serialization with header, compression, hash
+- [ ] `ConversationStateDebug.java` (toReadableJson)
+- [ ] Unit tests for all new components
+
+#### SQL Layer (sql pkg)
+- [ ] `SqlWorkingContextContributor.java`
+- [ ] `SqlWorkingContextExtractor.java`
+- [ ] Enhanced `Query.java` with extraction helpers
+- [ ] Unit tests for SQL context handling
+
+#### Integration Tests
+- [ ] Multi-turn refinement tests in `DataWarehouseApplicationScenarioTest`
+- [ ] Blob persistence round-trip tests
+- [ ] Integrity verification tests
+- [ ] Migration tests
+- [ ] History cap tests
+
+#### Documentation
+- [ ] README section on multi-turn conversations
+- [ ] Blob persistence pattern guide for applications
+- [ ] Migration authoring guide
+
+---
 
 ### Phase 5 Completion Checklist
 
 ```
-[ ] All tasks marked complete
-[ ] All new tests passing
-[ ] Conversation patterns documented
+[x] All generic framework tasks (5.1a-5.1k) complete
+[x] All blob/versioning tasks (5.2a-5.2h) complete (5.2c deferred)
+[ ] All SQL layer tasks (5.3a-5.3f) complete
+[ ] All integration tests (5.4a-5.4h) passing
+[ ] All documentation tasks (5.5a-5.5d) complete
 [ ] Phase status updated to ✅ in overview table
 ```
+
+---
+
+## Phase 6: SQL Module Positioning (Deferred)
+
+**Status**: ⏸️ Deferred — to be revisited after Phase 5
+
+**Goal**: Determine the appropriate architectural positioning of SQL support within the project.
+
+### Context
+
+The SQL support code (`Query`, `SqlCatalog`, `QueryResolver`, tokenization, synonyms, etc.) is currently located in `org.javai.springai.actions.sql`. A decision is pending on whether to:
+
+1. **Keep in framework** — SQL remains a framework feature in `actions.sql`
+2. **Move to scenario** — SQL moves to `scenarios.data_warehouse.sql` as an example implementation
+3. **Separate module** — SQL becomes `springai-actions-sql`, an optional add-on module
+
+### Considerations
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Keep in framework** | Simple, no restructuring | SQL-specific code in core framework |
+| **Move to scenario** | Clean core, SQL is "just an example" | Not reusable as library |
+| **Separate module** | Reusable, follows Spring pattern | Multi-module complexity |
+
+### Decision Criteria
+
+The decision should be made after:
+- Phase 5 (multi-turn context) is complete and tested
+- Shopping scenario is designed (to see if similar patterns emerge)
+- The framework's extension points are proven stable
+
+### Tasks (When Activated)
+
+| ID | Task | Status |
+|----|------|--------|
+| 6.1 | Evaluate reusability of SQL code across hypothetical applications | 🔲 |
+| 6.2 | Design shopping scenario to validate framework abstractions | 🔲 |
+| 6.3 | Decide on module vs. scenario placement | 🔲 |
+| 6.4 | Execute restructuring if decided | 🔲 |
+| 6.5 | Update documentation to reflect new structure | 🔲 |
 
 ---
 

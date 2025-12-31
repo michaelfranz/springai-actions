@@ -79,7 +79,9 @@ class StatsApplicationConversationUnitTest {
 				initialInstruction,
 				pendingParams,
 				Map.of("domainEntity", "displacement", "measurementConcept", "values"),
-				"bundle id is A12345");
+				"bundle id is A12345",
+				null,
+				List.of());
 		String addendum = ConversationPromptBuilder.buildRetryAddendum(retryState).orElseThrow();
 		assertThat(addendum).contains("bundleId").contains("bundle id is A12345");
 

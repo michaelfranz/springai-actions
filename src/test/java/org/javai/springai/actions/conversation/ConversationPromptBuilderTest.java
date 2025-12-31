@@ -14,7 +14,9 @@ class ConversationPromptBuilderTest {
 				"export a control chart to excel for displacement values",
 				List.of(new PlanStep.PendingParam("bundleId", "Provide bundle id")),
 				Map.of("domainEntity", "displacement"),
-				"bundle id is A12345"
+				"bundle id is A12345",
+				null,
+				List.of()
 		);
 
 		String addendum = ConversationPromptBuilder.buildRetryAddendum(state).orElseThrow();
