@@ -402,7 +402,7 @@ public final class Planner {
 			return this;
 		}
 
-		public Builder addPromptContribution(String promptText) {
+		public Builder promptContribution(String promptText) {
 			if (promptText != null && !promptText.isBlank()) {
 				promptContributions.add(promptText);
 			}
@@ -427,17 +427,8 @@ public final class Planner {
 
 		/**
 		 * Add a prompt contributor that provides dynamic context to the system prompt.
-		 * @deprecated Use {@link #addPromptContributor(PromptContributor)} instead
 		 */
-		@Deprecated(forRemoval = true)
-		public Builder addDslContextContributor(PromptContributor contributor) {
-			return addPromptContributor(contributor);
-		}
-
-		/**
-		 * Add a prompt contributor that provides dynamic context to the system prompt.
-		 */
-		public Builder addPromptContributor(PromptContributor contributor) {
+		public Builder promptContributor(PromptContributor contributor) {
 			if (contributor != null) {
 				this.promptContributors.add(contributor);
 			}

@@ -99,7 +99,7 @@ public class DataWarehouseApplicationScenarioTest {
 				.withChatClient(chatClient)
 				.persona(sqlAnalystPersona)
 				.actions(dataWarehouseActions)
-				.addPromptContributor(new SqlCatalogContextContributor(catalog))
+				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql", catalog)
 				.build();
 		executor = new DefaultPlanExecutor();

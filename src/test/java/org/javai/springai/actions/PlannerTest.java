@@ -22,7 +22,7 @@ class PlannerTest {
 	@Test
 	void previewIncludesActionsInJsonFormat() {
 		Planner planner = Planner.builder()
-				.addPromptContribution("system-extra")
+				.promptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
 				.build();
@@ -41,7 +41,7 @@ class PlannerTest {
 	@Test
 	void systemPromptUsesRawPlanFormat() {
 		Planner planner = Planner.builder()
-				.addPromptContribution("system-extra")
+				.promptContribution("system-extra")
 				.actions(new DemoActions())
 				.enablePromptCapture()
 				.build();
@@ -218,7 +218,7 @@ class PlannerTest {
 
 		Planner planner = Planner.builder()
 				.actions(new QueryActions())
-				.addPromptContributor(new SqlCatalogContextContributor(catalog))
+				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql-catalog", catalog)
 				.enablePromptCapture()
 				.build();
