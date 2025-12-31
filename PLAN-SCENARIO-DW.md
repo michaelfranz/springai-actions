@@ -24,7 +24,7 @@ Transform natural language query requests into **executable SQL** that, in the b
 | 1 | Documentation & Foundation | ✅ Complete | 2024-12-30 |
 | 2 | Static Approach Hardening | ✅ Complete | 2024-12-30 |
 | 3 | Tool-Based Dynamic Metadata | ✅ Complete | 2024-12-31 |
-| 4 | Adaptive Hybrid Approach | 🔄 In Progress | — |
+| 4 | Adaptive Hybrid Approach | ✅ Complete | 2024-12-31 |
 | 5 | Advanced Query Features | 🔲 Not Started | — |
 
 **Status Legend**: 🔲 Not Started | 🔄 In Progress | ✅ Complete
@@ -449,8 +449,8 @@ information while maintaining low-latency access to common patterns.
 | 4.6 | Test: After N requests for same table, table appears in prompt | ✅ | 2024-12-31 |
 | 4.7 | Test: Tool still works for infrequent tables | ✅ | 2024-12-31 |
 | 4.8 | Test: Frequency thresholds are configurable | ✅ | 2024-12-31 |
-| 4.9 | Document configuration options and usage patterns | 🔲 | — |
-| 4.10 | Consider persistence options for production (JDBC tracker) | 🔲 | — |
+| 4.9 | Document configuration options and usage patterns | ✅ | 2024-12-31 |
+| 4.10 | ~~Consider persistence options for production (JDBC tracker)~~ (skipped - no current use case) | ⏭️ | 2024-12-31 |
 
 ### Deliverables
 
@@ -466,11 +466,11 @@ information while maintaining low-latency access to common patterns.
 ### Phase 4 Completion Checklist
 
 ```
-[ ] All tasks marked complete
-[ ] All new tests passing
-[ ] Configuration documented
-[ ] Cold-start behavior documented
-[ ] Phase status updated to ✅ in overview table
+[x] All tasks marked complete (4.10 skipped - no current use case)
+[x] All new tests passing
+[x] Configuration documented in README.md
+[x] Cold-start behavior documented in README.md
+[x] Phase status updated to ✅ in overview table
 ```
 
 ---

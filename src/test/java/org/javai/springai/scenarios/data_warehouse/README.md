@@ -181,6 +181,102 @@ The scenario includes actions with similar purposes but different effects:
 
 The LLM must choose correctly based on user intent and the nature of the request.
 
+## Adaptive Hybrid Approach
+
+The adaptive hybrid approach combines the best of static schema contribution and tool-based discovery. It starts cold (no schema in prompt) and progressively promotes frequently-used tables to the system prompt, reducing tool call latency for common queries while keeping tools available for infrequent tables.
+
+### Components
+
+| Component | Purpose |
+|-----------|---------|
+| `SchemaAccessTracker` | Interface for recording table access patterns |
+| `InMemorySchemaAccessTracker` | In-memory implementation (suitable for testing, single-instance) |
+| `FrequencyAwareSqlCatalogTool` | Wraps `SqlCatalogTool`, records access to tracker |
+| `AdaptiveSqlCatalogContributor` | Includes only "hot" tables in the system prompt |
+
+### Configuration
+
+```java
+// Create tracker and tools
+SchemaAccessTracker tracker = new InMemorySchemaAccessTracker();
+SqlCatalogTool baseTool = new SqlCatalogTool(catalog);
+FrequencyAwareSqlCatalogTool trackingTool = new FrequencyAwareSqlCatalogTool(baseTool, tracker);
+
+// Configure hot threshold (minimum accesses to include in prompt)
+int hotThreshold = 3;  // Tables accessed 3+ times appear in prompt
+AdaptiveSqlCatalogContributor contributor = new AdaptiveSqlCatalogContributor(
+        catalog, tracker, hotThreshold);
+
+// Wire into Planner
+Planner planner = Planner.builder()
+        .withChatClient(chatClient)
+        .promptContributor(contributor)  // Adaptive schema in prompt
+        .tools(trackingTool)             // Tool-based discovery (records access)
+        .actions(actions)
+        .addPromptContext("sql", catalog)
+        .build();
+```
+
+### Hot Threshold Configuration
+
+The `hotThreshold` parameter controls when tables are promoted to the system prompt:
+
+| Threshold | Behavior |
+|-----------|----------|
+| 1 | Aggressive — tables appear after first access |
+| 2-3 | Balanced — tables need a few accesses before promotion |
+| 5+ | Conservative — only very frequently used tables promoted |
+
+**Choosing a threshold:**
+- **Lower threshold** → Faster warm-up, larger prompt over time
+- **Higher threshold** → Slower warm-up, leaner prompt, more tool calls
+
+### Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Phase 1: Cold Start                                            │
+│  • Prompt: "No frequently-used tables yet. Use tools..."        │
+│  • LLM discovers schema via listTables/getTableDetails          │
+│  • Each getTableDetails call records access                     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Phase 2: Warming Up                                            │
+│  • Access counts accumulate: fct_orders=2, dim_customer=1       │
+│  • Tables below threshold still require tools                   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Phase 3: Warm State                                            │
+│  • Prompt: fct_orders schema (accessed 3+)                      │
+│  • dim_customer still via tool (accessed <3)                    │
+│  • Hot tables get low-latency, cold tables still discoverable   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Production Considerations
+
+**In-Memory Tracker:**
+- Suitable for: Single-instance deployments, testing, prototyping
+- Resets on application restart
+- Thread-safe via `ConcurrentHashMap`
+
+**For distributed/persistent tracking:**
+- Implement `SchemaAccessTracker` with JDBC, Redis, or other backing store
+- Consider time-decay to deprioritize stale access patterns
+- Consider per-user vs. global tracking based on use case
+
+### Test Variants
+
+| Test Class | Approach |
+|------------|----------|
+| `DataWarehouseApplicationScenarioTest` | Static schema in prompt |
+| `DataWarehouseToolBasedScenarioTest` | Tool-based discovery only |
+| `DataWarehouseAdaptiveHybridScenarioTest` | Adaptive hybrid |
+
 ## Running the Tests
 
 ### Prerequisites
