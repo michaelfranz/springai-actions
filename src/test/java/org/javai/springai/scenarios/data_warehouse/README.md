@@ -181,6 +181,93 @@ The scenario includes actions with similar purposes but different effects:
 
 The LLM must choose correctly based on user intent and the nature of the request.
 
+## Schema Delivery Strategies
+
+The framework supports three strategies for delivering SQL schema information to the LLM, each with distinct trade-offs:
+
+| Strategy | Schema in Prompt | Tools Available | Latency | Best For |
+|----------|------------------|-----------------|---------|----------|
+| **Static** | Full schema | None | Lowest | Small schemas (<20 tables) |
+| **Tool-based** | None | `listTables`, `getTableDetails` | Higher | Large schemas, exploration |
+| **Adaptive Hybrid** | Hot tables only | Full tools | Balanced | Production workloads |
+
+### Static Schema Contribution
+
+The entire schema is injected into the system prompt via `SqlCatalogContextContributor`. The LLM has immediate access to all table and column metadata.
+
+```java
+Planner.builder()
+    .promptContributor(new SqlCatalogContextContributor(catalog))
+    .build();
+```
+
+**Advantages:**
+- Lowest latency — no tool round-trips
+- Simplest configuration
+- Predictable prompt content
+
+**Disadvantages:**
+- Prompt size grows with schema
+- All tables consume tokens, even if unused
+- Changes require application restart
+
+### Tool-Based Discovery
+
+Schema is not in the prompt. The LLM uses `SqlCatalogTool` to discover tables on demand.
+
+```java
+Planner.builder()
+    .tools(new SqlCatalogTool(catalog))
+    .build();
+```
+
+**Advantages:**
+- Minimal prompt size
+- Scales to large schemas (100+ tables)
+- LLM fetches only what it needs
+
+**Disadvantages:**
+- Higher latency (tool round-trips)
+- More LLM calls per request
+- Discovery adds cognitive load to LLM
+
+### Adaptive Hybrid (Recommended for Production)
+
+Combines both approaches: frequently-used tables are promoted to the prompt, while tools remain available for infrequent tables.
+
+```java
+Planner.builder()
+    .promptContributor(new AdaptiveSqlCatalogContributor(catalog, tracker, threshold))
+    .tools(new FrequencyAwareSqlCatalogTool(baseTool, tracker))
+    .build();
+```
+
+**Advantages:**
+- Low latency for common queries (hot tables in prompt)
+- Scales to large schemas (cold tables via tools)
+- Self-optimizing based on usage patterns
+
+**Disadvantages:**
+- More components to configure
+- Cold start requires tool calls
+- Requires access tracking infrastructure
+
+### Choosing a Strategy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    How many tables?                             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+     < 20 tables        20-100 tables        100+ tables
+          │                   │                   │
+          ▼                   ▼                   ▼
+       Static            Adaptive             Tool-based
+                          Hybrid              (or Adaptive)
+```
+
 ## Adaptive Hybrid Approach
 
 The adaptive hybrid approach combines the best of static schema contribution and tool-based discovery. It starts cold (no schema in prompt) and progressively promotes frequently-used tables to the system prompt, reducing tool call latency for common queries while keeping tools available for infrequent tables.
@@ -300,10 +387,15 @@ export RUN_LLM_TESTS=true
 
 ## Future Enhancements
 
-See `PLAN-SCENARIO-DW.md` for the enhancement roadmap, including:
+See `PLAN-SCENARIO-DW.md` for the enhancement roadmap:
 
-1. **Tool-based metadata lookup** — Dynamic schema discovery instead of static prompt
-2. **Adaptive hybrid approach** — Learn frequently-used schema elements
-3. **Expanded query patterns** — JOINs, aggregations, time intelligence
-4. **Multi-turn query refinement** — Build on previous queries
+| Feature | Status |
+|---------|--------|
+| Tool-based metadata lookup | ✅ Complete |
+| Adaptive hybrid approach | ✅ Complete |
+| Table/column synonyms | ✅ Complete |
+| Schema tokenization | ✅ Complete |
+| Expanded query patterns (JOINs, aggregations) | ✅ Complete |
+| Multi-turn query refinement | 🔲 Planned (Phase 5) |
+| SQL validation retry mechanism | 🔲 Planned |
 
