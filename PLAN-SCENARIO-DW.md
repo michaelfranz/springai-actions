@@ -216,18 +216,18 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 ---
 
-#### FWK-WEAK-004: PENDING Parameter Flow Not Exercised
+#### FWK-WEAK-004: PENDING Parameter Flow Not Exercised — ✅ FIXED
+
+**Status**: ✅ Fixed (2026-01-01)
 
 **Location**: `DataWarehouseApplicationScenarioTest` / Persona constraints
 
 **Issue**: The persona includes `"If any required parameter is unclear, use PENDING"`, but no test exercises this path.
 
-**Impact**: We don't know if:
-- The LLM actually uses PENDING correctly
-- The framework handles PENDING parameters properly
-- The conversation can recover from PENDING state
-
-**Recommended Fix**: Add test case where user request is ambiguous and LLM should return PENDING.
+**Resolution**:
+- Added `pendingWhenDateRangeMissing()` test: verifies LLM returns PENDING when required date range is missing
+- Added `conversationRecoversFromPending()` test: verifies multi-turn recovery when user provides clarification
+- Tests confirm LLM correctly identifies missing parameters and conversation state correctly preserves context
 
 ---
 
@@ -246,30 +246,36 @@ The following framework weaknesses have been exposed by analyzing the current da
 
 ---
 
-#### FWK-WEAK-006: Action Selection Not Verified
+#### FWK-WEAK-006: Action Selection Not Verified — ✅ FIXED
+
+**Status**: ✅ Fixed (2026-01-01)
 
 **Location**: `DataWarehouseApplicationScenarioTest.selectWithDatabaseObjectConstraintsTest()`
 
 **Issue**: Tests verify that `runSqlQueryInvoked()` is true, but don't verify `showSqlQueryInvoked()` is false. The LLM could be calling both.
 
-**Impact**: Can't confirm the LLM is selecting the *correct* action exclusively.
-
-**Recommended Fix**: Assert that wrong action was NOT invoked.
+**Resolution**:
+- Updated `selectWithoutDatabaseObjectConstraintsTest()` to assert `runSqlQuery` and `aggregateOrderValue` were NOT invoked
+- Updated `selectWithDatabaseObjectConstraintsTest()` to assert `showSqlQuery` and `aggregateOrderValue` were NOT invoked
+- Updated `aggregateOrderValueWithJsonRecordParameters()` to assert `showSqlQuery` and `runSqlQuery` were NOT invoked
+- All tests now verify exclusive action selection
 
 ---
 
-#### FWK-WEAK-007: No Instrumentation in Tests
+#### FWK-WEAK-007: No Instrumentation in Tests — ✅ FIXED
+
+**Status**: ✅ Fixed (2026-01-01)
 
 **Location**: `DataWarehouseApplicationScenarioTest`
 
 **Issue**: `DefaultPlanExecutor` is created without an `InvocationEmitter`, so no execution events are captured.
 
-**Impact**: Cannot observe:
-- Execution timing
-- Parameter values at execution time
-- Success/failure patterns
-
-**Recommended Fix**: Add tests with emitter to validate event capture.
+**Resolution**:
+- Added `executionEventsCapturedViaEmitter()` test that creates an `InvocationEmitter` with a test listener
+- Verifies REQUESTED, STARTED, and SUCCEEDED events are captured
+- Verifies correlation ID is propagated correctly
+- Verifies action ID and duration are recorded in event attributes
+- Added `executionTimingCaptured()` test that verifies timing is reasonable and timestamps are present
 
 ---
 
@@ -296,12 +302,12 @@ The following framework weaknesses have been exposed by analyzing the current da
 |----|----------|------|---------------|--------|
 | FWK-WEAK-001 | **Critical** | Resolution | Medium | ✅ Fixed |
 | FWK-WEAK-002 | High | Validation | Medium | ✅ Fixed |
-| FWK-WEAK-003 | Medium | Reliability | High |
-| FWK-WEAK-004 | Medium | Testing | Low |
-| FWK-WEAK-005 | Medium | Testing | Low |
-| FWK-WEAK-006 | Low | Testing | Low |
-| FWK-WEAK-007 | Low | Observability | Low |
-| FWK-WEAK-008 | Low | Scalability | Medium |
+| FWK-WEAK-003 | Medium | Reliability | High | |
+| FWK-WEAK-004 | Medium | Testing | Low | ✅ Fixed |
+| FWK-WEAK-005 | Medium | Testing | Low | |
+| FWK-WEAK-006 | Low | Testing | Low | ✅ Fixed |
+| FWK-WEAK-007 | Low | Observability | Low | ✅ Fixed |
+| FWK-WEAK-008 | Low | Scalability | Medium | |
 
 ---
 

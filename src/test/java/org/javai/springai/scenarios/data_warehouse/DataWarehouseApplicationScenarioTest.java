@@ -7,27 +7,34 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
+import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
+import org.javai.springai.actions.internal.instrument.InvocationEmitter;
+import org.javai.springai.actions.internal.instrument.InvocationEvent;
+import org.javai.springai.actions.internal.instrument.InvocationEventType;
+import org.javai.springai.actions.internal.instrument.InvocationListener;
 import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
-public class DataWarehouseApplicationScenarioTest {
+class DataWarehouseApplicationScenarioTest {
 
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
@@ -121,7 +128,15 @@ public class DataWarehouseApplicationScenarioTest {
 
 		PlanExecutionResult executed = executor.execute(plan);
 		assertExecutionSuccess(executed);
+		
+		// FWK-WEAK-006: Verify correct action was invoked AND wrong actions were NOT invoked
 		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
+		assertThat(dataWarehouseActions.runSqlQueryInvoked())
+				.as("runSqlQuery should NOT be invoked when user asks to 'show' a query")
+				.isFalse();
+		assertThat(dataWarehouseActions.aggregateOrderValueInvoked())
+				.as("aggregateOrderValue should NOT be invoked for simple select query")
+				.isFalse();
 	}
 
 	@Test
@@ -137,7 +152,15 @@ public class DataWarehouseApplicationScenarioTest {
 
 		PlanExecutionResult executed = executor.execute(plan);
 		assertExecutionSuccess(executed);
+		
+		// FWK-WEAK-006: Verify correct action was invoked AND wrong actions were NOT invoked
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
+		assertThat(dataWarehouseActions.showSqlQueryInvoked())
+				.as("showSqlQuery should NOT be invoked when user asks to 'run' a query")
+				.isFalse();
+		assertThat(dataWarehouseActions.aggregateOrderValueInvoked())
+				.as("aggregateOrderValue should NOT be invoked for simple select query")
+				.isFalse();
 	}
 
 	@Test
@@ -157,7 +180,15 @@ public class DataWarehouseApplicationScenarioTest {
 		PlanExecutionResult executed = executor.execute(plan);
 
 		assertExecutionSuccess(executed);
+		
+		// FWK-WEAK-006: Verify correct action was invoked AND wrong actions were NOT invoked
 		assertThat(dataWarehouseActions.aggregateOrderValueInvoked()).isTrue();
+		assertThat(dataWarehouseActions.showSqlQueryInvoked())
+				.as("showSqlQuery should NOT be invoked for aggregate request")
+				.isFalse();
+		assertThat(dataWarehouseActions.runSqlQueryInvoked())
+				.as("runSqlQuery should NOT be invoked for aggregate request")
+				.isFalse();
 
 		Optional<OrderValueQuery> optionalQuery = dataWarehouseActions.lastOrderValueQuery();
 		assertThat(optionalQuery).isPresent();
@@ -258,6 +289,238 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(sql).contains("JOIN");
 		assertThat(sql).contains("CUSTOMER_NAME");
 		assertThat(sql).contains("ORDER_VALUE");
+	}
+
+	// ========== PENDING Parameter Flow Tests ==========
+	// Tests that the LLM correctly uses PENDING when required parameters are unclear.
+	// These tests use a dedicated planner with explicit PENDING guidance to ensure
+	// reliable behavior across LLM invocations.
+
+	@Nested
+	@DisplayName("PENDING Parameter Flow Tests")
+	class PendingParameterFlowTests {
+
+		private Planner pendingAwarePlanner;
+		private ConversationManager pendingAwareConversationManager;
+		private DataWarehouseActions pendingTestActions;
+
+		@BeforeEach
+		void setUpPendingTests() {
+			pendingTestActions = new DataWarehouseActions();
+
+			// Create SQL catalog (same as main setup)
+			InMemorySqlCatalog catalog = new InMemorySqlCatalog()
+					.addTable("fct_orders", "Fact table for orders", "fact")
+					.withSynonyms("fct_orders", "orders", "order", "sales")
+					.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
+							new String[] { "fk:dim_customer.id" }, null)
+					.addColumn("fct_orders", "order_value", "Order amount", "double",
+							new String[] { "measure" }, null)
+					.addTable("dim_customer", "Customer dimension", "dimension")
+					.withSynonyms("dim_customer", "customers", "customer", "cust")
+					.addColumn("dim_customer", "id", "PK", "string",
+							new String[] { "pk" }, new String[] { "unique" })
+					.addColumn("dim_customer", "customer_name", "Customer name", "string",
+							new String[] { "attribute" }, null);
+
+			// Persona with EXPLICIT PENDING guidance (modeled after stats_app scenario)
+			PersonaSpec pendingAwarePersona = PersonaSpec.builder()
+					.name("SQLDataWarehouseAssistant")
+					.role("Assistant for data warehouse query planning and order value analysis")
+					.principles(List.of(
+							"Understand what the user wants to accomplish from a domain perspective",
+							"Select the action whose purpose best matches the user's intent",
+							"CRITICAL: The aggregateOrderValue action REQUIRES a date range (period with start and end dates)",
+							"If user asks for aggregate/total order value WITHOUT specifying dates, use PENDING for the period parameter"))
+					.constraints(List.of(
+							"Only use the available actions",
+							"NEVER invent or guess date ranges - if no dates provided, emit PENDING for period",
+							"Use PENDING format: (PENDING paramName \"what date range?\")"))
+					.build();
+
+			pendingAwarePlanner = Planner.builder()
+					.withChatClient(chatClient)
+					.persona(pendingAwarePersona)
+					.actions(pendingTestActions)
+					.promptContributor(new SqlCatalogContextContributor(catalog))
+					.addPromptContext("sql", catalog)
+					.build();
+
+			pendingAwareConversationManager = new ConversationManager(
+					pendingAwarePlanner, new InMemoryConversationStateStore());
+		}
+
+		@Test
+		@DisplayName("LLM returns PENDING when required date range is missing")
+		void pendingWhenDateRangeMissing() {
+			// User asks for aggregate without specifying dates - should trigger PENDING
+			String ambiguousRequest = "calculate total order value for Mike";
+
+			ConversationTurnResult turn = pendingAwareConversationManager.converse(
+					ambiguousRequest, "pending-test-session");
+			Plan plan = turn.plan();
+
+			assertThat(plan).isNotNull();
+
+			// The LLM should recognize that the aggregateOrderValue action requires a period
+			// and return PENDING since no date range was provided
+			assertThat(plan.status())
+					.as("Plan should be PENDING when required date range is missing")
+					.isEqualTo(PlanStatus.PENDING);
+
+			// Verify pending params include the missing period
+			assertThat(plan.pendingParameterNames())
+					.as("Missing 'period' parameter should be identified")
+					.anyMatch(name -> name.toLowerCase().contains("period")
+							|| name.toLowerCase().contains("date")
+							|| name.toLowerCase().contains("start")
+							|| name.toLowerCase().contains("end"));
+
+			// Verify no actions were invoked (plan wasn't executed)
+			assertThat(pendingTestActions.aggregateOrderValueInvoked()).isFalse();
+			assertThat(pendingTestActions.showSqlQueryInvoked()).isFalse();
+			assertThat(pendingTestActions.runSqlQueryInvoked()).isFalse();
+		}
+
+		@Test
+		@DisplayName("conversation recovers from PENDING after user provides missing info")
+		void conversationRecoversFromPending() {
+			// Turn 1: Ambiguous request
+			String ambiguousRequest = "calculate total order value for Mike";
+			ConversationTurnResult turn1 = pendingAwareConversationManager.converse(
+					ambiguousRequest, "recovery-session");
+
+			assertThat(turn1.plan().status())
+					.as("First turn should be PENDING")
+					.isEqualTo(PlanStatus.PENDING);
+
+			// Turn 2: User provides the missing date range
+			String clarification = "from January 1 2024 to January 31 2024";
+			ConversationTurnResult turn2 = pendingAwareConversationManager.converse(
+					clarification, "recovery-session");
+
+			Plan plan2 = turn2.plan();
+			assertThat(plan2).isNotNull();
+
+			// After clarification, plan should be READY
+			assertThat(plan2.status())
+					.as("Plan should be READY after user provides missing date range")
+					.isEqualTo(PlanStatus.READY);
+
+			// Execute the plan
+			PlanExecutionResult executed = executor.execute(plan2);
+			assertExecutionSuccess(executed);
+
+			// Verify the aggregate action was invoked with correct parameters
+			assertThat(pendingTestActions.aggregateOrderValueInvoked()).isTrue();
+			OrderValueQuery query = pendingTestActions.lastOrderValueQuery().orElseThrow();
+			assertThat(query.customer_name()).isEqualTo("Mike");
+			assertThat(query.period().start()).isEqualTo(LocalDate.parse("2024-01-01"));
+			assertThat(query.period().end()).isEqualTo(LocalDate.parse("2024-01-31"));
+		}
+	}
+
+	// ========== Instrumentation Tests (FWK-WEAK-007) ==========
+	// Tests that InvocationEmitter correctly captures execution events
+
+	@Test
+	@DisplayName("execution events are captured via InvocationEmitter")
+	void executionEventsCapturedViaEmitter() {
+		// Reset actions for clean state
+		dataWarehouseActions.reset();
+		
+		// Create a listener that captures all events
+		List<InvocationEvent> capturedEvents = new CopyOnWriteArrayList<>();
+		InvocationListener testListener = capturedEvents::add;
+		
+		// Create an emitter with our test listener
+		InvocationEmitter emitter = InvocationEmitter.of("test-correlation-id", testListener);
+		
+		// Create executor with instrumentation
+		DefaultPlanExecutor instrumentedExecutor = DefaultPlanExecutor.builder()
+				.withEmitter(emitter)
+				.build();
+
+		// Execute a plan
+		String request = "run query: select order_value from fct_orders";
+		ConversationTurnResult turn = conversationManager.converse(request, "instrumentation-session");
+		Plan plan = turn.plan();
+		
+		assertPlanReady(plan);
+		
+		PlanExecutionResult executed = instrumentedExecutor.execute(plan);
+		assertExecutionSuccess(executed);
+		
+		// Verify events were captured
+		assertThat(capturedEvents)
+				.as("At least REQUESTED, STARTED, and SUCCEEDED events should be captured")
+				.hasSizeGreaterThanOrEqualTo(3);
+		
+		// Verify event types
+		List<InvocationEventType> eventTypes = capturedEvents.stream()
+				.map(InvocationEvent::type)
+				.toList();
+		
+		assertThat(eventTypes).contains(
+				InvocationEventType.REQUESTED,
+				InvocationEventType.STARTED,
+				InvocationEventType.SUCCEEDED
+		);
+		
+		// Verify correlation ID is propagated
+		assertThat(capturedEvents)
+				.allMatch(event -> "test-correlation-id".equals(event.correlationId()));
+		
+		// Verify action name is captured
+		InvocationEvent succeededEvent = capturedEvents.stream()
+				.filter(e -> e.type() == InvocationEventType.SUCCEEDED)
+				.findFirst()
+				.orElseThrow();
+		
+		assertThat(succeededEvent.name()).isEqualTo("runSqlQuery");
+		
+		// Verify duration is recorded for SUCCEEDED event
+		assertThat(succeededEvent.durationMs())
+				.as("Duration should be recorded for completed actions")
+				.isNotNull()
+				.isGreaterThanOrEqualTo(0L);
+		
+		// Verify attributes contain action ID
+		assertThat(succeededEvent.attributes())
+				.containsEntry("actionId", "runSqlQuery");
+	}
+
+	@Test
+	@DisplayName("execution timing is captured accurately")
+	void executionTimingCaptured() {
+		dataWarehouseActions.reset();
+		
+		List<InvocationEvent> events = new CopyOnWriteArrayList<>();
+		InvocationEmitter emitter = InvocationEmitter.of("timing-test", events::add);
+		
+		DefaultPlanExecutor instrumentedExecutor = DefaultPlanExecutor.builder()
+				.withEmitter(emitter)
+				.build();
+
+		String request = "show me a query for customer names from dim_customer";
+		ConversationTurnResult turn = conversationManager.converse(request, "timing-session");
+		
+		assertPlanReady(turn.plan());
+		instrumentedExecutor.execute(turn.plan());
+		
+		// Find the SUCCEEDED event
+		InvocationEvent succeeded = events.stream()
+				.filter(e -> e.type() == InvocationEventType.SUCCEEDED)
+				.findFirst()
+				.orElseThrow();
+		
+		// Timing should be reasonable (not negative, not absurdly long)
+		assertThat(succeeded.durationMs())
+				.isNotNull()
+				.isBetween(0L, 5000L); // Action should complete in under 5 seconds
+		
+		// Verify timestamp is present
+		assertThat(succeeded.timestamp()).isNotNull();
 	}
 
 	// ========== Tokenization Unit Tests (Task 2.18) ==========
