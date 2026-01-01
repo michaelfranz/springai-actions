@@ -44,7 +44,7 @@ public class ShoppingActions {
 			@ActionParam(description = "Quantity", allowedRegex = "[0-9]+") int quantity) {
 		addItemInvoked.set(true);
 		lastAddItem = new AddItemRequest(product, quantity);
-		basket.merge(product, quantity, (existing, add) -> existing + add);
+		basket.merge(product, quantity, Integer::sum);
 	}
 
 	@Action(description = """
@@ -52,8 +52,8 @@ public class ShoppingActions {
 	public void addPartySnacks(
 			@ActionParam(description = "Party size", allowedRegex = "[0-9]+") int partySize) {
 		addPartySnacksInvoked.set(true);
-		basket.merge("crisps (party)", partySize, (existing, add) -> existing + add);
-		basket.merge("nuts (party)", partySize, (existing, add) -> existing + add);
+		basket.merge("crisps (party)", partySize, Integer::sum);
+		basket.merge("nuts (party)", partySize, Integer::sum);
 	}
 
 	@Action(description = """
