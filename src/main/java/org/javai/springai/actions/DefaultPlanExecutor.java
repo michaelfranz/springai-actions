@@ -47,10 +47,10 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		boolean success = true;
 
 		for (PlanStep step : plan.planSteps()) {
-			if (step instanceof PlanStep.ErrorStep errorStep) {
+			if (step instanceof PlanStep.ErrorStep(String reason)) {
 				success = false;
 				results.add(new StepExecutionResult(null, false, null, null,
-						"Plan contains error step: " + errorStep.reason()));
+						"Plan contains error step: " + reason));
 				break; // stop execution on error
 			}
 
