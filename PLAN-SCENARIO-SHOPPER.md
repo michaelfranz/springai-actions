@@ -320,50 +320,115 @@ public class MockStoreApi {
 
 ---
 
-### Phase 5: Budget-Aware Shopping
+### Phase 5: Budget & Mission Store Infrastructure
 
-**Objective**: Respect customer budget constraints throughout the session.
+**Objective**: Extend the mock store with budget tracking and mission planning capabilities at the infrastructure level only.
 
-| Task | Description | Deliverable |
-|------|-------------|-------------|
-| 5.1 | Add `setBudget` action | Customer states spending limit |
-| 5.2 | Track budget in session context | Persist budget constraint |
-| 5.3 | Warn when approaching/exceeding budget | Proactive budget alerts |
-| 5.4 | Update persona principles | Respect budget in recommendations |
-| 5.5 | Write budget constraint tests | Add item exceeds budget scenarios |
-
-**Outcome**: The assistant tracks budget and warns before the customer overspends.
-
----
-
-### Phase 6: Mission-Based Shopping
-
-**Objective**: Support complex shopping missions with constraints.
+#### Part A: Budget Infrastructure
 
 | Task | Description | Deliverable |
 |------|-------------|-------------|
-| 6.1 | Define `MissionRequest` model | Captures party size, dietary needs, budget, occasion |
-| 6.2 | Define `MissionPlan` model | Proposed product set with quantities and rationale |
-| 6.3 | Implement mission planning in `MockStoreApi` | Algorithm to select products |
-| 6.4 | Create `MissionTool` | Tool exposing `planMission` |
-| 6.5 | Create `executeMission` action | Add mission products to basket with confirmation |
-| 6.6 | Handle dietary exclusions | Filter allergens (e.g., peanut allergy) |
-| 6.7 | Handle portion scaling | Calculate quantities for party size |
-| 6.8 | Write mission scenario tests | Vegetarian party, budget-constrained dinner |
+| 5.1 | Add `budgetLimit` and `budgetRemaining` to session state | `ShoppingSession` model |
+| 5.2 | Implement `BudgetService` | Tracks spending, calculates remaining budget |
+| 5.3 | Add budget-aware methods to `MockStoreApi` | `setBudget`, `getRemainingBudget`, `wouldExceedBudget` |
+| 5.4 | Implement budget validation in pricing | Check if basket + new item exceeds limit |
+| 5.5 | Write budget infrastructure unit tests | Service-level budget tracking tests |
 
-**Mission Request Model**:
+**Budget Models**:
 ```java
-record MissionRequest(
-    String description,             // "midday party"
-    int headcount,                  // 10 people
-    Set<String> dietaryRequirements, // ["vegetarian"]
-    Set<String> allergenExclusions,  // ["peanuts"]
-    BigDecimal budgetLimit,          // optional
-    String occasion                  // "party", "dinner", "picnic"
+record ShoppingSession(
+    String sessionId,
+    String customerId,              // optional
+    BigDecimal budgetLimit,         // optional spending cap
+    BigDecimal currentSpend,        // running total
+    Instant startedAt
 ) {}
 ```
 
-**Outcome**: The assistant can orchestrate complex shopping goals, proposing complete product sets that satisfy all constraints.
+#### Part B: Mission Infrastructure
+
+| Task | Description | Deliverable |
+|------|-------------|-------------|
+| 5.6 | Define `MissionRequest` model | Captures occasion, headcount, dietary needs, allergens, budget |
+| 5.7 | Define `MissionPlan` model | Proposed products with quantities, rationale, and estimated cost |
+| 5.8 | Define `MissionItem` model | Individual item in a mission plan with quantity rationale |
+| 5.9 | Implement `MissionPlanningService` | Algorithm to select products satisfying constraints |
+| 5.10 | Add portion scaling logic | Calculate quantities based on headcount and occasion |
+| 5.11 | Add constraint filtering | Filter by dietary flags, allergens, and budget |
+| 5.12 | Integrate mission planning into `MockStoreApi` | `planMission(MissionRequest)` method |
+| 5.13 | Write mission infrastructure unit tests | Planning algorithm tests |
+
+**Mission Models**:
+```java
+record MissionRequest(
+    String description,              // "midday party"
+    int headcount,                   // 10 people
+    Set<String> dietaryRequirements, // ["vegetarian"]
+    Set<String> allergenExclusions,  // ["peanuts"]
+    BigDecimal budgetLimit,          // optional
+    String occasion                  // "party", "dinner", "picnic", "snacks"
+) {}
+
+record MissionPlan(
+    MissionRequest request,
+    List<MissionItem> items,
+    BigDecimal estimatedTotal,
+    List<String> notes              // e.g., "Budget allows for extras"
+) {}
+
+record MissionItem(
+    Product product,
+    int quantity,
+    String rationale                // e.g., "2 bottles per person"
+) {}
+```
+
+**Outcome**: Store infrastructure supports budget tracking and mission planning queries without any changes to actions, tools, or persona.
+
+---
+
+### Phase 6: Budget-Aware Shopping Integration
+
+**Objective**: Wire budget capabilities into the shopping workflow via actions, tools, and persona.
+
+| Task | Description | Deliverable |
+|------|-------------|-------------|
+| 6.1 | Create `BudgetTool` | Tool exposing `getRemainingBudget`, `wouldExceedBudget` |
+| 6.2 | Add `setBudget` action | Customer states spending limit |
+| 6.3 | Enhance `addItem` action | Warn if adding item would exceed budget |
+| 6.4 | Enhance `computeTotal` action | Show budget remaining if set |
+| 6.5 | Enhance `showRecommendations` action | Filter by budget if set |
+| 6.6 | Update persona principles | Add "Respect customer's budget" constraint |
+| 6.7 | Update persona style guidance | "Mention remaining budget when relevant" |
+| 6.8 | Write budget integration tests | End-to-end budget scenarios |
+
+**Outcome**: The assistant tracks budget, warns before overspending, and respects budget in recommendations.
+
+---
+
+### Phase 7: Mission-Based Shopping Integration
+
+**Objective**: Wire mission planning into the shopping workflow via tools and actions.
+
+| Task | Description | Deliverable |
+|------|-------------|-------------|
+| 7.1 | Create `MissionTool` | Tool exposing `planMission`, `refineMission` |
+| 7.2 | Create `startMission` action | Customer describes shopping goal |
+| 7.3 | Create `reviewMissionPlan` action | Present proposed items for approval |
+| 7.4 | Create `executeMission` action | Add approved mission items to basket |
+| 7.5 | Create `adjustMissionPlan` action | Modify quantities or swap items |
+| 7.6 | Update persona principles | Add mission-aware guidance |
+| 7.7 | Write mission integration tests | Vegetarian party, allergy exclusions, budget-constrained |
+| 7.8 | Write complex multi-turn mission tests | Mission refinement across turns |
+
+**Mission Workflow**:
+1. Customer: "Help me prepare for a party of 10 vegetarians"
+2. Assistant calls `planMission` tool → receives `MissionPlan`
+3. Assistant presents plan via `reviewMissionPlan` action
+4. Customer approves or requests changes
+5. Assistant executes via `executeMission` action
+
+**Outcome**: The assistant can orchestrate complex shopping goals, proposing and refining product sets that satisfy all constraints.
 
 ---
 
@@ -371,53 +436,71 @@ record MissionRequest(
 
 After all phases, `ShoppingActions` will include:
 
-| Action | Parameters | Description |
-|--------|------------|-------------|
-| `startSession` | `customerId?` | Start session, optionally authenticated |
-| `presentOffers` | — | Surface current promotions |
-| `addItem` | `product`, `quantity` | Add with inventory validation |
-| `updateItemQuantity` | `product`, `newQuantity` | Change quantity |
-| `removeItem` | `product` | Remove from basket |
-| `viewBasketSummary` | — | Show items, prices, subtotal |
-| `computeTotal` | — | Calculate total with discounts |
-| `setBudget` | `amount` | Set session spending limit |
-| `showRecommendations` | — | Display personalised suggestions |
-| `executeMission` | `missionPlan` | Add mission items with confirmation |
-| `checkoutBasket` | — | Complete purchase |
-| `requestFeedback` | — | End-of-session feedback |
+| Action | Parameters | Description | Phase |
+|--------|------------|-------------|-------|
+| `startSession` | `customerId?` | Start session, optionally authenticated | 1-4 ✅ |
+| `presentOffers` | — | Surface current promotions | 1-3 ✅ |
+| `addItem` | `product`, `quantity` | Add with inventory validation | 2 ✅ |
+| `updateItemQuantity` | `product`, `newQuantity` | Change quantity | 2 ✅ |
+| `removeItem` | `product` | Remove from basket | 1-2 ✅ |
+| `viewBasketSummary` | — | Show items, prices, subtotal | 3 ✅ |
+| `computeTotal` | — | Calculate total with discounts | 3 ✅ |
+| `showRecommendations` | — | Display personalised suggestions | 4 ✅ |
+| `checkoutBasket` | — | Complete purchase, record history | 4 ✅ |
+| `requestFeedback` | — | End-of-session feedback | 1 ✅ |
+| `setBudget` | `amount` | Set session spending limit | 6 |
+| `startMission` | `description`, `headcount`, etc. | Begin mission-based shopping | 7 |
+| `reviewMissionPlan` | — | Present proposed items | 7 |
+| `executeMission` | — | Add mission items to basket | 7 |
+| `adjustMissionPlan` | `changes` | Modify mission plan | 7 |
 
 ---
 
 ## New Tools Summary
 
-| Tool | Methods | Purpose |
-|------|---------|---------|
-| `ProductSearchTool` | `searchProducts`, `getByCategory`, `getSafeProducts` | Catalog queries |
-| `InventoryTool` | `checkAvailability`, `getAlternatives`, `getStockLevel` | Stock queries |
-| `PricingTool` | `calculateTotal`, `getApplicableOffers` | Pricing queries |
-| `CustomerTool` | `getRecommendations`, `getFrequentPurchases`, `getProfile` | Customer queries |
-| `MissionTool` | `planMission` | Mission planning |
+| Tool | Methods | Purpose | Phase |
+|------|---------|---------|-------|
+| `ProductSearchTool` | `searchProducts`, `getByCategory`, `getSafeProducts` | Catalog queries | 2 ✅ |
+| `InventoryTool` | `checkAvailability`, `getAlternatives`, `getStockLevel` | Stock queries | 2 ✅ |
+| `PricingTool` | `calculateTotal`, `getApplicableOffers` | Pricing queries | 3 ✅ |
+| `EnhancedSpecialOfferTool` | `listSpecialOffers`, `getOffersForProducts` | Offer queries | 3 ✅ |
+| `CustomerTool` | `getRecommendations`, `getFrequentPurchases`, `getProfile`, `checkProductSafety` | Customer queries | 4 ✅ |
+| `BudgetTool` | `getRemainingBudget`, `wouldExceedBudget` | Budget queries | 6 |
+| `MissionTool` | `planMission`, `refineMission` | Mission planning | 7 |
 
 ---
 
-## Test Scenarios to Add
+## Test Scenarios Summary
 
-Building on existing tests, add coverage for:
+### Completed (Phases 1-4) ✅
 
-| Scenario | Description |
-|----------|-------------|
-| Low stock warning | Add item with stock < threshold; verify warning |
-| Out of stock rejection | Add unavailable item; verify alternatives offered |
-| Partial availability | Request 10, only 5 in stock; verify partial offer |
-| Price calculation | Add items; verify correct total with discounts |
-| Discount application | Add offer-eligible item; verify discount reflected |
-| Customer recommendations | Authenticated customer; verify personalised suggestions |
-| Frequent purchases | Query history; verify top items returned |
-| Budget warning | Set budget, exceed it; verify warning |
-| Budget enforcement | Set budget, try to exceed; verify blocking option |
-| Simple mission | "Snacks for 6"; verify appropriate products and quantities |
-| Complex mission | Vegetarian party with allergy; verify exclusions applied |
-| Mission with budget | Party under £50; verify cost-optimised selection |
+| Scenario | Description | Phase |
+|----------|-------------|-------|
+| Low stock warning | Add item with stock < threshold; verify warning | 2 ✅ |
+| Out of stock rejection | Add unavailable item; verify alternatives offered | 2 ✅ |
+| Partial availability | Request 10, only 5 in stock; verify partial offer | 2 ✅ |
+| Price calculation | Add items; verify correct total with discounts | 3 ✅ |
+| Discount application | Add offer-eligible item; verify discount reflected | 3 ✅ |
+| Customer recommendations | Authenticated customer; verify personalised suggestions | 4 ✅ |
+| Frequent purchases | Query history; verify top items returned | 4 ✅ |
+| Product safety check | Verify allergen warnings for customer | 4 ✅ |
+| Purchase history recording | Checkout records order in customer history | 4 ✅ |
+
+### Pending (Phases 5-7)
+
+| Scenario | Description | Phase |
+|----------|-------------|-------|
+| Budget tracking | Set budget; verify remaining tracked | 5 |
+| Budget validation | Check if basket would exceed budget | 5 |
+| Mission planning (unit) | Plan mission; verify constraint satisfaction | 5 |
+| Portion scaling | Verify quantities scale with headcount | 5 |
+| Budget warning | Set budget, approach limit; verify warning | 6 |
+| Budget enforcement | Set budget, try to exceed; verify blocking | 6 |
+| Budget-aware recommendations | Recommendations filtered by remaining budget | 6 |
+| Simple mission | "Snacks for 6"; verify products and quantities | 7 |
+| Complex mission | Vegetarian party with allergy; verify exclusions | 7 |
+| Mission with budget | Party under £50; verify cost-optimised selection | 7 |
+| Mission refinement | Multi-turn mission adjustment | 7 |
 
 ---
 
@@ -482,30 +565,52 @@ The enhanced shopping scenario is complete when:
 ```
 src/test/java/org/javai/springai/scenarios/shopping/
 ├── README.md
-├── AddItemRequest.java              (existing)
-├── ShoppingActions.java             (enhanced)
-├── ShoppingApplicationScenarioTest.java (extended)
-├── SpecialOfferTool.java            (refactored to use PricingService)
-├── ProductSearchTool.java           (new)
-├── InventoryTool.java               (new)
-├── PricingTool.java                 (new)
-├── CustomerTool.java                (new)
-├── MissionTool.java                 (new)
-└── store/                           (new sub-package)
-    ├── MockStoreApi.java
-    ├── ProductCatalog.java
-    ├── InventoryService.java
-    ├── PricingService.java
-    ├── CustomerProfileService.java
+├── ActionResult.java                    ✅ Phase 2
+├── AddItemRequest.java                  (existing)
+├── InventoryAwareShoppingActions.java   ✅ Phase 2-4
+├── ShoppingPersonaSpec.java             ✅ Phase 3
+├── ShoppingApplicationScenarioTest.java (existing, extended)
+│
+├── # Tools
+├── SpecialOfferTool.java                (existing)
+├── EnhancedSpecialOfferTool.java        ✅ Phase 3
+├── ProductSearchTool.java               ✅ Phase 2
+├── InventoryTool.java                   ✅ Phase 2
+├── PricingTool.java                     ✅ Phase 3
+├── CustomerTool.java                    ✅ Phase 4
+├── BudgetTool.java                      Phase 6
+├── MissionTool.java                     Phase 7
+│
+├── # Tests
+├── MockStoreApiTest.java                ✅ Phase 1
+├── InventoryAwareShoppingTest.java      ✅ Phase 2
+├── PricingIntegrationTest.java          ✅ Phase 3
+├── CustomerPersonalisationTest.java     ✅ Phase 4
+├── BudgetIntegrationTest.java           Phase 6
+├── MissionShoppingTest.java             Phase 7
+│
+└── store/                               ✅ Phase 1
+    ├── MockStoreApi.java                ✅ Phase 1-4
+    ├── ProductCatalog.java              ✅ Phase 1
+    ├── InventoryService.java            ✅ Phase 1
+    ├── PricingService.java              ✅ Phase 1
+    ├── CustomerProfileService.java      ✅ Phase 4
+    ├── BudgetService.java               Phase 5
+    ├── MissionPlanningService.java      Phase 5
     └── model/
-        ├── Product.java
-        ├── StockLevel.java
-        ├── AvailabilityResult.java
-        ├── SpecialOffer.java
-        ├── PricingBreakdown.java
-        ├── CustomerProfile.java
-        ├── PurchaseHistory.java
-        ├── MissionRequest.java
-        └── MissionPlan.java
+        ├── Product.java                 ✅ Phase 1
+        ├── StockLevel.java              ✅ Phase 1
+        ├── AvailabilityResult.java      ✅ Phase 1
+        ├── SpecialOffer.java            ✅ Phase 1
+        ├── DiscountType.java            ✅ Phase 1
+        ├── LineItem.java                ✅ Phase 1
+        ├── AppliedDiscount.java         ✅ Phase 1
+        ├── PricingBreakdown.java        ✅ Phase 1
+        ├── CustomerProfile.java         ✅ Phase 4
+        ├── PurchaseHistory.java         ✅ Phase 4
+        ├── ShoppingSession.java         Phase 5
+        ├── MissionRequest.java          Phase 5
+        ├── MissionPlan.java             Phase 5
+        └── MissionItem.java             Phase 5
 ```
 
