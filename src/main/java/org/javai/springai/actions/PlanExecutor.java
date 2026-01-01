@@ -3,7 +3,7 @@ package org.javai.springai.actions;
 /**
  * Executes a bound plan.
  * <p>
- * Plans must have {@link org.javai.springai.actions.plan.PlanStatus#READY} status
+ * Plans must have {@link org.javai.springai.actions.PlanStatus#READY} status
  * to be executed. Plans with pending or error steps will be rejected.
  */
 public interface PlanExecutor {

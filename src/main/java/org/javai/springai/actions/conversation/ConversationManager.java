@@ -216,9 +216,6 @@ public class ConversationManager {
 		// Formulate the plan
 		PlanFormulationResult planningResult = planner.formulatePlan(userMessage, state);
 		Plan plan = planningResult.plan();
-		if (plan == null) {
-			plan = new Plan("", List.of());
-		}
 
 		// Extract pending parameters and provided params
 		List<PlanStep.PendingParam> pending = plan.pendingParams();
