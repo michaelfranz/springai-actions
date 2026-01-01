@@ -1,10 +1,15 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Map;
 
+import org.javai.springai.scenarios.shopping.actions.ActionResult;
+import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
+import org.javai.springai.scenarios.shopping.tools.EnhancedSpecialOfferTool;
+import org.javai.springai.scenarios.shopping.tools.InventoryTool;
+import org.javai.springai.scenarios.shopping.tools.ProductSearchTool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

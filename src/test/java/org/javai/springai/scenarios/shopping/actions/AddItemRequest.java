@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.actions;
 
 /**
  * Request to add a product and quantity to the shopping basket.

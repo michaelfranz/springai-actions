@@ -3,8 +3,10 @@ package org.javai.springai.scenarios.shopping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
+
 import java.util.Map;
 import java.util.Objects;
+
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -15,6 +17,8 @@ import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
+import org.javai.springai.scenarios.shopping.actions.ShoppingActions;
+import org.javai.springai.scenarios.shopping.tools.SpecialOfferTool;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.tools;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.ai.tool.annotation.Tool;

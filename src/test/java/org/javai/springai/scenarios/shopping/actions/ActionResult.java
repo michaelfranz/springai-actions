@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.actions;
 
 /**
  * Simple result type for action execution in the shopping scenario.

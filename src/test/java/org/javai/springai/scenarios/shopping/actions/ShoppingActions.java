@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.actions;
 
 import java.util.HashMap;
 import java.util.Map;

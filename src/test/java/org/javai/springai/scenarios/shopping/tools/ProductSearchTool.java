@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.tools;
 
 import java.util.List;
 import java.util.Set;

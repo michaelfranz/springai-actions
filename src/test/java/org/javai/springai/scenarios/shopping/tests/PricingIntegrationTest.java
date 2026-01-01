@@ -1,12 +1,17 @@
-package org.javai.springai.scenarios.shopping;
+package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 
 import org.javai.springai.actions.PersonaSpec;
+import org.javai.springai.scenarios.shopping.actions.ActionResult;
+import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
+import org.javai.springai.scenarios.shopping.actions.ShoppingPersonaSpec;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.store.model.PricingBreakdown;
+import org.javai.springai.scenarios.shopping.tools.EnhancedSpecialOfferTool;
+import org.javai.springai.scenarios.shopping.tools.PricingTool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
