@@ -33,23 +33,32 @@ import org.javai.springai.actions.internal.instrument.InvocationKind;
  *         logger.warn("Plan error occurred");
  *         return PlanExecutionResult.notExecuted(plan, context, "Plan parsing failed");
  *     })
+ *     .onNoAction((plan, context, message) -> {
+ *         respondToUser(message);
+ *         return PlanExecutionResult.notExecuted(plan, context, "No action identified");
+ *     })
  *     .build();
  * }</pre>
  *
  * @see PendingPlanHandler
  * @see ErrorPlanHandler
+ * @see NoActionPlanHandler
  */
 public class DefaultPlanExecutor implements PlanExecutor {
+
+	private static final String DEFAULT_NO_ACTION_MESSAGE = 
+			"I couldn't identify an appropriate action for your request.";
 
 	private final InvocationEmitter emitter;
 	private final PendingPlanHandler pendingHandler;
 	private final ErrorPlanHandler errorHandler;
+	private final NoActionPlanHandler noActionHandler;
 
 	/**
 	 * Create an executor with default behavior (no handlers).
 	 */
 	public DefaultPlanExecutor() {
-		this(null, null, null);
+		this(null, null, null, null);
 	}
 
 	/**
@@ -58,21 +67,24 @@ public class DefaultPlanExecutor implements PlanExecutor {
 	 * @param emitter the emitter for action invocation events
 	 */
 	public DefaultPlanExecutor(InvocationEmitter emitter) {
-		this(emitter, null, null);
+		this(emitter, null, null, null);
 	}
 
 	private DefaultPlanExecutor(InvocationEmitter emitter,
 								PendingPlanHandler pendingHandler,
-								ErrorPlanHandler errorHandler) {
+								ErrorPlanHandler errorHandler,
+								NoActionPlanHandler noActionHandler) {
 		this.emitter = emitter;
 		this.pendingHandler = pendingHandler;
 		this.errorHandler = errorHandler;
+		this.noActionHandler = noActionHandler;
 	}
 
 	private DefaultPlanExecutor(Builder builder) {
 		this.emitter = builder.emitter;
 		this.pendingHandler = builder.pendingHandler;
 		this.errorHandler = builder.errorHandler;
+		this.noActionHandler = builder.noActionHandler;
 	}
 
 	/**
@@ -108,20 +120,66 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			return errorHandler.handle(plan, context);
 		}
 
+		// Handle NO_ACTION state (empty steps or NoActionStep)
+		if (isNoActionPlan(plan)) {
+			if (noActionHandler == null) {
+				throw new IllegalStateException("Plan has no actions and no handler is registered");
+			}
+			String message = extractNoActionMessage(plan);
+			return noActionHandler.handle(plan, context, message);
+		}
+
 		List<StepExecutionResult> results = new ArrayList<>();
 		boolean success = true;
 
 		for (PlanStep step : plan.planSteps()) {
-			assert step instanceof PlanStep.ActionStep : "Unexpected step type: " + step;
-			StepExecutionResult result = executeActionStep((PlanStep.ActionStep)step, context);
-			results.add(result);
-			if (!result.success()) {
-				success = false;
-				break; // fail fast on execution error
+			if (step instanceof PlanStep.ActionStep actionStep) {
+				StepExecutionResult result = executeActionStep(actionStep, context);
+				results.add(result);
+				if (!result.success()) {
+					success = false;
+					break; // fail fast on execution error
+				}
+			} else {
+				// Unexpected step type - should have been caught by isNoActionPlan
+				throw new IllegalStateException("Unexpected step type during execution: " + step.getClass().getSimpleName());
 			}
 		}
 
 		return new PlanExecutionResult(success, results, context);
+	}
+
+	/**
+	 * Check if this plan represents a "no action" situation.
+	 * This is true when:
+	 * - The plan has no steps at all (empty list)
+	 * - The plan contains only a NoActionStep
+	 */
+	private boolean isNoActionPlan(Plan plan) {
+		List<PlanStep> steps = plan.planSteps();
+		if (steps == null || steps.isEmpty()) {
+			return true;
+		}
+		// Single NoActionStep is also a no-action plan
+		if (steps.size() == 1 && steps.getFirst() instanceof PlanStep.NoActionStep) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Extract the no-action message from the plan.
+	 * Returns the message from NoActionStep if present, otherwise a default message.
+	 */
+	private String extractNoActionMessage(Plan plan) {
+		if (plan.planSteps() != null) {
+			for (PlanStep step : plan.planSteps()) {
+				if (step instanceof PlanStep.NoActionStep noActionStep) {
+					return noActionStep.message();
+				}
+			}
+		}
+		return DEFAULT_NO_ACTION_MESSAGE;
 	}
 
 	private StepExecutionResult executeActionStep(PlanStep.ActionStep step, ActionContext context) {
@@ -191,6 +249,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 	 *     .withEmitter(myEmitter)
 	 *     .onPending((plan, ctx) -> ...)
 	 *     .onError((plan, ctx) -> ...)
+	 *     .onNoAction((plan, ctx, msg) -> ...)
 	 *     .build();
 	 * }</pre>
 	 */
@@ -198,6 +257,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		private InvocationEmitter emitter;
 		private PendingPlanHandler pendingHandler;
 		private ErrorPlanHandler errorHandler;
+		private NoActionPlanHandler noActionHandler;
 
 		private Builder() {
 		}
@@ -238,6 +298,23 @@ public class DefaultPlanExecutor implements PlanExecutor {
 		 */
 		public Builder onError(ErrorPlanHandler handler) {
 			this.errorHandler = handler;
+			return this;
+		}
+
+		/**
+		 * Register a handler for plans with no executable actions.
+		 *
+		 * <p>When a plan has no steps or contains only a {@link PlanStep.NoActionStep},
+		 * this handler will be invoked instead of throwing {@link IllegalStateException}.</p>
+		 *
+		 * <p>This occurs when the assistant could not identify an appropriate action
+		 * for the user's request and provides an explanation message.</p>
+		 *
+		 * @param handler the no-action plan handler
+		 * @return this builder
+		 */
+		public Builder onNoAction(NoActionPlanHandler handler) {
+			this.noActionHandler = handler;
 			return this;
 		}
 

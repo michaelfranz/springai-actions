@@ -3,18 +3,13 @@ package org.javai.springai.scenarios.shopping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
-
-import java.util.List;
 import java.util.Objects;
-
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
@@ -30,6 +25,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -110,6 +107,10 @@ public class ShoppingCoreScenarioTest {
 							.orElse("Unknown error");
 					log.warn("Plan error: {}", errorMsg);
 					return PlanExecutionResult.notExecuted(plan, context, errorMsg);
+				})
+				.onNoAction((plan, context, message) -> {
+					log.info("No action identified: {}", message);
+					return PlanExecutionResult.notExecuted(plan, context, message);
 				})
 				.build();
 		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());

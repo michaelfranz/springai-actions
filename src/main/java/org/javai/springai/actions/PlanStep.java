@@ -13,6 +13,7 @@ import org.javai.springai.actions.internal.plan.PlanArgument;
  *   <li>{@link ActionStep} - A fully bound action ready for execution</li>
  *   <li>{@link PendingActionStep} - An action missing required parameters</li>
  *   <li>{@link ErrorStep} - An error encountered during parsing or validation</li>
+ *   <li>{@link NoActionStep} - The assistant could not identify an appropriate action</li>
  * </ul>
  */
 public sealed interface PlanStep {
@@ -67,6 +68,23 @@ public sealed interface PlanStep {
 	 * @param reason description of what went wrong
 	 */
 	record ErrorStep(String reason) implements PlanStep {
+	}
+
+	/**
+	 * Indicates the assistant could not identify an appropriate action for the user's request.
+	 * <p>
+	 * This step should be used when:
+	 * <ul>
+	 *   <li>The user's request is outside the assistant's capabilities</li>
+	 *   <li>No registered action matches the user's intent</li>
+	 *   <li>The assistant needs to politely decline and explain what it CAN help with</li>
+	 * </ul>
+	 * <p>
+	 * The message should explain why no action was taken and suggest alternatives.
+	 *
+	 * @param message explanation for the user about why no action was taken
+	 */
+	record NoActionStep(String message) implements PlanStep {
 	}
 
 	/**

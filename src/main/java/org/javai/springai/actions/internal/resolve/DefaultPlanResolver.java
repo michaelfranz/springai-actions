@@ -48,10 +48,18 @@ public class DefaultPlanResolver implements PlanResolver {
 		return new Plan(jsonPlan.message(), resolved);
 	}
 
+	private static final String NO_ACTION_ID = "noAction";
+
 	private PlanStep resolveStep(RawPlanStep step, ResolutionContext context) {
 		String actionId = step.actionId();
 		if (actionId == null || actionId.isBlank()) {
 			return new PlanStep.ErrorStep("Step has no actionId");
+		}
+
+		// Handle special noAction step type
+		if (NO_ACTION_ID.equals(actionId)) {
+			String message = extractNoActionMessage(step);
+			return new PlanStep.NoActionStep(message);
 		}
 
 		ActionBinding binding = context.actionRegistry().getActionBinding(actionId);
@@ -311,5 +319,33 @@ public class DefaultPlanResolver implements PlanResolver {
 		static ConversionOutcome failure(String errorMessage) {
 			return new ConversionOutcome(false, null, errorMessage);
 		}
+	}
+
+	/**
+	 * Extract the message from a noAction step.
+	 * Looks for a "message" or "reason" parameter in the step.
+	 */
+	private String extractNoActionMessage(RawPlanStep step) {
+		Map<String, Object> params = step.parameters();
+		if (params == null || params.isEmpty()) {
+			// Fall back to description if no parameters
+			return step.description() != null ? step.description() 
+					: "No appropriate action could be identified for this request.";
+		}
+		
+		// Try "message" first, then "reason"
+		Object message = params.get("message");
+		if (message != null) {
+			return message.toString();
+		}
+		
+		Object reason = params.get("reason");
+		if (reason != null) {
+			return reason.toString();
+		}
+		
+		// Fall back to description
+		return step.description() != null ? step.description() 
+				: "No appropriate action could be identified for this request.";
 	}
 }

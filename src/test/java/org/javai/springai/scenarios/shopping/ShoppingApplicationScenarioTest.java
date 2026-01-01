@@ -101,6 +101,10 @@ public class ShoppingApplicationScenarioTest {
 					log.warn("Plan error: {}", errorMsg);
 					return PlanExecutionResult.notExecuted(plan, context, errorMsg);
 				})
+				.onNoAction((plan, context, message) -> {
+					log.info("No action identified: {}", message);
+					return PlanExecutionResult.notExecuted(plan, context, message);
+				})
 				.build();
 		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
