@@ -7,12 +7,17 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Represents an active shopping session with optional budget tracking.
+ * Represents an active shopping session with optional budget tracking and mission plan.
+ * 
+ * The mission plan, when present, serves as a "statement of intent" that influences
+ * LLM recommendations. The gap between the plan and the basket is computed by the LLM,
+ * not programmatically. The user decides when the mission is accomplished.
  *
  * @param sessionId Unique session identifier
  * @param customerId Optional customer ID for personalization
  * @param budgetLimit Optional spending limit set by customer
  * @param basket Current basket contents (SKU to quantity)
+ * @param activeMission Optional mission plan guiding this shopping session
  * @param startedAt When the session began
  */
 public record ShoppingSession(
@@ -20,6 +25,7 @@ public record ShoppingSession(
 		String customerId,
 		BigDecimal budgetLimit,
 		Map<String, Integer> basket,
+		Optional<MissionPlan> activeMission,
 		Instant startedAt
 ) {
 
@@ -32,6 +38,7 @@ public record ShoppingSession(
 				customerId,
 				null,
 				new HashMap<>(),
+				Optional.empty(),
 				Instant.now()
 		);
 	}
@@ -68,21 +75,37 @@ public record ShoppingSession(
 	 * Create a new session with a budget limit set.
 	 */
 	public ShoppingSession withBudget(BigDecimal limit) {
-		return new ShoppingSession(sessionId, customerId, limit, basket, startedAt);
+		return new ShoppingSession(sessionId, customerId, limit, basket, activeMission, startedAt);
 	}
 
 	/**
 	 * Create a new session with the budget removed.
 	 */
 	public ShoppingSession withoutBudget() {
-		return new ShoppingSession(sessionId, customerId, null, basket, startedAt);
+		return new ShoppingSession(sessionId, customerId, null, basket, activeMission, startedAt);
+	}
+
+	/**
+	 * Create a new session with an active mission plan.
+	 * The mission plan serves as a reference point for the LLM to compute gaps.
+	 */
+	public ShoppingSession withMission(MissionPlan mission) {
+		return new ShoppingSession(sessionId, customerId, budgetLimit, basket, Optional.ofNullable(mission), startedAt);
+	}
+
+	/**
+	 * Create a new session with the mission cleared.
+	 * Use when the user explicitly resets or abandons the mission.
+	 */
+	public ShoppingSession withoutMission() {
+		return new ShoppingSession(sessionId, customerId, budgetLimit, basket, Optional.empty(), startedAt);
 	}
 
 	/**
 	 * Create a new session with updated basket.
 	 */
 	public ShoppingSession withBasket(Map<String, Integer> newBasket) {
-		return new ShoppingSession(sessionId, customerId, budgetLimit, new HashMap<>(newBasket), startedAt);
+		return new ShoppingSession(sessionId, customerId, budgetLimit, new HashMap<>(newBasket), activeMission, startedAt);
 	}
 
 	/**

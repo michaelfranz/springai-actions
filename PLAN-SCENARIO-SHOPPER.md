@@ -43,6 +43,62 @@ This document outlines the implementation plan for enhancing the shopping scenar
 
 ---
 
+## Design Principles (from Questionnaire)
+
+The following principles guide the implementation of mission-based shopping. See `MISSION-PLAN-DESIGN-QUESTIONS.md` for full context.
+
+### 1. Mission Plan as Dynamic System Prompt Contribution
+
+The mission plan is a **living contribution to the system prompt**, not rigid state:
+- When present, it influences LLM recommendations and warnings
+- When absent or scrapped, the LLM proceeds without constraint
+- It is stored in conversation context and recomputed on-demand
+- It can be changed at any time based on user input
+
+### 2. LLM-Driven Intelligence, Not Hard-Coded Logic
+
+Behavioral decisions are delegated to the LLM via **guidance in the system prompt**:
+- Gap granularity (item/category/constraint) → LLM interprets and surfaces what's relevant
+- Completion signals → Persona-driven, not threshold-based
+- Conflict handling → Warn but don't block; trust user agency
+- Budget exceeded → Simply inform, don't prevent
+
+### 3. High Drift Tolerance with Safety Alerts
+
+- Extras beyond the plan are fine (no warnings)
+- Allergens and health hazards get **warnings** (not blocks)
+- Religious/cultural sensitivities also warrant warnings
+- User always has final say
+
+### 4. Additive Missions, Explicit Resets
+
+- New mission statements **merge** into the existing plan
+- Only explicit signals ("I've changed my plan") trigger a reset
+- Multi-mission support is low priority (rank 8)
+
+### 5. Guardrails as Tools, Not Middleware
+
+Content validation is implemented as **tools the LLM can call**:
+- Guardrail tools return evaluation results
+- LLM decides how to act (ErrorStep vs. ActionStep)
+- Rejection results in polite error message explaining reason
+- Scope: mission requests and all user input
+
+### 6. Implementation Priority
+
+| Priority | Capability |
+|----------|------------|
+| 1 | Gap computation (what's missing from the plan) |
+| 2 | Constraint conflict detection (allergens, dietary, cultural) |
+| 3 | Budget constraint integration |
+| 4 | Mission evolution/replanning |
+| 5 | Coverage metrics (percentage/category completion) |
+| 6 | Mission guardrails (content validation) |
+| 7 | External moderation API integration |
+| 8 | Multi-mission support |
+
+---
+
 ## Mock Infrastructure Design
 
 To make the scenario realistic without external dependencies, we will create a mock store infrastructure in a sub-package:
@@ -389,46 +445,105 @@ record MissionItem(
 
 ### Phase 6: Budget-Aware Shopping Integration
 
-**Objective**: Wire budget capabilities into the shopping workflow via actions, tools, and persona.
+**Objective**: Wire budget capabilities into the shopping workflow via dynamic system prompt guidance.
+
+**Design Note**: Per design principles:
+- The assistant should **inform** about budget status but **not block** actions
+- Gap computation is **LLM-driven**, not programmatic — the LLM compares plan vs. basket
+- Conflict detection is **LLM-driven** — the LLM reasons about allergens/dietary from the data
+- No `GapAnalysis` or `ConflictWarning` models needed
 
 | Task | Description | Deliverable |
 |------|-------------|-------------|
-| 6.1 | Create `BudgetTool` | Tool exposing `getRemainingBudget`, `wouldExceedBudget` |
+| 6.1 | Create `BudgetTool` | Tool exposing `getBudgetStatus`, `formatBudgetStatus` |
 | 6.2 | Add `setBudget` action | Customer states spending limit |
-| 6.3 | Enhance `addItem` action | Warn if adding item would exceed budget |
-| 6.4 | Enhance `computeTotal` action | Show budget remaining if set |
-| 6.5 | Enhance `showRecommendations` action | Filter by budget if set |
-| 6.6 | Update persona principles | Add "Respect customer's budget" constraint |
-| 6.7 | Update persona style guidance | "Mention remaining budget when relevant" |
-| 6.8 | Write budget integration tests | End-to-end budget scenarios |
+| 6.3 | Create dynamic prompt builder | Inject mission/budget/basket state into system prompt |
+| 6.4 | Define budget guidance templates | Guidance for exceeded/approaching budget scenarios |
+| 6.5 | Define gap guidance templates | How LLM should reason about plan vs. basket |
+| 6.6 | Define conflict guidance templates | How LLM should warn about allergen/dietary conflicts |
+| 6.7 | Write budget integration tests | End-to-end budget scenarios |
 
-**Outcome**: The assistant tracks budget, warns before overspending, and respects budget in recommendations.
+**LLM-Driven Gap & Conflict Analysis**:
+Rather than computing gaps programmatically, we present the LLM with:
+1. The mission plan (structured text in system prompt)
+2. The basket contents (structured text in system prompt)
+3. Guidelines on how to reason about gaps and conflicts
+
+The LLM then:
+- Identifies what's missing from the plan
+- Warns about allergen/dietary/cultural conflicts
+- Suggests next actions
+
+**Outcome**: The assistant is aware of budget and mission state via the system prompt, and uses LLM reasoning to identify gaps and conflicts.
 
 ---
 
 ### Phase 7: Mission-Based Shopping Integration
 
-**Objective**: Wire mission planning into the shopping workflow via tools and actions.
+**Objective**: Wire mission planning into the shopping workflow, with the mission plan as a dynamic contribution to the system prompt.
+
+**Design Note**: Per design principles:
+- Mission plan is stored in `ShoppingSession.activeMission` (as `Optional<MissionPlan>`)
+- It influences LLM behavior via dynamic system prompt injection
+- Gap between plan and basket is computed **by the LLM**, not programmatically
+- No `GapAnalysis` or `ConflictWarning` models — LLM generates prose
+- User declares completion; assistant suggests next actions when plan is covered
 
 | Task | Description | Deliverable |
 |------|-------------|-------------|
 | 7.1 | Create `MissionTool` | Tool exposing `planMission`, `refineMission` |
-| 7.2 | Create `startMission` action | Customer describes shopping goal |
-| 7.3 | Create `reviewMissionPlan` action | Present proposed items for approval |
-| 7.4 | Create `executeMission` action | Add approved mission items to basket |
-| 7.5 | Create `adjustMissionPlan` action | Modify quantities or swap items |
-| 7.6 | Update persona principles | Add mission-aware guidance |
-| 7.7 | Write mission integration tests | Vegetarian party, allergy exclusions, budget-constrained |
-| 7.8 | Write complex multi-turn mission tests | Mission refinement across turns |
+| 7.2 | Create `GuardrailTool` | Tool to evaluate mission content (blacklist, moderation) |
+| 7.3 | Store mission in `ShoppingSession` | `Optional<MissionPlan> activeMission` ✅ Done |
+| 7.4 | Dynamic prompt: mission plan | Inject plan items, constraints, budget into prompt |
+| 7.5 | Dynamic prompt: basket state | Inject current basket contents into prompt |
+| 7.6 | Dynamic prompt: gap guidance | How LLM should compare plan to basket |
+| 7.7 | Dynamic prompt: conflict guidance | How LLM should warn about allergens/dietary |
+| 7.8 | Dynamic prompt: completion guidance | How LLM should suggest checkout when done |
+| 7.9 | Write mission integration tests | LLM-driven gap reasoning, conflict warnings |
+| 7.10 | Write guardrail tests | Blacklist rejection, polite error messages |
+
+**Mission as System Prompt Contribution**:
+When a mission plan is active, the system prompt includes the raw data:
+```
+CURRENT MISSION:
+- Description: Party for 10 vegetarians with peanut allergy
+- Headcount: 10
+- Dietary requirements: vegetarian
+- Allergens to exclude: peanuts
+- Budget: £50
+
+MISSION PLAN ITEMS:
+- 6x Sparkling Water (beverages)
+- 4x Sea Salt Crisps (snacks)
+- 2x Caprese Skewers (party)
+- 2x Guacamole (snacks)
+
+CURRENT BASKET:
+- 4x Sparkling Water
+- 4x Sea Salt Crisps
+
+GUIDANCE:
+- Compare the mission plan to the basket and identify gaps
+- Warn if user adds items containing excluded allergens (peanuts)
+- Warn if user adds items that violate dietary requirements (vegetarian)
+- Consider cultural/religious sensitivities based on mission description
+- When the basket covers the mission plan, suggest proceeding to checkout
+- Do not block actions; always allow user to proceed after warning
+```
+
+The LLM then reasons about gaps, conflicts, and next actions.
 
 **Mission Workflow**:
-1. Customer: "Help me prepare for a party of 10 vegetarians"
-2. Assistant calls `planMission` tool → receives `MissionPlan`
-3. Assistant presents plan via `reviewMissionPlan` action
-4. Customer approves or requests changes
-5. Assistant executes via `executeMission` action
+1. Customer: "Help me prepare for a party of 10 vegetarians with a peanut allergy"
+2. Assistant calls `GuardrailTool.evaluate()` → passes (or rejects with ErrorStep)
+3. Assistant calls `MissionTool.planMission()` → receives `MissionPlan`
+4. Mission stored in `session.withMission(plan)`; injected into system prompt
+5. Assistant presents plan and asks for confirmation
+6. User adds/removes items; each turn, prompt includes updated basket
+7. LLM compares plan to basket and identifies gaps
+8. When LLM determines plan is covered, suggests checkout
 
-**Outcome**: The assistant can orchestrate complex shopping goals, proposing and refining product sets that satisfy all constraints.
+**Outcome**: The assistant uses the mission plan as context for recommendations, warns about conflicts via LLM reasoning, and suggests completion when appropriate.
 
 ---
 
@@ -465,8 +580,11 @@ After all phases, `ShoppingActions` will include:
 | `PricingTool` | `calculateTotal`, `getApplicableOffers` | Pricing queries | 3 ✅ |
 | `EnhancedSpecialOfferTool` | `listSpecialOffers`, `getOffersForProducts` | Offer queries | 3 ✅ |
 | `CustomerTool` | `getRecommendations`, `getFrequentPurchases`, `getProfile`, `checkProductSafety` | Customer queries | 4 ✅ |
-| `BudgetTool` | `getRemainingBudget`, `wouldExceedBudget` | Budget queries | 6 |
+| `BudgetTool` | `getBudgetStatus`, `formatBudgetStatus` | Budget status queries | 6 |
 | `MissionTool` | `planMission`, `refineMission` | Mission planning | 7 |
+| `GuardrailTool` | `evaluate` | Content moderation for missions | 7 |
+
+**Note**: Gap computation and conflict detection are **LLM-driven**, not tool-based. The LLM receives mission plan + basket in the system prompt and reasons about gaps/conflicts directly.
 
 ---
 
