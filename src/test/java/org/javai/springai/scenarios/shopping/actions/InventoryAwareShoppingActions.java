@@ -15,8 +15,11 @@ import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
 import org.javai.springai.scenarios.shopping.store.model.CustomerProfile;
 import org.javai.springai.scenarios.shopping.store.model.LineItem;
+import org.javai.springai.scenarios.shopping.store.model.MissionPlan;
+import org.javai.springai.scenarios.shopping.store.model.MissionRequest;
 import org.javai.springai.scenarios.shopping.store.model.PricingBreakdown;
 import org.javai.springai.scenarios.shopping.store.model.Product;
+import org.javai.springai.scenarios.shopping.store.model.ShoppingSession;
 
 /**
  * Enhanced shopping actions with inventory awareness and customer personalisation.
@@ -38,6 +41,9 @@ public class InventoryAwareShoppingActions {
 	private final AtomicBoolean checkoutInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean requestFeedbackInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean showRecommendationsInvoked = new AtomicBoolean(false);
+	private final AtomicBoolean setBudgetInvoked = new AtomicBoolean(false);
+	private final AtomicBoolean startMissionInvoked = new AtomicBoolean(false);
+	private final AtomicBoolean reviewMissionPlanInvoked = new AtomicBoolean(false);
 
 	// Basket state: maps product SKU to quantity
 	private final Map<String, Integer> basket = new HashMap<>();
@@ -47,6 +53,9 @@ public class InventoryAwareShoppingActions {
 	
 	// Customer state
 	private String currentCustomerId;
+	
+	// Session state (budget and mission tracking)
+	private ShoppingSession currentSession;
 
 	public InventoryAwareShoppingActions(MockStoreApi storeApi) {
 		this.storeApi = storeApi;
@@ -72,8 +81,15 @@ public class InventoryAwareShoppingActions {
 		lastAlternatives = null;
 		currentCustomerId = customerId;
 		
+		// Create a new shopping session
+		currentSession = ShoppingSession.create(
+				java.util.UUID.randomUUID().toString(),
+				customerId
+		);
+		
 		if (context != null) {
 			context.put("basket", basket);
+			context.put("session", currentSession);
 			if (customerId != null) {
 				context.put("customerId", customerId);
 			}
@@ -143,6 +159,11 @@ public class InventoryAwareShoppingActions {
 				Product p = productOpt.get();
 				basket.merge(p.sku(), quantity, Integer::sum);
 				storeApi.reserveStock(p.sku(), quantity);
+				
+				// Keep session basket in sync
+				if (currentSession != null) {
+					currentSession = currentSession.withItemAdded(p.sku(), quantity);
+				}
 
 				if (lowStock) {
 					int remaining = storeApi.getAvailableQuantity(p.sku());
@@ -393,6 +414,183 @@ public class InventoryAwareShoppingActions {
 		return ActionResult.success("Thank you for shopping with us! How was your experience today?");
 	}
 
+	// ========== Budget Actions (Phase 6) ==========
+
+	@Action(description = """
+			Set a spending budget for this shopping session.
+			The assistant will track spending against this limit and inform you when approaching or exceeding it.
+			Note: Setting a budget does not block additions - it's for information only.""")
+	public ActionResult setBudget(
+			ActionContext context,
+			@ActionParam(description = "The budget limit in pounds") BigDecimal budgetLimit) {
+		setBudgetInvoked.set(true);
+
+		if (budgetLimit == null || budgetLimit.compareTo(BigDecimal.ZERO) <= 0) {
+			return ActionResult.error("Please provide a valid budget amount greater than £0.");
+		}
+
+		if (currentSession == null) {
+			currentSession = ShoppingSession.create(
+					java.util.UUID.randomUUID().toString(),
+					currentCustomerId
+			);
+		}
+
+		currentSession = currentSession.withBudget(budgetLimit);
+
+		if (context != null) {
+			context.put("session", currentSession);
+			context.put("budgetLimit", budgetLimit);
+		}
+
+		return ActionResult.success(String.format(
+				"Budget set to £%.2f. I'll keep you informed of your spending as you shop.",
+				budgetLimit));
+	}
+
+	// ========== Mission Actions (Phase 7) ==========
+
+	@Action(description = """
+			Start a shopping mission with specific goals and constraints.
+			Describe your shopping goal (e.g., "party for 10 vegetarians") and I'll create a plan.
+			The plan will respect dietary requirements, allergen exclusions, and budget if specified.""")
+	public ActionResult startMission(
+			ActionContext context,
+			@ActionParam(description = "Description of your shopping goal") String description,
+			@ActionParam(description = "Number of people to cater for") int headcount,
+			@ActionParam(description = "Occasion type: party, dinner, picnic, snacks, meeting") String occasion,
+			@ActionParam(description = "Dietary requirements (comma-separated, e.g., 'vegetarian,gluten-free')") String dietaryRequirements,
+			@ActionParam(description = "Allergens to exclude (comma-separated, e.g., 'peanuts,dairy')") String allergenExclusions,
+			@ActionParam(description = "Optional budget limit") BigDecimal budgetLimit) {
+		
+		startMissionInvoked.set(true);
+
+		if (description == null || description.isBlank()) {
+			return ActionResult.error("Please describe your shopping goal.");
+		}
+
+		if (headcount <= 0) {
+			return ActionResult.error("Please specify how many people you're shopping for.");
+		}
+
+		// Parse occasion
+		MissionRequest.Occasion parsedOccasion;
+		try {
+			parsedOccasion = MissionRequest.Occasion.valueOf(occasion.toUpperCase());
+		} catch (IllegalArgumentException e) {
+			parsedOccasion = MissionRequest.Occasion.PARTY; // Default
+		}
+
+		// Parse dietary requirements
+		java.util.Set<String> dietary = java.util.Collections.emptySet();
+		if (dietaryRequirements != null && !dietaryRequirements.isBlank()) {
+			dietary = java.util.Arrays.stream(dietaryRequirements.split(","))
+					.map(String::trim)
+					.map(String::toLowerCase)
+					.collect(java.util.stream.Collectors.toSet());
+		}
+
+		// Parse allergen exclusions
+		java.util.Set<String> allergens = java.util.Collections.emptySet();
+		if (allergenExclusions != null && !allergenExclusions.isBlank()) {
+			allergens = java.util.Arrays.stream(allergenExclusions.split(","))
+					.map(String::trim)
+					.map(String::toLowerCase)
+					.collect(java.util.stream.Collectors.toSet());
+		}
+
+		// Create mission request
+		MissionRequest request = MissionRequest.builder()
+				.description(description)
+				.headcount(headcount)
+				.occasion(parsedOccasion)
+				.dietaryRequirements(dietary)
+				.allergenExclusions(allergens)
+				.budgetLimit(budgetLimit)
+				.build();
+
+		// Plan the mission
+		MissionPlan plan = storeApi.planMission(request);
+
+		// Store mission in session
+		if (currentSession == null) {
+			currentSession = ShoppingSession.create(
+					java.util.UUID.randomUUID().toString(),
+					currentCustomerId
+			);
+		}
+		currentSession = currentSession.withMission(plan);
+
+		if (context != null) {
+			context.put("session", currentSession);
+			context.put("missionPlan", plan);
+		}
+
+		return ActionResult.success(formatMissionPlan(plan));
+	}
+
+	@Action(description = """
+			Review the current mission plan.
+			Shows the proposed items, quantities, and estimated total.
+			Use this to check what's planned before adding items to your basket.""")
+	public ActionResult reviewMissionPlan(ActionContext context) {
+		reviewMissionPlanInvoked.set(true);
+
+		if (currentSession == null || currentSession.activeMission().isEmpty()) {
+			return ActionResult.error("No active mission. Use startMission to create a shopping plan.");
+		}
+
+		MissionPlan plan = currentSession.activeMission().get();
+		return ActionResult.success(formatMissionPlan(plan));
+	}
+
+	private String formatMissionPlan(MissionPlan plan) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("📋 **Mission Plan**\n\n");
+
+		MissionRequest req = plan.request();
+		sb.append(String.format("**Goal**: %s\n", req.description()));
+		sb.append(String.format("**For**: %d people (%s)\n", req.headcount(), req.occasion().name().toLowerCase()));
+
+		if (!req.dietaryRequirements().isEmpty()) {
+			sb.append(String.format("**Dietary**: %s\n", String.join(", ", req.dietaryRequirements())));
+		}
+		if (!req.allergenExclusions().isEmpty()) {
+			sb.append(String.format("**Excluding allergens**: %s\n", String.join(", ", req.allergenExclusions())));
+		}
+		if (req.budgetLimit() != null) {
+			sb.append(String.format("**Budget**: £%.2f\n", req.budgetLimit()));
+		}
+
+		sb.append("\n**Suggested Items**:\n");
+		for (var item : plan.items()) {
+			sb.append(String.format("- %d × %s (£%.2f each) - %s\n",
+					item.quantity(),
+					item.product().name(),
+					item.product().unitPrice(),
+					item.rationale()));
+		}
+
+		sb.append(String.format("\n**Estimated Total**: £%.2f\n", plan.estimatedTotal()));
+
+		if (!plan.notes().isEmpty()) {
+			sb.append("\n**Notes**:\n");
+			for (String note : plan.notes()) {
+				sb.append(String.format("• %s\n", note));
+			}
+		}
+
+		if (!plan.warnings().isEmpty()) {
+			sb.append("\n**⚠️ Warnings**:\n");
+			for (String warning : plan.warnings()) {
+				sb.append(String.format("• %s\n", warning));
+			}
+		}
+
+		sb.append("\nWould you like me to add these items to your basket?");
+		return sb.toString();
+	}
+
 	// ========== Test Assertion Helpers ==========
 
 	public boolean startSessionInvoked() {
@@ -437,6 +635,22 @@ public class InventoryAwareShoppingActions {
 
 	public boolean requestFeedbackInvoked() {
 		return requestFeedbackInvoked.get();
+	}
+
+	public boolean setBudgetInvoked() {
+		return setBudgetInvoked.get();
+	}
+
+	public boolean startMissionInvoked() {
+		return startMissionInvoked.get();
+	}
+
+	public boolean reviewMissionPlanInvoked() {
+		return reviewMissionPlanInvoked.get();
+	}
+
+	public ShoppingSession getCurrentSession() {
+		return currentSession;
 	}
 
 	public AddItemRequest lastAddItem() {
