@@ -248,7 +248,7 @@ public class MockStoreApi {
 
 ## Implementation Phases
 
-### Phase 1: Core Mock Infrastructure
+### Phase 1: Core Mock Infrastructure ✅ COMPLETE
 
 **Objective**: Establish the mock store with product catalog, inventory, and pricing.
 
@@ -265,7 +265,7 @@ public class MockStoreApi {
 
 ---
 
-### Phase 2: Inventory-Aware Shopping
+### Phase 2: Inventory-Aware Shopping ✅ COMPLETE
 
 **Objective**: Integrate stock awareness into the shopping workflow.
 
@@ -284,7 +284,7 @@ public class MockStoreApi {
 
 ---
 
-### Phase 3: Real Pricing and Checkout
+### Phase 3: Real Pricing and Checkout ✅ COMPLETE
 
 **Objective**: Compute actual basket totals with discounts.
 
@@ -301,7 +301,7 @@ public class MockStoreApi {
 
 ---
 
-### Phase 4: Customer Personalisation
+### Phase 4: Customer Personalisation ✅ COMPLETE
 
 **Objective**: Support customer identity, preferences, and recommendations.
 

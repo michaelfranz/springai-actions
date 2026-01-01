@@ -24,6 +24,7 @@ public class MockStoreApi {
 	private final ProductCatalog catalog;
 	private final InventoryService inventory;
 	private final PricingService pricing;
+	private final CustomerProfileService customers;
 
 	/**
 	 * Create a MockStoreApi with default services.
@@ -32,6 +33,7 @@ public class MockStoreApi {
 		this.catalog = new ProductCatalog();
 		this.inventory = new InventoryService(catalog);
 		this.pricing = new PricingService(catalog);
+		this.customers = new CustomerProfileService(catalog);
 	}
 
 	/**
@@ -41,6 +43,18 @@ public class MockStoreApi {
 		this.catalog = catalog;
 		this.inventory = inventory;
 		this.pricing = pricing;
+		this.customers = new CustomerProfileService(catalog);
+	}
+
+	/**
+	 * Create a MockStoreApi with all custom services (for testing).
+	 */
+	public MockStoreApi(ProductCatalog catalog, InventoryService inventory, 
+			PricingService pricing, CustomerProfileService customers) {
+		this.catalog = catalog;
+		this.inventory = inventory;
+		this.pricing = pricing;
+		this.customers = customers;
 	}
 
 	// ========== CATALOG QUERIES ==========
@@ -286,6 +300,13 @@ public class MockStoreApi {
 	 */
 	public PricingService getPricing() {
 		return pricing;
+	}
+
+	/**
+	 * Get direct access to customer profile service (for advanced operations).
+	 */
+	public CustomerProfileService getCustomers() {
+		return customers;
 	}
 }
 

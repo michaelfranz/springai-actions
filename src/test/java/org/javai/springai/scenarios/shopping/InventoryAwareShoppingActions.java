@@ -11,15 +11,18 @@ import java.util.stream.Collectors;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.scenarios.shopping.store.CustomerProfileService;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
+import org.javai.springai.scenarios.shopping.store.model.CustomerProfile;
 import org.javai.springai.scenarios.shopping.store.model.LineItem;
 import org.javai.springai.scenarios.shopping.store.model.PricingBreakdown;
 import org.javai.springai.scenarios.shopping.store.model.Product;
 
 /**
- * Enhanced shopping actions with inventory awareness.
+ * Enhanced shopping actions with inventory awareness and customer personalisation.
  * Validates stock levels before adding items and provides warnings/alternatives.
+ * Supports customer-specific recommendations and allergen safety checks.
  */
 public class InventoryAwareShoppingActions {
 
@@ -35,12 +38,16 @@ public class InventoryAwareShoppingActions {
 	private final AtomicBoolean computeTotalInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean checkoutInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean requestFeedbackInvoked = new AtomicBoolean(false);
+	private final AtomicBoolean showRecommendationsInvoked = new AtomicBoolean(false);
 
 	// Basket state: maps product SKU to quantity
 	private final Map<String, Integer> basket = new HashMap<>();
 	private String lastWarning;
 	private List<Product> lastAlternatives;
 	private AddItemRequest lastAddItem;
+	
+	// Customer state
+	private String currentCustomerId;
 
 	public InventoryAwareShoppingActions(MockStoreApi storeApi) {
 		this.storeApi = storeApi;
@@ -48,16 +55,49 @@ public class InventoryAwareShoppingActions {
 
 	@Action(description = """
 			Start or reset a shopping session and basket.
-			Clears any existing basket contents.""")
+			Clears any existing basket contents.
+			Optionally provide a customer ID for personalized experience.""")
 	public ActionResult startSession(ActionContext context) {
+		return startSessionForCustomer(context, null);
+	}
+
+	@Action(description = """
+			Start a shopping session for a specific customer.
+			Loads customer preferences and provides personalized recommendations.""")
+	public ActionResult startSessionForCustomer(
+			ActionContext context,
+			@ActionParam(description = "Customer ID for personalization") String customerId) {
 		startSessionInvoked.set(true);
 		basket.clear();
 		lastWarning = null;
 		lastAlternatives = null;
+		currentCustomerId = customerId;
+		
 		if (context != null) {
 			context.put("basket", basket);
+			if (customerId != null) {
+				context.put("customerId", customerId);
+			}
 		}
 		storeApi.reset(); // Reset any stock reservations
+
+		if (customerId != null) {
+			Optional<CustomerProfile> profileOpt = storeApi.getCustomers().getProfile(customerId);
+			if (profileOpt.isPresent()) {
+				CustomerProfile profile = profileOpt.get();
+				StringBuilder greeting = new StringBuilder();
+				greeting.append(String.format("Welcome back, %s! ", profile.name()));
+				
+				if (!profile.allergens().isEmpty()) {
+					greeting.append(String.format("I'll keep your %s allergy in mind. ",
+							String.join("/", profile.allergens())));
+				}
+				
+				greeting.append("Your basket is empty.");
+				return ActionResult.success(greeting.toString());
+			}
+		}
+		
 		return ActionResult.success("Shopping session started. Your basket is empty.");
 	}
 
@@ -290,7 +330,7 @@ public class InventoryAwareShoppingActions {
 
 	@Action(description = """
 			Checkout the basket and complete the purchase.
-			Commits the stock reservations.""")
+			Commits the stock reservations and records purchase history.""")
 	public ActionResult checkoutBasket() {
 		checkoutInvoked.set(true);
 
@@ -301,11 +341,51 @@ public class InventoryAwareShoppingActions {
 		PricingBreakdown pricing = storeApi.calculateTotal(basket);
 		storeApi.commitReservations(basket);
 
+		// Record purchase history if customer is identified
+		if (currentCustomerId != null) {
+			storeApi.getCustomers().recordPurchase(currentCustomerId, new HashMap<>(basket), pricing.total());
+		}
+
 		String summary = String.format("Order complete! Total: £%.2f for %d item(s).",
 				pricing.total(), basket.size());
 
 		basket.clear();
 		return ActionResult.success(summary);
+	}
+
+	@Action(description = """
+			Show personalized product recommendations for the current customer.
+			Based on purchase history, preferences, and dietary requirements.""")
+	public ActionResult showRecommendations() {
+		showRecommendationsInvoked.set(true);
+
+		if (currentCustomerId == null) {
+			return ActionResult.error("No customer identified. Start a session with a customer ID for recommendations.");
+		}
+
+		CustomerProfileService customers = storeApi.getCustomers();
+		List<Product> recommendations = customers.getRecommendations(
+				currentCustomerId, basket.keySet(), 5);
+
+		if (recommendations.isEmpty()) {
+			return ActionResult.success("No specific recommendations at this time. Browse our categories!");
+		}
+
+		Optional<CustomerProfile> profileOpt = customers.getProfile(currentCustomerId);
+		String intro = profileOpt.map(p -> String.format("Recommended for you, %s:\n", p.name()))
+				.orElse("Recommended for you:\n");
+
+		StringBuilder sb = new StringBuilder(intro);
+		for (Product product : recommendations) {
+			// Check if there's an offer
+			List<org.javai.springai.scenarios.shopping.store.model.SpecialOffer> offers = 
+					storeApi.getApplicableOffers(java.util.Set.of(product.sku()));
+			String offerTag = offers.isEmpty() ? "" : " 🏷️";
+			
+			sb.append(String.format("- %s (£%.2f)%s\n", product.name(), product.unitPrice(), offerTag));
+		}
+
+		return ActionResult.success(sb.toString());
 	}
 
 	@Action(description = "Request end-of-session feedback from the shopper.")
@@ -346,6 +426,14 @@ public class InventoryAwareShoppingActions {
 
 	public boolean checkoutInvoked() {
 		return checkoutInvoked.get();
+	}
+
+	public boolean showRecommendationsInvoked() {
+		return showRecommendationsInvoked.get();
+	}
+
+	public String currentCustomerId() {
+		return currentCustomerId;
 	}
 
 	public boolean requestFeedbackInvoked() {
