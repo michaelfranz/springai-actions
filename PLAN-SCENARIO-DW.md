@@ -25,7 +25,7 @@ Transform natural language query requests into **executable SQL** that, in the b
 | 2 | Static Approach Hardening | ✅ Complete | 2024-12-30 |
 | 3 | Tool-Based Dynamic Metadata | ✅ Complete | 2024-12-31 |
 | 4 | Adaptive Hybrid Approach | ✅ Complete | 2024-12-31 |
-| 5 | Multi-Turn Context Tracking | 🔄 In Progress | — |
+| 5 | Multi-Turn Context Tracking | ✅ Complete | 2026-01-01 |
 | 6 | SQL Module Positioning | 🔲 Deferred | — |
 
 **Status Legend**: 🔲 Not Started | 🔄 In Progress | ✅ Complete | ⏸️ Deferred
@@ -579,7 +579,7 @@ The **framework** provides:
 |----|------|--------|-----------|
 | 5.2a | Create blob format with header (version, flags, hash) + compressed payload | ✅ | 2024-12-31 |
 | 5.2b | Implement gzip compression for payload | ✅ | 2024-12-31 |
-| 5.2c | Implement SHA-256 integrity hash | ⏸️ | — |
+| 5.2c | Implement SHA-256 integrity hash | ✅ | 2026-01-01 |
 | 5.2d | Add `toReadableJson()` for debugging (decompresses blob to pretty JSON) | ✅ | 2024-12-31 |
 | 5.2e | Create `ConversationStateMigration` interface | ✅ | 2024-12-31 |
 | 5.2f | Create `ConversationStateMigrationRegistry` | ✅ | 2024-12-31 |
@@ -607,17 +607,17 @@ The **framework** provides:
 | 5.4d | Test: Context persists across multiple turns via blob | ✅ | 2024-12-31 |
 | 5.4e | Test: `expire()` returns empty state | ✅ | 2024-12-31 |
 | 5.4f | Test: History is capped at configured size | ✅ | 2024-12-31 |
-| 5.4g | Test: Tampered blob is rejected (integrity check) | ⏸️ | — |
+| 5.4g | Test: Tampered blob is rejected (integrity check) | ✅ | 2026-01-01 |
 | 5.4h | Test: Old version blob is migrated on load | ✅ | 2024-12-31 |
 
 ### Tasks — Documentation
 
 | ID | Task | Status | Completed |
 |----|------|--------|-----------|
-| 5.5a | Document conversation patterns for query refinement | 🔲 | — |
-| 5.5b | Add multi-turn examples to README | 🔲 | — |
-| 5.5c | Document blob persistence pattern for applications | 🔲 | — |
-| 5.5d | Document migration authoring for framework maintainers | 🔲 | — |
+| 5.5a | Document conversation patterns for query refinement | ✅ | 2026-01-01 |
+| 5.5b | Add multi-turn examples to README | ✅ | 2026-01-01 |
+| 5.5c | Document blob persistence pattern for applications | ✅ | 2026-01-01 |
+| 5.5d | Document migration authoring for framework maintainers | ✅ | 2026-01-01 |
 
 ---
 
@@ -908,11 +908,11 @@ public class ShoppingSessionService {
 
 ```
 [x] All generic framework tasks (5.1a-5.1k) complete
-[x] All blob/versioning tasks (5.2a-5.2h) complete (5.2c deferred)
+[x] All blob/versioning tasks (5.2a-5.2h) complete
 [x] All SQL layer tasks (5.3a-5.3f) complete
-[x] All integration tests (5.4a-5.4h) implemented (5.4g deferred)
-[ ] All documentation tasks (5.5a-5.5d) complete
-[ ] Phase status updated to ✅ in overview table
+[x] All integration tests (5.4a-5.4h) implemented
+[x] All documentation tasks (5.5a-5.5d) complete
+[x] Phase status updated to ✅ in overview table
 ```
 
 ---

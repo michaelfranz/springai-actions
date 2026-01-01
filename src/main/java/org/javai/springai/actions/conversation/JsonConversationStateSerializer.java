@@ -10,8 +10,11 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,13 +24,18 @@ import java.util.zip.GZIPOutputStream;
 /**
  * JSON-based implementation of {@link ConversationStateSerializer}.
  * 
- * <p>Serializes conversation state to compressed JSON with schema versioning.
- * The blob format is:</p>
+ * <p>Serializes conversation state to compressed JSON with schema versioning
+ * and integrity protection. The blob format is:</p>
  * <ul>
  *   <li>4 bytes: Magic number "CVST"</li>
  *   <li>2 bytes: Schema version</li>
+ *   <li>32 bytes: SHA-256 hash of the compressed data (integrity check)</li>
  *   <li>Remaining: gzip-compressed JSON</li>
  * </ul>
+ * 
+ * <h2>Integrity Protection</h2>
+ * <p>The SHA-256 hash ensures that any tampering with the blob is detected
+ * during deserialization, throwing an {@link IntegrityException}.</p>
  * 
  * <h2>Schema Migrations</h2>
  * <p>When deserializing older blobs, registered migrations are applied
@@ -43,6 +51,8 @@ import java.util.zip.GZIPOutputStream;
 public class JsonConversationStateSerializer implements ConversationStateSerializer {
 
 	private static final byte[] MAGIC = "CVST".getBytes(StandardCharsets.UTF_8);
+	private static final int HASH_LENGTH = 32; // SHA-256 produces 32 bytes
+	private static final int HEADER_LENGTH = 4 + 2 + HASH_LENGTH; // magic + version + hash
 	
 	/** Current schema version for new blobs */
 	public static final int CURRENT_SCHEMA_VERSION = 1;
@@ -81,12 +91,14 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 			ObjectNode json = stateToJson(state);
 			String jsonString = mapper.writeValueAsString(json);
 			byte[] compressed = compress(jsonString.getBytes(StandardCharsets.UTF_8));
+			byte[] hash = computeHash(compressed);
 
-			// Build blob: magic + version + compressed data
+			// Build blob: magic + version + hash + compressed data
 			ByteArrayOutputStream bos = new ByteArrayOutputStream();
 			bos.write(MAGIC);
 			bos.write((schemaVersion >> 8) & 0xFF);
 			bos.write(schemaVersion & 0xFF);
+			bos.write(hash);
 			bos.write(compressed);
 			return bos.toByteArray();
 
@@ -97,7 +109,7 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 
 	@Override
 	public ConversationState deserialize(byte[] blob, PayloadTypeRegistry typeRegistry) {
-		if (blob == null || blob.length < 6) {
+		if (blob == null || blob.length < HEADER_LENGTH) {
 			throw new ConversationStateSerializer.IntegrityException("Blob is too short or null");
 		}
 
@@ -115,10 +127,21 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 					"Blob version " + blobVersion + " is newer than current version " + schemaVersion);
 		}
 
+		// Extract stored hash and compressed data
+		byte[] storedHash = new byte[HASH_LENGTH];
+		System.arraycopy(blob, 6, storedHash, 0, HASH_LENGTH);
+		
+		byte[] compressed = new byte[blob.length - HEADER_LENGTH];
+		System.arraycopy(blob, HEADER_LENGTH, compressed, 0, compressed.length);
+
+		// Verify integrity
+		byte[] computedHash = computeHash(compressed);
+		if (!Arrays.equals(storedHash, computedHash)) {
+			throw new ConversationStateSerializer.IntegrityException("Blob integrity check failed - data may have been tampered with");
+		}
+
 		try {
 			// Decompress
-			byte[] compressed = new byte[blob.length - 6];
-			System.arraycopy(blob, 6, compressed, 0, compressed.length);
 			byte[] jsonBytes = decompress(compressed);
 			String jsonString = new String(jsonBytes, StandardCharsets.UTF_8);
 
@@ -153,13 +176,13 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 
 	@Override
 	public String toReadableJson(byte[] blob) {
-		if (blob == null || blob.length < 6) {
+		if (blob == null || blob.length < HEADER_LENGTH) {
 			return "{}";
 		}
 
 		try {
-			byte[] compressed = new byte[blob.length - 6];
-			System.arraycopy(blob, 6, compressed, 0, compressed.length);
+			byte[] compressed = new byte[blob.length - HEADER_LENGTH];
+			System.arraycopy(blob, HEADER_LENGTH, compressed, 0, compressed.length);
 			byte[] jsonBytes = decompress(compressed);
 			String jsonString = new String(jsonBytes, StandardCharsets.UTF_8);
 
@@ -312,6 +335,16 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 			}
 		}
 		return bos.toByteArray();
+	}
+
+	private byte[] computeHash(byte[] data) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			return digest.digest(data);
+		} catch (NoSuchAlgorithmException e) {
+			// SHA-256 is guaranteed to be available in all Java implementations
+			throw new RuntimeException("SHA-256 algorithm not available", e);
+		}
 	}
 }
 

@@ -2,12 +2,10 @@ package org.javai.springai.actions.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @DisplayName("Conversation State Migration")
 class ConversationStateMigrationTest {
@@ -141,23 +139,114 @@ class ConversationStateMigrationTest {
 		}
 
 		@Test
-		@DisplayName("throws when migration needed but no registry")
-		void throwsWhenMigrationNeededButNoRegistry() {
+		@DisplayName("throws when migration needed but not registered")
+		void throwsWhenMigrationNeededButNotRegistered() {
 			var typeRegistry = new PayloadTypeRegistry();
 
-			// Create blob with v1
-			var v1Serializer = new JsonConversationStateSerializer();
+			// Create blob with v1 serializer
+			var v1Registry = new DefaultConversationStateMigrationRegistry(1);
+			var v1Serializer = new JsonConversationStateSerializer(v1Registry);
 			var state = ConversationState.initial("test");
 			byte[] v1Blob = v1Serializer.serialize(state, typeRegistry);
 
-			// Manually corrupt version to v0 to simulate old blob
-			v1Blob[4] = 0;
-			v1Blob[5] = 0;
-
-			// Try to deserialize - should fail because v0 < v1 but no registry
-			assertThatThrownBy(() -> v1Serializer.deserialize(v1Blob, typeRegistry))
+			// Try to deserialize with v2 serializer that has no migrations registered
+			var v2Registry = new DefaultConversationStateMigrationRegistry(2);
+			// Note: deliberately NOT registering v1->v2 migration
+			var v2Serializer = new JsonConversationStateSerializer(v2Registry);
+			
+			assertThatThrownBy(() -> v2Serializer.deserialize(v1Blob, typeRegistry))
 					.isInstanceOf(ConversationStateSerializer.MigrationException.class)
-					.hasMessageContaining("requires migration but no registry");
+					.hasMessageContaining("No migration registered");
+		}
+	}
+
+	@Nested
+	@DisplayName("Integrity Protection")
+	class IntegrityTests {
+
+		@Test
+		@DisplayName("rejects tampered blob data")
+		void rejectsTamperedBlobData() {
+			var serializer = new JsonConversationStateSerializer();
+			var typeRegistry = new PayloadTypeRegistry();
+
+			var state = ConversationState.initial("original instruction");
+			byte[] blob = serializer.serialize(state, typeRegistry);
+
+			// Tamper with the compressed data portion (after header: 4 magic + 2 version + 32 hash)
+			int dataOffset = 4 + 2 + 32;
+			if (blob.length > dataOffset + 5) {
+				blob[dataOffset + 5] ^= 0xFF; // Flip bits in the compressed data
+			}
+
+			assertThatThrownBy(() -> serializer.deserialize(blob, typeRegistry))
+					.isInstanceOf(ConversationStateSerializer.IntegrityException.class)
+					.hasMessageContaining("integrity check failed");
+		}
+
+		@Test
+		@DisplayName("rejects blob with corrupted hash")
+		void rejectsBlobWithCorruptedHash() {
+			var serializer = new JsonConversationStateSerializer();
+			var typeRegistry = new PayloadTypeRegistry();
+
+			var state = ConversationState.initial("test instruction");
+			byte[] blob = serializer.serialize(state, typeRegistry);
+
+			// Tamper with the hash (bytes 6-37)
+			blob[10] ^= 0xFF;
+
+			assertThatThrownBy(() -> serializer.deserialize(blob, typeRegistry))
+					.isInstanceOf(ConversationStateSerializer.IntegrityException.class)
+					.hasMessageContaining("integrity check failed");
+		}
+
+		@Test
+		@DisplayName("accepts valid blob unchanged")
+		void acceptsValidBlobUnchanged() {
+			var serializer = new JsonConversationStateSerializer();
+			var typeRegistry = new PayloadTypeRegistry();
+
+			var state = ConversationState.initial("valid instruction");
+			byte[] blob = serializer.serialize(state, typeRegistry);
+
+			// Should deserialize without exception
+			var restored = serializer.deserialize(blob, typeRegistry);
+			assertThat(restored.originalInstruction()).isEqualTo("valid instruction");
+		}
+
+		@Test
+		@DisplayName("rejects truncated blob")
+		void rejectsTruncatedBlob() {
+			var serializer = new JsonConversationStateSerializer();
+			var typeRegistry = new PayloadTypeRegistry();
+
+			var state = ConversationState.initial("test");
+			byte[] blob = serializer.serialize(state, typeRegistry);
+
+			// Truncate to just the header
+			byte[] truncated = new byte[38]; // 4 + 2 + 32 = header only
+			System.arraycopy(blob, 0, truncated, 0, truncated.length);
+
+			assertThatThrownBy(() -> serializer.deserialize(truncated, typeRegistry))
+					.isInstanceOf(RuntimeException.class); // Will fail on decompress or hash
+		}
+
+		@Test
+		@DisplayName("rejects blob with invalid magic number")
+		void rejectsBlobWithInvalidMagicNumber() {
+			var serializer = new JsonConversationStateSerializer();
+			var typeRegistry = new PayloadTypeRegistry();
+
+			var state = ConversationState.initial("test");
+			byte[] blob = serializer.serialize(state, typeRegistry);
+
+			// Corrupt magic number
+			blob[0] = 'X';
+
+			assertThatThrownBy(() -> serializer.deserialize(blob, typeRegistry))
+					.isInstanceOf(ConversationStateSerializer.IntegrityException.class)
+					.hasMessageContaining("Invalid blob magic number");
 		}
 	}
 

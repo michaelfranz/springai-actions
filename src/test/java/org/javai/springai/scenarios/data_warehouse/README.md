@@ -385,6 +385,333 @@ export RUN_LLM_TESTS=true
 - Temperature set to 0.0 for deterministic output
 - Tests are skipped without env vars (safe for CI)
 
+## Multi-Turn Query Refinement
+
+The framework supports **multi-turn conversations** where users iteratively refine queries across multiple exchanges. This enables natural interactions like:
+
+```
+User: "Show me order values"
+AI: [generates SELECT order_value FROM fct_orders]
+
+User: "Add customer names"
+AI: [refines to include JOIN with dim_customer]
+
+User: "Filter to just the East region"
+AI: [adds WHERE clause while preserving previous structure]
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| `WorkingContext<T>` | Holds the current object being refined (e.g., a Query) |
+| `ConversationState` | Tracks context, history, and pending parameters across turns |
+| `WorkingContextContributor` | Renders the current context into the system prompt |
+| `WorkingContextExtractor` | Extracts new context from executed plan results |
+
+### Conversation Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Turn 1: "Show me order values"                                  │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LLM generates: SELECT order_value FROM fct_orders               │
+│  → Executed → SqlQueryPayload stored in WorkingContext          │
+│  → Serialized to blob → Application stores blob                  │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Turn 2: "Add customer names" (+ priorBlob)                      │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  System prompt includes:                                         │
+│  "PREVIOUS QUERY CONTEXT: SELECT order_value FROM fct_orders"   │
+│  LLM sees prior query and refines it                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### SQL Working Context Components
+
+The SQL layer provides specialized components for query refinement:
+
+| Component | Purpose |
+|-----------|---------|
+| `SqlQueryPayload` | Serializable record storing `modelSql` and extracted metadata |
+| `SqlWorkingContextContributor` | Renders query context for LLM consumption |
+| `SqlWorkingContextExtractor` | Extracts `Query` objects from executed plans |
+
+### Model SQL vs Canonical SQL
+
+The framework distinguishes between two SQL representations:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **Model SQL** | SQL as the LLM sees/generates it (uses synonyms) | `SELECT value FROM orders` |
+| **Canonical SQL** | SQL for database execution (real table names) | `SELECT order_value FROM fct_orders` |
+
+```java
+Query query = Query.fromSql("SELECT value FROM orders", catalog);
+query.modelSql();      // "SELECT value FROM orders" (LLM-facing)
+query.canonicalSql();  // "SELECT order_value FROM fct_orders" (DB-facing)
+```
+
+### Example: Multi-Turn Setup
+
+```java
+// Create the conversation manager with blob-based persistence
+PayloadTypeRegistry typeRegistry = new PayloadTypeRegistry();
+typeRegistry.register("sql.query", SqlQueryPayload.class);
+
+ConversationStateSerializer serializer = new JsonConversationStateSerializer();
+ConversationStateConfig config = ConversationStateConfig.builder()
+        .maxHistorySize(10)
+        .build();
+
+List<WorkingContextExtractor<?>> extractors = List.of(
+        new SqlWorkingContextExtractor());
+
+ConversationManager manager = new ConversationManager(
+        planner, serializer, typeRegistry, config, extractors);
+
+// First turn
+ConversationTurnResult turn1 = manager.converse("Show me order values", null);
+byte[] blob1 = turn1.blob();  // Application stores this
+
+// Execute the plan
+PlanExecutionResult exec1 = executor.execute(turn1.plan());
+
+// Second turn (with prior blob and execution result)
+ConversationTurnResult turn2 = manager.converse("Add customer names", blob1, exec1);
+byte[] blob2 = turn2.blob();  // Application stores updated blob
+```
+
+## Application Persistence Pattern
+
+The framework uses **application-owned persistence** for conversation state. The framework provides an opaque, versioned, integrity-protected blob; the application stores it however it chooses.
+
+### Why Application-Owned?
+
+- **Flexibility**: Applications can use any storage (SQL, NoSQL, files, session)
+- **Control**: TTL, cleanup, and lifecycle are application concerns
+- **Simplicity**: Framework has no JDBC/persistence dependencies
+- **Security**: Application controls where sensitive data lives
+
+### Blob Format
+
+The serialized blob contains:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  4 bytes: Magic number "CVST" (identifies blob type)            │
+│  2 bytes: Schema version (for migration)                        │
+│ 32 bytes: SHA-256 hash (integrity protection)                   │
+│  N bytes: Gzip-compressed JSON payload                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Persistence Examples
+
+**Database storage:**
+```java
+// Store blob in database
+void saveSession(String sessionId, byte[] blob) {
+    jdbcTemplate.update(
+        "INSERT INTO sessions (id, state_blob, updated_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT (id) DO UPDATE SET state_blob = ?, updated_at = ?",
+        sessionId, blob, Instant.now(), blob, Instant.now());
+}
+
+// Retrieve blob
+byte[] loadSession(String sessionId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT state_blob FROM sessions WHERE id = ?",
+        byte[].class, sessionId);
+}
+```
+
+**Redis storage:**
+```java
+// Store with TTL
+redisTemplate.opsForValue().set(
+    "session:" + sessionId, blob, Duration.ofHours(24));
+
+// Retrieve
+byte[] blob = redisTemplate.opsForValue().get("session:" + sessionId);
+```
+
+### Integrity Protection
+
+The SHA-256 hash ensures tampered blobs are rejected:
+
+```java
+// Tampered blob throws IntegrityException
+byte[] tamperedBlob = Arrays.copyOf(validBlob, validBlob.length);
+tamperedBlob[50] ^= 0xFF;  // Flip bits
+
+try {
+    manager.fromBlob(tamperedBlob);  // Throws!
+} catch (ConversationStateSerializer.IntegrityException e) {
+    // "Blob integrity check failed - data may have been tampered with"
+}
+```
+
+### Debugging Blobs
+
+Use `toReadableJson()` to inspect blob contents:
+
+```java
+String json = manager.toReadableJson(blob);
+System.out.println(json);
+// {
+//   "originalInstruction": "Show me orders",
+//   "workingContext": {
+//     "contextType": "sql.query",
+//     "payload": { "modelSql": "SELECT ..." }
+//   }
+// }
+```
+
+### Session Expiry
+
+Applications control when sessions expire:
+
+```java
+// Force expiry (e.g., on logout)
+ConversationTurnResult expired = manager.expire();
+byte[] emptyBlob = expired.blob();
+saveSession(sessionId, emptyBlob);
+
+// Or simply delete the stored blob
+deleteSession(sessionId);
+```
+
+## Schema Migration Guide
+
+The framework supports **schema versioning and migration** to handle evolution of the conversation state structure across framework versions.
+
+### When Migrations Are Needed
+
+Migrations are required when:
+
+- Adding new fields to `ConversationState`
+- Changing field names or types
+- Restructuring nested objects (e.g., `WorkingContext` payload format)
+
+Migrations are **not** needed for:
+
+- Adding new `contextType` values (handled by `PayloadTypeRegistry`)
+- Application-specific domain changes (application manages its own data)
+
+### Creating a Migration
+
+1. **Implement `ConversationStateMigration`:**
+
+```java
+public class V1ToV2Migration implements ConversationStateMigration {
+    
+    @Override
+    public int fromVersion() { return 1; }
+    
+    @Override
+    public int toVersion() { return 2; }
+    
+    @Override
+    public String description() {
+        return "Add turnCount field to conversation state";
+    }
+    
+    @Override
+    public void migrate(ObjectNode json) {
+        // Add the new field with a default value
+        json.put("turnCount", 0);
+        
+        // Or transform existing data
+        if (json.has("oldField")) {
+            json.set("newField", json.get("oldField"));
+            json.remove("oldField");
+        }
+    }
+}
+```
+
+2. **Register with the migration registry:**
+
+```java
+ConversationStateMigrationRegistry registry = 
+    new DefaultConversationStateMigrationRegistry(2)  // Current version = 2
+        .register(new V1ToV2Migration());
+
+JsonConversationStateSerializer serializer = 
+    new JsonConversationStateSerializer(registry);
+```
+
+3. **Migration executes automatically:**
+
+```java
+// Old v1 blob is automatically migrated to v2 on deserialize
+byte[] v1Blob = loadFromStorage();
+ConversationState state = serializer.deserialize(v1Blob, typeRegistry);
+// → V1ToV2Migration.migrate() called automatically
+```
+
+### Migration Chain
+
+For multi-version jumps, register all intermediate migrations:
+
+```java
+var registry = new DefaultConversationStateMigrationRegistry(4)
+    .register(new V1ToV2Migration())  // 1 → 2
+    .register(new V2ToV3Migration())  // 2 → 3
+    .register(new V3ToV4Migration()); // 3 → 4
+
+// A v1 blob will run: V1ToV2 → V2ToV3 → V3ToV4
+```
+
+### Migration Rules
+
+| Rule | Rationale |
+|------|-----------|
+| Each migration increments version by exactly 1 | Ensures complete chain |
+| Migrations must be idempotent-safe | May be re-applied if storage is stale |
+| Never remove migrations for shipped versions | Old blobs in the wild need them |
+| Test migrations with real v(N) blobs | Catch subtle format differences |
+
+### Versioning Best Practices
+
+```java
+// In JsonConversationStateSerializer
+public static final int CURRENT_SCHEMA_VERSION = 1;  // Increment for breaking changes
+
+// Version history:
+// v1 (2026-01): Initial schema
+// v2 (2026-03): Added turnCount field
+// v3 (2026-06): Renamed workingContext.sql to workingContext.modelSql
+```
+
+### Error Handling
+
+```java
+// Missing migration
+try {
+    serializer.deserialize(oldBlob, typeRegistry);
+} catch (ConversationStateSerializer.MigrationException e) {
+    // "No migration registered for version 1 -> 2"
+}
+
+// Future version (downgrade not supported)
+try {
+    serializer.deserialize(futureBlob, typeRegistry);
+} catch (ConversationStateSerializer.MigrationException e) {
+    // "Blob version 5 is newer than current version 3"
+}
+```
+
 ## Future Enhancements
 
 See `PLAN-SCENARIO-DW.md` for the enhancement roadmap:
@@ -394,8 +721,10 @@ See `PLAN-SCENARIO-DW.md` for the enhancement roadmap:
 | Tool-based metadata lookup | ✅ Complete |
 | Adaptive hybrid approach | ✅ Complete |
 | Table/column synonyms | ✅ Complete |
-| Schema tokenization | ✅ Complete |
+| Schema tokenization (model names) | ✅ Complete |
 | Expanded query patterns (JOINs, aggregations) | ✅ Complete |
-| Multi-turn query refinement | 🔲 Planned (Phase 5) |
+| Multi-turn query refinement | ✅ Complete |
+| Blob persistence with integrity protection | ✅ Complete |
+| Schema migration infrastructure | ✅ Complete |
 | SQL validation retry mechanism | 🔲 Planned |
 
