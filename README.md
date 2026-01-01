@@ -259,9 +259,60 @@ The `src/test/java/org/javai/springai/scenarios/` directory contains complete ex
 - Keep LLM interactions side-effect free
 - Follow existing code style and patterns
 
-## Possible future enhancements
+## Possible Future Enhancements
+
+### Generic Retry/Correction Mechanism
+
+LLMs occasionally generate responses that fail validation (syntax errors, schema violations, wrong table names). A single retry with clear error context often produces a correct response. A generic retry mechanism should be:
+
+- **Transparent** to the application developer
+- **Configurable** (enable/disable, max retries)
+- **Extensible** for different correction strategies
+
+**Proposed Design**:
+
+```java
+public interface CorrectionStrategy<T> {
+    boolean canHandle(ValidationError error);
+    String buildCorrectionPrompt(T failedValue, ValidationError error, Map<String, Object> context);
+    T parseCorrection(String llmResponse, Map<String, Object> context);
+}
+```
+
+The `Planner` would orchestrate retries:
+1. Initial response fails validation
+2. Find applicable `CorrectionStrategy`
+3. Build correction prompt with error details
+4. Send to LLM
+5. Parse correction response
+6. Retry validation (max N times)
+7. Return corrected value or final error
+
+**Configuration**:
+
+```java
+Planner planner = Planner.builder()
+    .withChatClient(chatClient)
+    .withMaxRetries(2)
+    .addCorrectionStrategy(new QueryCorrectionStrategy())
+    .build();
+```
+
+### Prompt Size Monitoring
+
+Currently there is no safeguard or warning when prompt contributions (e.g., schema metadata) exceed reasonable size limits.
+
+**Impact**: Large contributions could:
+- Exceed context window limits
+- Dilute the LLM's attention to important content
+- Increase costs significantly
+
+**Recommended approach**: 
+1. Log warning when contribution exceeds threshold (e.g., 2000 tokens)
+2. Consider summarization or pagination for large schemas
 
 ### Data Warehouse Scenarios
+
 - The star schema assumption is powerful but not universal. Consider how to handle other warehouse patterns (snowflake, data vault) in future iterations.
 - The adaptive hybrid approach could benefit from ML-based prediction, but start with simple frequency counting.
 - Consider how this scenario relates to the MCP (Model Context Protocol) for external database introspection.
