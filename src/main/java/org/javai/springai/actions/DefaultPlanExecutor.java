@@ -104,6 +104,16 @@ public class DefaultPlanExecutor implements PlanExecutor {
 	public PlanExecutionResult execute(Plan plan, ActionContext context) {
 		Objects.requireNonNull(plan);
 
+		// Handle NO_ACTION state FIRST (empty steps or NoActionStep)
+		// This must be checked before ERROR because Plan.status() returns ERROR for empty steps
+		if (isNoActionPlan(plan)) {
+			if (noActionHandler == null) {
+				throw new IllegalStateException("Plan has no actions and no handler is registered");
+			}
+			String message = extractNoActionMessage(plan);
+			return noActionHandler.handle(plan, context, message);
+		}
+
 		// Handle PENDING state
 		if (plan.status() == PlanStatus.PENDING) {
 			if (pendingHandler == null) {
@@ -112,21 +122,12 @@ public class DefaultPlanExecutor implements PlanExecutor {
 			return pendingHandler.handle(plan, context);
 		}
 
-		// Handle ERROR state
+		// Handle ERROR state (contains ErrorStep, not just empty)
 		if (plan.status() == PlanStatus.ERROR) {
 			if (errorHandler == null) {
 				throw new IllegalStateException("Plan in ERROR state has no handler");
 			}
 			return errorHandler.handle(plan, context);
-		}
-
-		// Handle NO_ACTION state (empty steps or NoActionStep)
-		if (isNoActionPlan(plan)) {
-			if (noActionHandler == null) {
-				throw new IllegalStateException("Plan has no actions and no handler is registered");
-			}
-			String message = extractNoActionMessage(plan);
-			return noActionHandler.handle(plan, context, message);
 		}
 
 		List<StepExecutionResult> results = new ArrayList<>();

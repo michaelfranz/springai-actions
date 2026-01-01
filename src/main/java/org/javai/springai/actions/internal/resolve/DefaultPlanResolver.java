@@ -38,7 +38,8 @@ public class DefaultPlanResolver implements PlanResolver {
 
 	@Override
 	public Plan resolve(RawPlan jsonPlan, ResolutionContext context) {
-		if (jsonPlan.steps().isEmpty()) {
+		// Handle null or empty steps - this triggers the noAction handler
+		if (jsonPlan.steps() == null || jsonPlan.steps().isEmpty()) {
 			return new Plan(jsonPlan.message(), List.of());
 		}
 

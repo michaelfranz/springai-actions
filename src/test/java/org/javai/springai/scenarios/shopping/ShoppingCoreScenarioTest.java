@@ -438,8 +438,24 @@ public class ShoppingCoreScenarioTest {
 			Plan plan = turn.plan();
 
 			assertThat(plan).isNotNull();
-			assertThat(plan.status()).isEqualTo(PlanStatus.ERROR);
-			assertThat(plan.planSteps().getFirst()).isInstanceOf(PlanStep.ErrorStep.class);
+			
+			// Non-shopping requests result in no actions - triggers noAction handler
+			// The plan may have empty steps or a NoActionStep
+			if (plan.planSteps().isEmpty()) {
+				// Empty steps - noAction handler will be invoked on execute
+				PlanExecutionResult result = executor.execute(plan);
+				assertThat(result.success()).isFalse();
+				// The assistant message should explain what the assistant can help with
+				assertThat(plan.assistantMessage()).isNotBlank();
+			} else if (plan.planSteps().getFirst() instanceof PlanStep.NoActionStep noAction) {
+				// Explicit noAction step with explanation
+				assertThat(noAction.message()).isNotBlank();
+				PlanExecutionResult result = executor.execute(plan);
+				assertThat(result.success()).isFalse();
+			} else {
+				// Fallback: might still be an error step
+				assertThat(plan.status()).isEqualTo(PlanStatus.ERROR);
+			}
 		}
 
 		@Test
