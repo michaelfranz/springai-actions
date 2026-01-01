@@ -176,37 +176,51 @@ public final class Planner {
 			
 			EXAMPLES:
 			
-			1. For new SQL queries (showSqlQuery, runSqlQuery):
+			1. To SHOW/DISPLAY a query (user says "show", "generate", "create"):
 			{
-			  "message": "Query orders with customer names and dates",
+			  "message": "Show query for orders with customer names",
 			  "steps": [
 			    {
 			      "actionId": "showSqlQuery",
-			      "description": "Join fct_orders with dim_customer and dim_date",
+			      "description": "Join fct_orders with dim_customer",
 			      "parameters": {
-			        "query": { "sql": "SELECT o.order_value, c.customer_name, d.date FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id JOIN dim_date d ON o.date_id = d.id" }
+			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id" }
 			      }
 			    }
 			  ]
 			}
 			
-			2. For REFINING an existing query (when CURRENT QUERY CONTEXT is present):
-			If the current query is: SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id
-			And user says: "filter by region = 'East'"
+			2. To RUN/EXECUTE a query (user says "run", "execute", "get data"):
 			{
-			  "message": "Add region filter to the current query",
+			  "message": "Run query to get order values for Smith",
 			  "steps": [
 			    {
-			      "actionId": "showSqlQuery",
-			      "description": "Add WHERE clause to existing query",
+			      "actionId": "runSqlQuery",
+			      "description": "Execute query filtering by customer name",
 			      "parameters": {
-			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id WHERE o.region = 'East'" }
+			        "query": { "sql": "SELECT o.order_value FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id WHERE c.customer_name LIKE '%Smith%'" }
 			      }
 			    }
 			  ]
 			}
 			
-			3. For aggregateOrderValue:
+			3. For REFINING an existing query (when CURRENT QUERY CONTEXT is present):
+			If the current query is: SELECT o.order_value FROM fct_orders o
+			And user says: "add customer names"
+			{
+			  "message": "Add customer names to the query",
+			  "steps": [
+			    {
+			      "actionId": "showSqlQuery",
+			      "description": "Add JOIN to include customer_name",
+			      "parameters": {
+			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id" }
+			      }
+			    }
+			  ]
+			}
+			
+			4. For aggregateOrderValue:
 			{
 			  "message": "Calculate total order value for Mike in January 2024",
 			  "steps": [
@@ -221,7 +235,8 @@ public final class Planner {
 			}
 			
 		RULES:
-		- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS (e.g., "query" for SQL, "orderValueQuery" for aggregates)
+		- Choose actionId based on user intent: "show/generate" → showSqlQuery, "run/execute/get" → runSqlQuery
+		- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS
 		- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
 		- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
 		- SQL MUST derive exact table/column names from the descriptions in the SQL CATALOG
@@ -460,18 +475,6 @@ public final class Planner {
 			return this;
 		}
 
-		/**
-		 * Add context data that can be accessed by prompt contributors.
-		 * @deprecated Use {@link #addPromptContext(String, Object)} instead
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder addDslContext(String key, Object context) {
-			return addPromptContext(key, context);
-		}
-
-		/**
-		 * Add context data that can be accessed by prompt contributors.
-		 */
 		public Builder addPromptContext(String key, Object context) {
 			if (key != null && !key.isBlank() && context != null) {
 				this.promptContext.put(key, context);

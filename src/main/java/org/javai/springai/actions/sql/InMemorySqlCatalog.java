@@ -162,8 +162,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			return Map.of();
 		}
 		ensureModelNameMappingsBuilt();
-		Map<String, String> all = new LinkedHashMap<>();
-		all.putAll(modelNameToTableName);
+		Map<String, String> all = new LinkedHashMap<>(modelNameToTableName);
 		// For column model names, include table context
 		modelNameToColumnName.forEach((key, value) -> {
 			// key is "tableModelName.columnModelName", extract just the column model name for display
@@ -211,7 +210,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			// Use first synonym as model name if available, otherwise generate one
 			String tableModelName;
 			if (!table.synonyms.isEmpty()) {
-				tableModelName = table.synonyms.get(0);  // First synonym is the model name
+				tableModelName = table.synonyms.getFirst();  // First synonym is the model name
 			} else {
 				String[] tagsArray = table.tags.toArray(new String[0]);
 				tableModelName = TokenGenerator.tableToken(table.name, tagsArray);  // Generated fallback
@@ -223,7 +222,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			for (ColumnBuilder column : table.columns.values()) {
 				String columnModelName;
 				if (!column.synonyms.isEmpty()) {
-					columnModelName = column.synonyms.get(0);  // First synonym is the model name
+					columnModelName = column.synonyms.getFirst();  // First synonym is the model name
 				} else {
 					columnModelName = TokenGenerator.columnToken(table.name, column.name);  // Generated fallback
 				}

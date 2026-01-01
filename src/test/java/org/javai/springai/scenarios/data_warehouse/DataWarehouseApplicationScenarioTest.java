@@ -219,7 +219,8 @@ public class DataWarehouseApplicationScenarioTest {
 	@Test
 	void joinMultipleDimensions() {
 		// Request requires joining fact table to multiple dimensions
-		String request = "show me order values with customer names and dates";
+		// Use explicit table references to avoid LLM inventing columns
+		String request = "show me order values with customer names from dim_customer and date from dim_date";
 
 		ConversationTurnResult turn = conversationManager.converse(request, "multi-join-session");
 		Plan plan = turn.plan();

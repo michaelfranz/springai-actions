@@ -259,6 +259,13 @@ The `src/test/java/org/javai/springai/scenarios/` directory contains complete ex
 - Keep LLM interactions side-effect free
 - Follow existing code style and patterns
 
+## Possible future enhancements
+
+### Data Warehouse Scenarios
+- The star schema assumption is powerful but not universal. Consider how to handle other warehouse patterns (snowflake, data vault) in future iterations.
+- The adaptive hybrid approach could benefit from ML-based prediction, but start with simple frequency counting.
+- Consider how this scenario relates to the MCP (Model Context Protocol) for external database introspection.
+
 ## License
 
 Licensed under the Apache License, Version 2.0 (Apache-2.0). See `LICENSE`.
