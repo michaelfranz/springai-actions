@@ -101,8 +101,8 @@ public class AdaptiveSqlCatalogContributor implements PromptContributor {
 				return;
 			}
 			
-			String displayName = catalog.isTokenized() 
-					? catalog.getTableToken(tableName).orElse(tableName)
+			String displayName = catalog.usesModelNames() 
+					? catalog.getTableModelName(tableName).orElse(tableName)
 					: tableName;
 			
 			sb.append("- ").append(displayName);
@@ -117,8 +117,8 @@ public class AdaptiveSqlCatalogContributor implements PromptContributor {
 			// Include columns
 			if (table.columns() != null && !table.columns().isEmpty()) {
 				for (var col : table.columns()) {
-					String columnDisplayName = catalog.isTokenized()
-							? catalog.getColumnToken(tableName, col.name()).orElse(col.name())
+					String columnDisplayName = catalog.usesModelNames()
+							? catalog.getColumnModelName(tableName, col.name()).orElse(col.name())
 							: col.name();
 					
 					sb.append("  • ").append(columnDisplayName);

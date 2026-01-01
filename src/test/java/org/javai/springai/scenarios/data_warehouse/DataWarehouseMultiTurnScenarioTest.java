@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
-import org.javai.springai.actions.PlanExecutionResult;
+import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationState;
@@ -20,6 +20,8 @@ import org.javai.springai.actions.conversation.WorkingContext;
 import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.SqlCatalogContextContributor;
+import org.javai.springai.actions.sql.SqlQueryPayload;
+import org.javai.springai.actions.sql.SqlWorkingContextContributor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -143,13 +145,14 @@ public class DataWarehouseMultiTurnScenarioTest {
 				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
+				.promptContributor(new SqlWorkingContextContributor())
 				.build();
 
 		executor = new DefaultPlanExecutor();
 
 		// Set up blob-based conversation infrastructure
 		typeRegistry = new PayloadTypeRegistry();
-		typeRegistry.register("sql.query", QueryContext.class);
+		typeRegistry.register(SqlQueryPayload.CONTEXT_TYPE, SqlQueryPayload.class);
 
 		serializer = new JsonConversationStateSerializer();
 
@@ -161,27 +164,6 @@ public class DataWarehouseMultiTurnScenarioTest {
 
 		// Application's simulated blob store
 		applicationBlobStore = new HashMap<>();
-	}
-
-	/**
-	 * Payload for SQL working context.
-	 * 
-	 * <p>Stores the "model SQL" — the SQL using catalog synonyms as the LLM
-	 * sees and generates it. This is the canonical form from which resolved
-	 * variants (real table names, dialect-specific) are derived.</p>
-	 */
-	public record QueryContext(String modelSql) {
-		
-		/**
-		 * Creates a QueryContext from a Query.
-		 * 
-		 * <p>Note: In a full implementation, we would capture the model SQL
-		 * before resolution. For now, we use the resolved SQL as a placeholder.</p>
-		 */
-		public static QueryContext from(Query query) {
-			// TODO: Capture model SQL before de-synonymization
-			return new QueryContext(query.sqlString());
-		}
 	}
 
 	// ========================================================================
@@ -283,6 +265,15 @@ public class DataWarehouseMultiTurnScenarioTest {
 
 		/**
 		 * Simulates the application's session handling.
+		 * 
+		 * <p>This demonstrates the recommended pattern:</p>
+		 * <ol>
+		 *   <li>Load prior blob from storage</li>
+		 *   <li>Process the turn with ConversationManager</li>
+		 *   <li>Execute the plan if ready</li>
+		 *   <li>Extract working context from execution results</li>
+		 *   <li>Store updated blob for next turn</li>
+		 * </ol>
 		 */
 		private ConversationTurnResult processUserMessage(String sessionId, String message) {
 			// Load prior blob from "database"
@@ -292,17 +283,17 @@ public class DataWarehouseMultiTurnScenarioTest {
 			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
 
 			// Execute plan if ready and extract working context
-			if (result.plan().status() == org.javai.springai.actions.PlanStatus.READY) {
-				PlanExecutionResult execResult = executor.execute(result.plan());
+			if (result.plan().status() == PlanStatus.READY) {
+				executor.execute(result.plan());
 				
 				// If we got a Query, create a working context from it
-				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery() != null) {
-					Query query = dataWarehouseActions.lastQuery();
-					QueryContext queryCtx = QueryContext.from(query);
+				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery().isPresent()) {
+					Query query = dataWarehouseActions.lastQuery().get();
+					SqlQueryPayload payload = SqlQueryPayload.fromQuery(query);
 					
 					// Update state with working context and re-serialize
 					var updatedState = result.state().withWorkingContext(
-							WorkingContext.of("sql.query", queryCtx),
+							WorkingContext.of(SqlQueryPayload.CONTEXT_TYPE, payload),
 							conversationManager.config().maxHistorySize());
 					
 					byte[] updatedBlob = serializer.serialize(updatedState, typeRegistry);
@@ -331,7 +322,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 			assertPlanReady(result.plan());
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
-			Query query = dataWarehouseActions.lastQuery();
+			Query query = dataWarehouseActions.lastQuery().orElseThrow();
 			String sql = query.sqlString().toUpperCase();
 			assertThat(sql).contains("FCT_ORDERS");
 			assertThat(sql).contains("DIM_CUSTOMER");
@@ -356,7 +347,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 					"show me order values with customer names");
 			assertPlanReady(turn1.plan());
 			
-			String turn1Sql = dataWarehouseActions.lastQuery().sqlString();
+			String turn1Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
 			System.out.println("Turn 1 SQL: " + turn1Sql);
 
 			dataWarehouseActions.reset();
@@ -369,7 +360,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 			assertPlanReady(turn2.plan());
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
-			String turn2Sql = dataWarehouseActions.lastQuery().sqlString();
+			String turn2Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
 			System.out.println("Turn 2 SQL: " + turn2Sql);
 
 			// The refined query should include the filter
@@ -421,20 +412,19 @@ public class DataWarehouseMultiTurnScenarioTest {
 			// SETUP (done once at application startup)
 			// ========================================
 			PayloadTypeRegistry registry = new PayloadTypeRegistry();
-			registry.register("sql.query", QueryContext.class);
+			registry.register(SqlQueryPayload.CONTEXT_TYPE, SqlQueryPayload.class);
 
-			ConversationStateSerializer serializer = new JsonConversationStateSerializer();
+			ConversationStateSerializer localSerializer = new JsonConversationStateSerializer();
 			ConversationStateConfig config = ConversationStateConfig.builder()
 					.maxHistorySize(10)
 					.build();
 
 			ConversationManager manager = new ConversationManager(
-					planner, serializer, registry, config);
+					planner, localSerializer, registry, config);
 
 			// ========================================
 			// REQUEST 1: New conversation
 			// ========================================
-			String sessionId = "user-123";
 			
 			// Application loads blob (null for new session)
 			byte[] blob1 = null;  // sessionRepository.getBlob(sessionId);
@@ -444,7 +434,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 					"show me total order values", blob1);
 
 			// Execute if ready
-			if (result1.status() == org.javai.springai.actions.PlanStatus.READY) {
+			if (result1.status() == PlanStatus.READY) {
 				executor.execute(result1.plan());
 			}
 
@@ -466,7 +456,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 			ConversationTurnResult result2 = manager.converse(
 					"group that by customer", blob2);
 
-			if (result2.status() == org.javai.springai.actions.PlanStatus.READY) {
+			if (result2.status() == PlanStatus.READY) {
 				executor.execute(result2.plan());
 			}
 
@@ -491,6 +481,167 @@ public class DataWarehouseMultiTurnScenarioTest {
 			var finalState = manager.fromBlob(expired.blob());
 			assertThat(finalState.workingContext()).isNull();
 			System.out.println("Session cancelled/expired");
+		}
+	}
+
+	// ========================================================================
+	// 5.4x Integration Tests - Query Refinement Patterns
+	// ========================================================================
+
+	@Nested
+	@DisplayName("Query Refinement Patterns (5.4x)")
+	@EnabledIfEnvironmentVariable(named = "RUN_LLM_TESTS", matches = "true")
+	class QueryRefinementPatterns {
+
+		/**
+		 * Processes a message and tracks working context.
+		 */
+		private ConversationTurnResult processAndTrack(String sessionId, String message) {
+			byte[] priorBlob = applicationBlobStore.get(sessionId);
+			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
+
+			if (result.plan().status() == PlanStatus.READY) {
+				executor.execute(result.plan());
+				
+				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery().isPresent()) {
+					Query query = dataWarehouseActions.lastQuery().orElseThrow();
+					SqlQueryPayload payload = SqlQueryPayload.fromQuery(query);
+					
+					var updatedState = result.state().withWorkingContext(
+							WorkingContext.of(SqlQueryPayload.CONTEXT_TYPE, payload),
+							conversationManager.config().maxHistorySize());
+					
+					byte[] updatedBlob = serializer.serialize(updatedState, typeRegistry);
+					result = new ConversationTurnResult(
+							result.plan(), updatedState, updatedBlob,
+							result.pendingParams(), result.providedParams());
+				}
+			}
+
+			applicationBlobStore.put(sessionId, result.blob());
+			return result;
+		}
+
+		@Test
+		@DisplayName("5.4a: Filter refinement - 'filter that by region = West'")
+		void filterRefinement() {
+			String sessionId = "filter-refinement";
+			dataWarehouseActions.reset();
+
+			// Turn 1: Initial query
+			ConversationTurnResult turn1 = processAndTrack(sessionId,
+					"show me order values");
+			assertPlanReady(turn1.plan());
+			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 1 SQL: " + sql1);
+
+			dataWarehouseActions.reset();
+
+			// Turn 2: Add filter
+			ConversationTurnResult turn2 = processAndTrack(sessionId,
+					"now filter that by region = 'West'");
+			assertPlanReady(turn2.plan());
+			
+			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 2 SQL: " + sql2);
+
+			// Verify the filter was added
+			assertThat(sql2.toUpperCase()).contains("WHERE");
+			assertThat(sql2.toUpperCase()).contains("REGION");
+			assertThat(sql2).contains("West");
+		}
+
+		@Test
+		@DisplayName("5.4b: Column addition - 'add customer name to those results'")
+		void columnAddition() {
+			String sessionId = "column-addition";
+			dataWarehouseActions.reset();
+
+			// Turn 1: Initial query with single column
+			ConversationTurnResult turn1 = processAndTrack(sessionId,
+					"show me order values from the orders table");
+			assertPlanReady(turn1.plan());
+			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 1 SQL: " + sql1);
+
+			dataWarehouseActions.reset();
+
+			// Turn 2: Add column
+			ConversationTurnResult turn2 = processAndTrack(sessionId,
+					"add the customer name to those results");
+			assertPlanReady(turn2.plan());
+			
+			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 2 SQL: " + sql2);
+
+			// Verify customer_name was added (implies JOIN to dim_customer)
+			assertThat(sql2.toUpperCase()).contains("CUSTOMER_NAME");
+			assertThat(sql2.toUpperCase()).contains("DIM_CUSTOMER");
+		}
+
+		@Test
+		@DisplayName("5.4c: Date substitution - 'show same query for 2023'")
+		void dateSubstitution() {
+			String sessionId = "date-substitution";
+			dataWarehouseActions.reset();
+
+			// Turn 1: Query with date filter
+			ConversationTurnResult turn1 = processAndTrack(sessionId,
+					"show me order values for January 2024");
+			assertPlanReady(turn1.plan());
+			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 1 SQL: " + sql1);
+
+			dataWarehouseActions.reset();
+
+			// Turn 2: Change date
+			ConversationTurnResult turn2 = processAndTrack(sessionId,
+					"show the same query but for January 2023");
+			assertPlanReady(turn2.plan());
+			
+			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Turn 2 SQL: " + sql2);
+
+			// Verify year changed
+			assertThat(sql2).contains("2023");
+			assertThat(sql2).doesNotContain("2024");
+		}
+
+		@Test
+		@DisplayName("5.4d: Context persists across multiple turns")
+		void contextPersistsAcrossTurns() {
+			String sessionId = "multi-turn-persist";
+			dataWarehouseActions.reset();
+
+			// Turn 1
+			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
+			assertPlanReady(turn1.plan());
+
+			// Turn 2
+			dataWarehouseActions.reset();
+			ConversationTurnResult turn2 = processAndTrack(sessionId, "add customer names");
+			assertPlanReady(turn2.plan());
+
+			// Turn 3
+			dataWarehouseActions.reset();
+			ConversationTurnResult turn3 = processAndTrack(sessionId, "filter by region = 'East'");
+			assertPlanReady(turn3.plan());
+
+			// Verify final query has all refinements
+			String finalSql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			System.out.println("Final SQL: " + finalSql);
+
+			assertThat(finalSql.toUpperCase()).contains("ORDER_VALUE");
+			assertThat(finalSql.toUpperCase()).contains("CUSTOMER_NAME");
+			assertThat(finalSql.toUpperCase()).contains("REGION");
+			assertThat(finalSql).contains("East");
+
+			// Verify history is tracked
+			var state = conversationManager.fromBlob(turn3.blob());
+			assertThat(state.hasWorkingContext()).isTrue();
+			assertThat(state.turnHistory()).hasSizeGreaterThanOrEqualTo(1);
+			
+			System.out.println("History size: " + state.turnHistory().size());
 		}
 	}
 }

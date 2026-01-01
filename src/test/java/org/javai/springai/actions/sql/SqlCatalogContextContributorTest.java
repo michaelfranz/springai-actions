@@ -117,7 +117,7 @@ class SqlCatalogContextContributorTest {
 	void contributesTokenizedCatalogWhenEnabled() {
 		// Synonym-based tokenization: first synonym becomes the token
 		InMemorySqlCatalog tokenizedCatalog = new InMemorySqlCatalog()
-				.withTokenization(true)
+				.withModelNames(true)
 				.addTable("fct_orders", "Order transactions", "fact")
 				.withSynonyms("fct_orders", "orders", "sales")  // "orders" is token, "sales" is remaining
 				.addColumn("fct_orders", "customer_id", "FK to customers", "integer", 
@@ -179,7 +179,7 @@ class SqlCatalogContextContributorTest {
 	void tokenizedCatalogUsesSameFooterAsStandard() {
 		// LLM is unaware of tokenization - sees same catalog format
 		InMemorySqlCatalog tokenizedCatalog = new InMemorySqlCatalog()
-				.withTokenization(true)
+				.withModelNames(true)
 				.addTable("orders", "Orders", "fact");
 
 		SqlCatalogContextContributor tokenizedContributor = new SqlCatalogContextContributor(tokenizedCatalog);
@@ -197,7 +197,7 @@ class SqlCatalogContextContributorTest {
 	void tokenizedCatalogUsesCrypticTokensWhenNoSynonyms() {
 		// When no synonyms are defined, cryptic hash-based tokens are used
 		InMemorySqlCatalog tokenizedCatalog = new InMemorySqlCatalog()
-				.withTokenization(true)
+				.withModelNames(true)
 				.addTable("fct_orders", "Orders", "fact")
 				.addColumn("fct_orders", "customer_id", "FK to customer", "integer", null, null)
 				.addTable("dim_customer", "Customers", "dimension");

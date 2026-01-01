@@ -15,9 +15,9 @@ import org.javai.springai.actions.internal.prompt.SystemPromptContext;
  * <p>By default it reads a provided {@link SqlCatalog} instance; if absent, it will look for
  * a {@link SqlCatalog} under the context key "sql" in {@link SystemPromptContext}.</p>
  * 
- * <h2>Tokenization (Internal)</h2>
+	 * <h2>Model Name Mapping (Internal)</h2>
  * 
- * <p>When the catalog has {@link SqlCatalog#isTokenized()} enabled, this contributor
+ * <p>When the catalog has {@link SqlCatalog#usesModelNames()} enabled, this contributor
  * emits alternative names (synonyms or cryptic identifiers) instead of real database 
  * object names. The LLM sees these as normal table/column names and generates SQL
  * using them. The framework automatically translates back to real names before
@@ -56,15 +56,15 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 			return Optional.empty();
 		}
 
-		if (effectiveCatalog.isTokenized()) {
-			return Optional.of(contributeTokenized(effectiveCatalog));
+		if (effectiveCatalog.usesModelNames()) {
+			return Optional.of(contributeWithModelNames(effectiveCatalog));
 		} else {
 			return Optional.of(contributeStandard(effectiveCatalog));
 		}
 	}
 
 	/**
-	 * Contributes standard (non-tokenized) catalog format.
+	 * Contributes standard (canonical name) catalog format.
 	 */
 	private String contributeStandard(SqlCatalog catalog) {
 		StringBuilder sb = new StringBuilder("SQL CATALOG:\n");
@@ -125,27 +125,27 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 	 *   <li>Remaining synonyms are listed as "also: ..." to help LLM understand alternatives</li>
 	 * </ul>
 	 */
-	private String contributeTokenized(SqlCatalog catalog) {
+	private String contributeWithModelNames(SqlCatalog catalog) {
 		StringBuilder sb = new StringBuilder("SQL CATALOG:\n");
 		catalog.tables().forEach((tableName, table) -> {
-			String tableToken = catalog.getTableToken(tableName).orElse(tableName);
-			sb.append("- ").append(tableToken);
+			String tableModelName = catalog.getTableModelName(tableName).orElse(tableName);
+			sb.append("- ").append(tableModelName);
 			if (table.description() != null && !table.description().isBlank()) {
 				sb.append(": ").append(table.description());
 			}
 			if (table.tags() != null && !table.tags().isEmpty()) {
 				sb.append(" [tags: ").append(String.join(", ", table.tags())).append("]");
 			}
-			// Show remaining synonyms (first one is the token)
-			List<String> remainingSynonyms = getRemainingTableSynonyms(table, tableToken);
+			// Show remaining synonyms (first one is the model name)
+			List<String> remainingSynonyms = getRemainingTableSynonyms(table, tableModelName);
 			if (!remainingSynonyms.isEmpty()) {
 				sb.append(" (also: ").append(String.join(", ", remainingSynonyms)).append(")");
 			}
 			sb.append("\n");
 			if (table.columns() != null && !table.columns().isEmpty()) {
 				for (var col : table.columns()) {
-					String columnToken = catalog.getColumnToken(tableName, col.name()).orElse(col.name());
-					sb.append("  • ").append(columnToken);
+					String columnModelName = catalog.getColumnModelName(tableName, col.name()).orElse(col.name());
+					sb.append("  • ").append(columnModelName);
 					StringJoiner details = new StringJoiner("; ");
 					if (col.dataType() != null && !col.dataType().isBlank()) {
 						details.add("type=" + col.dataType());
@@ -153,13 +153,13 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 					if (col.description() != null && !col.description().isBlank()) {
 						details.add(col.description());
 					}
-					// Tokenize FK references in tags
+					// Convert FK references to model names
 					if (col.tags() != null && !col.tags().isEmpty()) {
-						String tokenizedTags = tokenizeFkTags(col.tags(), catalog);
-						details.add("tags=" + tokenizedTags);
+						String modelNameTags = convertFkTagsToModelNames(col.tags(), catalog);
+						details.add("tags=" + modelNameTags);
 					}
-					// Show remaining column synonyms (first one is the token)
-					List<String> remainingColSynonyms = getRemainingColumnSynonyms(col, columnToken);
+					// Show remaining column synonyms (first one is the model name)
+					List<String> remainingColSynonyms = getRemainingColumnSynonyms(col, columnModelName);
 					if (!remainingColSynonyms.isEmpty()) {
 						details.add("also=" + String.join(",", remainingColSynonyms));
 					}
@@ -175,51 +175,51 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 	}
 
 	/**
-	 * Gets table synonyms excluding the first one if it's used as the token.
+	 * Gets table synonyms excluding the first one if it's used as the model name.
 	 */
-	private List<String> getRemainingTableSynonyms(SqlCatalog.SqlTable table, String tableToken) {
+	private List<String> getRemainingTableSynonyms(SqlCatalog.SqlTable table, String modelName) {
 		if (table.synonyms() == null || table.synonyms().isEmpty()) {
 			return List.of();
 		}
 		List<String> synonyms = table.synonyms();
-		// If first synonym is the token, return the rest
-		if (!synonyms.isEmpty() && synonyms.get(0).equals(tableToken)) {
+		// If first synonym is the model name, return the rest
+		if (!synonyms.isEmpty() && synonyms.get(0).equals(modelName)) {
 			return synonyms.size() > 1 ? synonyms.subList(1, synonyms.size()) : List.of();
 		}
-		// Token is cryptic, show all synonyms
+		// Model name is generated, show all synonyms
 		return synonyms;
 	}
 
 	/**
-	 * Gets column synonyms excluding the first one if it's used as the token.
+	 * Gets column synonyms excluding the first one if it's used as the model name.
 	 */
-	private List<String> getRemainingColumnSynonyms(SqlCatalog.SqlColumn col, String columnToken) {
+	private List<String> getRemainingColumnSynonyms(SqlCatalog.SqlColumn col, String modelName) {
 		if (col.synonyms() == null || col.synonyms().isEmpty()) {
 			return List.of();
 		}
 		List<String> synonyms = col.synonyms();
-		// If first synonym is the token, return the rest
-		if (!synonyms.isEmpty() && synonyms.get(0).equals(columnToken)) {
+		// If first synonym is the model name, return the rest
+		if (!synonyms.isEmpty() && synonyms.get(0).equals(modelName)) {
 			return synonyms.size() > 1 ? synonyms.subList(1, synonyms.size()) : List.of();
 		}
-		// Token is cryptic, show all synonyms
+		// Model name is generated, show all synonyms
 		return synonyms;
 	}
 
 	/**
-	 * Tokenizes FK references in column tags.
-	 * <p>Converts tags like "fk:dim_customer.id" to "fk:dt_abc123.c_def456"</p>
+	 * Converts FK references in column tags to use model names.
+	 * <p>Converts tags like "fk:dim_customer.id" to use their model name equivalents</p>
 	 */
-	private String tokenizeFkTags(java.util.List<String> tags, SqlCatalog catalog) {
+	private String convertFkTagsToModelNames(java.util.List<String> tags, SqlCatalog catalog) {
 		return tags.stream()
-				.map(tag -> tokenizeFkTag(tag, catalog))
+				.map(tag -> convertFkTagToModelName(tag, catalog))
 				.collect(java.util.stream.Collectors.joining(","));
 	}
 
 	/**
-	 * Tokenizes a single FK tag if it matches the fk:table.column pattern.
+	 * Converts a single FK tag to use model names if it matches the fk:table.column pattern.
 	 */
-	private String tokenizeFkTag(String tag, SqlCatalog catalog) {
+	private String convertFkTagToModelName(String tag, SqlCatalog catalog) {
 		if (tag == null || !tag.startsWith("fk:")) {
 			return tag;
 		}
@@ -227,14 +227,14 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 		int dotIndex = reference.indexOf('.');
 		if (dotIndex < 0) {
 			// Just table reference, no column
-			String tableToken = catalog.getTableToken(reference).orElse(reference);
-			return "fk:" + tableToken;
+			String tableModelName = catalog.getTableModelName(reference).orElse(reference);
+			return "fk:" + tableModelName;
 		}
 		String tableName = reference.substring(0, dotIndex);
 		String columnName = reference.substring(dotIndex + 1);
-		String tableToken = catalog.getTableToken(tableName).orElse(tableName);
-		String columnToken = catalog.getColumnToken(tableName, columnName).orElse(columnName);
-		return "fk:" + tableToken + "." + columnToken;
+		String tableModelName = catalog.getTableModelName(tableName).orElse(tableName);
+		String columnModelName = catalog.getColumnModelName(tableName, columnName).orElse(columnName);
+		return "fk:" + tableModelName + "." + columnModelName;
 	}
 }
 

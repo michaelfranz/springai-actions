@@ -6,6 +6,7 @@ import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -158,7 +159,9 @@ public class DataWarehouseApplicationScenarioTest {
 		assertExecutionSuccess(executed);
 		assertThat(dataWarehouseActions.aggregateOrderValueInvoked()).isTrue();
 
-		OrderValueQuery query = dataWarehouseActions.lastOrderValueQuery();
+		Optional<OrderValueQuery> optionalQuery = dataWarehouseActions.lastOrderValueQuery();
+		assertThat(optionalQuery).isPresent();
+		OrderValueQuery query = optionalQuery.get();
 		assertThat(query).isNotNull();
 		assertThat(query.customer_name()).isEqualTo("Mike");
 		assertThat(query.period()).isNotNull();
@@ -185,7 +188,7 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
 		// Verify the generated SQL contains a JOIN
-		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 		assertThat(sql).contains("JOIN");
 		assertThat(sql).contains("FCT_ORDERS");
 		assertThat(sql).contains("DIM_CUSTOMER");
@@ -207,7 +210,7 @@ public class DataWarehouseApplicationScenarioTest {
 		assertThat(dataWarehouseActions.runSqlQueryInvoked()).isTrue();
 
 		// Verify JOIN and WHERE clause on dimension attribute
-		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 		assertThat(sql).contains("JOIN");
 		assertThat(sql).contains("DIM_CUSTOMER");
 		assertThat(sql).containsAnyOf("WHERE", "CUSTOMER_NAME", "SMITH");
@@ -228,7 +231,7 @@ public class DataWarehouseApplicationScenarioTest {
 		assertExecutionSuccess(executed);
 
 		// Verify the SQL contains JOINs to both dimension tables
-		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 		assertThat(sql).contains("FCT_ORDERS");
 		assertThat(sql).contains("DIM_CUSTOMER");
 		assertThat(sql).contains("DIM_DATE");
@@ -250,7 +253,7 @@ public class DataWarehouseApplicationScenarioTest {
 		PlanExecutionResult executed = executor.execute(plan);
 		assertExecutionSuccess(executed);
 
-		String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+		String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 		assertThat(sql).contains("JOIN");
 		assertThat(sql).contains("CUSTOMER_NAME");
 		assertThat(sql).contains("ORDER_VALUE");
@@ -260,16 +263,16 @@ public class DataWarehouseApplicationScenarioTest {
 	// These tests don't require LLM access - they verify the tokenization infrastructure
 
 	@org.junit.jupiter.api.Nested
-	@DisplayName("Tokenization Infrastructure Tests")
-	class TokenizationTests {
+	@DisplayName("Model Name Mapping Tests")
+	class ModelNameMappingTests {
 
-		private InMemorySqlCatalog tokenizedCatalog;
+		private InMemorySqlCatalog modelNameCatalog;
 
 		@org.junit.jupiter.api.BeforeEach
 		void setUp() {
-			// Create a tokenized version of the data warehouse catalog
-			tokenizedCatalog = new InMemorySqlCatalog()
-					.withTokenization(true)
+			// Create a catalog with model name mapping enabled
+			modelNameCatalog = new InMemorySqlCatalog()
+					.withModelNames(true)
 					.addTable("fct_orders", "Fact table for orders", "fact")
 					.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
 							new String[]{"fk:dim_customer.id"}, null)
@@ -290,27 +293,27 @@ public class DataWarehouseApplicationScenarioTest {
 		}
 
 		@Test
-		@DisplayName("catalog generates correct token prefixes for DW schema")
-		void catalogGeneratesCorrectTokenPrefixes() {
-			// Fact tables should have ft_ prefix
-			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
-			assertThat(ordersToken).startsWith("ft_");
+		@DisplayName("catalog generates correct model name prefixes for DW schema")
+		void catalogGeneratesCorrectModelNamePrefixes() {
+			// Fact tables should have ft_ prefix when no synonyms defined
+			String ordersModelName = modelNameCatalog.getTableModelName("fct_orders").orElseThrow();
+			assertThat(ordersModelName).startsWith("ft_");
 
-			// Dimension tables should have dt_ prefix
-			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
-			assertThat(customerToken).startsWith("dt_");
+			// Dimension tables should have dt_ prefix when no synonyms defined
+			String customerModelName = modelNameCatalog.getTableModelName("dim_customer").orElseThrow();
+			assertThat(customerModelName).startsWith("dt_");
 
-			String dateToken = tokenizedCatalog.getTableToken("dim_date").orElseThrow();
-			assertThat(dateToken).startsWith("dt_");
+			String dateModelName = modelNameCatalog.getTableModelName("dim_date").orElseThrow();
+			assertThat(dateModelName).startsWith("dt_");
 		}
 
 		@Test
-		@DisplayName("tokenized catalog context contributor hides real names")
-		void tokenizedCatalogContributorHidesRealNames() {
-			// Add synonyms to the tokenized catalog for this test
-			// With synonym-based tokenization, first synonym becomes the displayed name
+		@DisplayName("model name catalog contributor uses synonyms as model names")
+		void modelNameCatalogContributorUsesSynonyms() {
+			// With model name mapping, first synonym becomes the displayed name
+			// If no synonym defined, a generated identifier is used
 			InMemorySqlCatalog catalogWithSynonyms = new InMemorySqlCatalog()
-					.withTokenization(true)
+					.withModelNames(true)
 					.addTable("fct_orders", "Fact table for orders", "fact")
 					.withSynonyms("fct_orders", "orders", "sales")  // "orders" is displayed name
 					.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
@@ -358,36 +361,36 @@ public class DataWarehouseApplicationScenarioTest {
 		}
 
 		@Test
-		@DisplayName("de-tokenizes simple SELECT from tokenized SQL")
-		void deTokenizesSimpleSelect() {
-			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
-			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
+		@DisplayName("resolves simple SELECT from model SQL to canonical names")
+		void resolvesSimpleSelect() {
+			String ordersModelName = modelNameCatalog.getTableModelName("fct_orders").orElseThrow();
+			String orderValueModelName = modelNameCatalog.getColumnModelName("fct_orders", "order_value").orElseThrow();
 
-			String tokenizedSql = "SELECT " + orderValueToken + " FROM " + ordersToken;
-			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(tokenizedSql, tokenizedCatalog);
+			String modelSql = "SELECT " + orderValueModelName + " FROM " + ordersModelName;
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(modelSql, modelNameCatalog);
 
 			String sql = query.sqlString().toUpperCase();
 			assertThat(sql).contains("ORDER_VALUE");
 			assertThat(sql).contains("FCT_ORDERS");
-			assertThat(sql).doesNotContain(ordersToken.toUpperCase());
-			assertThat(sql).doesNotContain(orderValueToken.toUpperCase());
+			assertThat(sql).doesNotContain(ordersModelName.toUpperCase());
+			assertThat(sql).doesNotContain(orderValueModelName.toUpperCase());
 		}
 
 		@Test
-		@DisplayName("de-tokenizes JOIN query from tokenized SQL")
-		void deTokenizesJoinQuery() {
-			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
-			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
-			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
-			String customerIdToken = tokenizedCatalog.getColumnToken("fct_orders", "customer_id").orElseThrow();
-			String customerPkToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
-			String customerNameToken = tokenizedCatalog.getColumnToken("dim_customer", "customer_name").orElseThrow();
+		@DisplayName("resolves JOIN query from model SQL to canonical names")
+		void resolvesJoinQuery() {
+			String ordersModelName = modelNameCatalog.getTableModelName("fct_orders").orElseThrow();
+			String customerModelName = modelNameCatalog.getTableModelName("dim_customer").orElseThrow();
+			String orderValueModelName = modelNameCatalog.getColumnModelName("fct_orders", "order_value").orElseThrow();
+			String customerIdModelName = modelNameCatalog.getColumnModelName("fct_orders", "customer_id").orElseThrow();
+			String customerPkModelName = modelNameCatalog.getColumnModelName("dim_customer", "id").orElseThrow();
+			String customerNameModelName = modelNameCatalog.getColumnModelName("dim_customer", "customer_name").orElseThrow();
 
-			String tokenizedSql = "SELECT o." + orderValueToken + ", c." + customerNameToken 
-					+ " FROM " + ordersToken + " o JOIN " + customerToken + " c ON o." + customerIdToken 
-					+ " = c." + customerPkToken;
+			String modelSql = "SELECT o." + orderValueModelName + ", c." + customerNameModelName 
+					+ " FROM " + ordersModelName + " o JOIN " + customerModelName + " c ON o." + customerIdModelName 
+					+ " = c." + customerPkModelName;
 
-			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(tokenizedSql, tokenizedCatalog);
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(modelSql, modelNameCatalog);
 			String sql = query.sqlString().toUpperCase();
 
 			assertThat(sql).contains("O.ORDER_VALUE");
@@ -398,41 +401,41 @@ public class DataWarehouseApplicationScenarioTest {
 		}
 
 		@Test
-		@DisplayName("tokenizedSql() converts real names back to tokens")
-		void tokenizedSqlConvertsBackToTokens() {
+		@DisplayName("modelSql() converts canonical names to model names")
+		void modelSqlConvertsToModelNames() {
 			// Start with canonical SQL
 			String canonicalSql = "SELECT order_value, customer_id FROM fct_orders";
-			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(canonicalSql, tokenizedCatalog);
+			org.javai.springai.actions.sql.Query query = org.javai.springai.actions.sql.Query.fromSql(canonicalSql, modelNameCatalog);
 
-			String tokenized = query.tokenizedSql();
+			String modelSql = query.modelSql();
 
-			// Should contain tokens
-			String ordersToken = tokenizedCatalog.getTableToken("fct_orders").orElseThrow();
-			String orderValueToken = tokenizedCatalog.getColumnToken("fct_orders", "order_value").orElseThrow();
-			String customerIdToken = tokenizedCatalog.getColumnToken("fct_orders", "customer_id").orElseThrow();
+			// Should contain model names
+			String ordersModelName = modelNameCatalog.getTableModelName("fct_orders").orElseThrow();
+			String orderValueModelName = modelNameCatalog.getColumnModelName("fct_orders", "order_value").orElseThrow();
+			String customerIdModelName = modelNameCatalog.getColumnModelName("fct_orders", "customer_id").orElseThrow();
 
-			assertThat(tokenized).contains(ordersToken);
-			assertThat(tokenized).contains(orderValueToken);
-			assertThat(tokenized).contains(customerIdToken);
+			assertThat(modelSql).contains(ordersModelName);
+			assertThat(modelSql).contains(orderValueModelName);
+			assertThat(modelSql).contains(customerIdModelName);
 
-			// Real names should NOT appear
-			assertThat(tokenized).doesNotContain("fct_orders");
-			assertThat(tokenized).doesNotContain("order_value");
-			assertThat(tokenized).doesNotContain("customer_id");
+			// Real/canonical names should NOT appear
+			assertThat(modelSql).doesNotContain("fct_orders");
+			assertThat(modelSql).doesNotContain("order_value");
+			assertThat(modelSql).doesNotContain("customer_id");
 		}
 
 		@Test
-		@DisplayName("FK references in prompt are tokenized")
-		void fkReferencesAreTokenized() {
-			SqlCatalogContextContributor contributor = new SqlCatalogContextContributor(tokenizedCatalog);
+		@DisplayName("FK references in prompt use model names")
+		void fkReferencesUseModelNames() {
+			SqlCatalogContextContributor contributor = new SqlCatalogContextContributor(modelNameCatalog);
 			String prompt = contributor.contribute(null).orElseThrow();
 
-			// FK reference should use tokens, not real names
+			// FK reference should use model names, not real/canonical names
 			// e.g., "fk:dt_abc123.c_def456" instead of "fk:dim_customer.id"
-			String customerToken = tokenizedCatalog.getTableToken("dim_customer").orElseThrow();
-			String customerIdToken = tokenizedCatalog.getColumnToken("dim_customer", "id").orElseThrow();
+			String customerModelName = modelNameCatalog.getTableModelName("dim_customer").orElseThrow();
+			String customerIdModelName = modelNameCatalog.getColumnModelName("dim_customer", "id").orElseThrow();
 
-			assertThat(prompt).contains("fk:" + customerToken + "." + customerIdToken);
+			assertThat(prompt).contains("fk:" + customerModelName + "." + customerIdModelName);
 			assertThat(prompt).doesNotContain("fk:dim_customer.id");
 		}
 	}

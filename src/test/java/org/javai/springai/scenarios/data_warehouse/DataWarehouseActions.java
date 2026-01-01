@@ -1,5 +1,6 @@
 package org.javai.springai.scenarios.data_warehouse;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
@@ -57,12 +58,12 @@ public class DataWarehouseActions {
 		return aggregateOrderValueInvoked.get();
 	}
 
-	public OrderValueQuery lastOrderValueQuery() {
-		return lastOrderValueQuery;
+	public Optional<OrderValueQuery> lastOrderValueQuery() {
+		return Optional.ofNullable(lastOrderValueQuery);
 	}
 
-	public Query lastQuery() {
-		return lastQuery;
+	public Optional<Query> lastQuery() {
+		return Optional.ofNullable(lastQuery);
 	}
 
 	/**

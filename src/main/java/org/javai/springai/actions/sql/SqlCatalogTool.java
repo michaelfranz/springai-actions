@@ -73,8 +73,8 @@ public class SqlCatalogTool {
 		
 		List<TableSummary> summaries = new ArrayList<>();
 		catalog.tables().forEach((tableName, table) -> {
-			String displayName = catalog.isTokenized() 
-					? catalog.getTableToken(tableName).orElse(tableName)
+			String displayName = catalog.usesModelNames() 
+					? catalog.getTableModelName(tableName).orElse(tableName)
 					: tableName;
 			summaries.add(TableSummary.from(displayName, table));
 		});
@@ -112,8 +112,8 @@ public class SqlCatalogTool {
 			return null;
 		}
 		
-		String displayName = catalog.isTokenized() 
-				? catalog.getTableToken(canonicalName).orElse(canonicalName)
+		String displayName = catalog.usesModelNames() 
+				? catalog.getTableModelName(canonicalName).orElse(canonicalName)
 				: canonicalName;
 		
 		return TableDetail.from(displayName, table, catalog, canonicalName);
@@ -133,8 +133,8 @@ public class SqlCatalogTool {
 		}
 		
 		// If tokenized, try to resolve the token
-		if (catalog.isTokenized()) {
-			String resolved = catalog.resolveTableToken(displayName).orElse(null);
+		if (catalog.usesModelNames()) {
+			String resolved = catalog.resolveTableFromModelName(displayName).orElse(null);
 			if (resolved != null) {
 				return resolved;
 			}

@@ -20,18 +20,19 @@ import java.util.Optional;
  *     .addColumn("orders", "id", "Primary key", "bigint", new String[]{"pk"}, null);
  * }</pre>
  * 
- * <h2>Tokenization</h2>
+ * <h2>Model Name Mapping</h2>
  * 
- * <p>When tokenization is enabled, the catalog generates opaque tokens for table
- * and column names. This prevents exposure of real schema names to external LLMs:</p>
+ * <p>When model name mapping is enabled, the catalog provides alternative names
+ * for tables and columns. The LLM sees and generates SQL using these "model names"
+ * (derived from synonyms or generated). The framework automatically resolves 
+ * model names back to canonical names during query processing:</p>
  * 
  * <pre>{@code
  * SqlCatalog catalog = new InMemorySqlCatalog()
- *     .withTokenization(true)
+ *     .withModelNames(true)
  *     .addTable("fct_orders", "Order transactions", "fact")
+ *     .withSynonyms("fct_orders", "orders")  // LLM sees "orders"
  *     .addColumn("fct_orders", "customer_id", "FK to customers", "integer", null, null);
- * 
- * // Tokens: ft_abc123, c_def456 (hides real names from LLM)
  * }</pre>
  */
 public final class InMemorySqlCatalog implements SqlCatalog {
@@ -41,13 +42,13 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 	private final Map<String, TableBuilder> tables = new LinkedHashMap<>();
 	private Query.Dialect dialect = Query.Dialect.ANSI;
 	private boolean validateColumns = false;
-	private boolean tokenizationEnabled = false;
+	private boolean modelNamesEnabled = false;
 
-	// Token mappings (lazily populated when tokenization is enabled)
-	private Map<String, String> tableNameToToken = null;  // tableName -> token
-	private Map<String, String> tableTokenToName = null;  // token -> tableName
-	private Map<String, String> columnNameToToken = null; // "table.column" -> token
-	private Map<String, String> columnTokenToName = null; // "tableToken.columnToken" -> columnName
+	// Model name mappings (lazily populated when model names are enabled)
+	private Map<String, String> tableNameToModelName = null;  // tableName -> modelName
+	private Map<String, String> modelNameToTableName = null;  // modelName -> tableName
+	private Map<String, String> columnNameToModelName = null; // "table.column" -> modelName
+	private Map<String, String> modelNameToColumnName = null; // "tableModelName.columnModelName" -> columnName
 
 	/**
 	 * Sets the target SQL dialect for queries using this catalog.
@@ -89,147 +90,147 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 	}
 
 	/**
-	 * Enables or disables tokenization for this catalog.
+	 * Enables or disables model name mapping for this catalog.
 	 * 
-	 * <p>When enabled, the catalog will generate opaque tokens for all table and
-	 * column names. These tokens can be used in system prompts to hide real schema
-	 * names from external LLMs. The framework will automatically de-tokenize
-	 * LLM-generated SQL before validation and execution.</p>
+	 * <p>When enabled, the catalog provides model-facing names (derived from
+	 * synonyms or generated) for all tables and columns. The LLM sees and 
+	 * generates SQL using these model names. The framework automatically
+	 * resolves model names back to canonical names during query processing.</p>
 	 * 
-	 * <p>Tokenization must be enabled <b>before</b> adding tables and columns.
-	 * Token mappings are generated lazily when first accessed.</p>
+	 * <p>Model name mapping must be enabled <b>before</b> adding tables and columns.
+	 * Mappings are generated lazily when first accessed.</p>
 	 * 
-	 * @param enabled true to enable tokenization
+	 * @param enabled true to enable model name mapping
 	 * @return this catalog for fluent chaining
 	 */
-	public InMemorySqlCatalog withTokenization(boolean enabled) {
-		this.tokenizationEnabled = enabled;
-		// Clear any existing token mappings when toggling
-		this.tableNameToToken = null;
-		this.tableTokenToName = null;
-		this.columnNameToToken = null;
-		this.columnTokenToName = null;
+	public InMemorySqlCatalog withModelNames(boolean enabled) {
+		this.modelNamesEnabled = enabled;
+		// Clear any existing mappings when toggling
+		this.tableNameToModelName = null;
+		this.modelNameToTableName = null;
+		this.columnNameToModelName = null;
+		this.modelNameToColumnName = null;
 		return this;
 	}
 
 	@Override
-	public boolean isTokenized() {
-		return tokenizationEnabled;
+	public boolean usesModelNames() {
+		return modelNamesEnabled;
 	}
 
 	@Override
-	public Optional<String> getTableToken(String tableName) {
-		if (!tokenizationEnabled || tableName == null) {
+	public Optional<String> getTableModelName(String tableName) {
+		if (!modelNamesEnabled || tableName == null) {
 			return Optional.empty();
 		}
-		ensureTokenMappingsBuilt();
-		return Optional.ofNullable(tableNameToToken.get(tableName));
+		ensureModelNameMappingsBuilt();
+		return Optional.ofNullable(tableNameToModelName.get(tableName));
 	}
 
 	@Override
-	public Optional<String> getColumnToken(String tableName, String columnName) {
-		if (!tokenizationEnabled || tableName == null || columnName == null) {
+	public Optional<String> getColumnModelName(String tableName, String columnName) {
+		if (!modelNamesEnabled || tableName == null || columnName == null) {
 			return Optional.empty();
 		}
-		ensureTokenMappingsBuilt();
+		ensureModelNameMappingsBuilt();
 		String key = tableName + "." + columnName;
-		return Optional.ofNullable(columnNameToToken.get(key));
+		return Optional.ofNullable(columnNameToModelName.get(key));
 	}
 
 	@Override
-	public Optional<String> resolveTableToken(String token) {
-		if (!tokenizationEnabled || token == null) {
+	public Optional<String> resolveTableFromModelName(String modelName) {
+		if (!modelNamesEnabled || modelName == null) {
 			return Optional.empty();
 		}
-		ensureTokenMappingsBuilt();
-		return Optional.ofNullable(tableTokenToName.get(token));
+		ensureModelNameMappingsBuilt();
+		return Optional.ofNullable(modelNameToTableName.get(modelName));
 	}
 
 	@Override
-	public Optional<String> resolveColumnToken(String tableToken, String columnToken) {
-		if (!tokenizationEnabled || tableToken == null || columnToken == null) {
+	public Optional<String> resolveColumnFromModelName(String tableModelName, String columnModelName) {
+		if (!modelNamesEnabled || tableModelName == null || columnModelName == null) {
 			return Optional.empty();
 		}
-		ensureTokenMappingsBuilt();
-		String key = tableToken + "." + columnToken;
-		return Optional.ofNullable(columnTokenToName.get(key));
+		ensureModelNameMappingsBuilt();
+		String key = tableModelName + "." + columnModelName;
+		return Optional.ofNullable(modelNameToColumnName.get(key));
 	}
 
 	@Override
-	public Map<String, String> tokenMappings() {
-		if (!tokenizationEnabled) {
+	public Map<String, String> modelNameMappings() {
+		if (!modelNamesEnabled) {
 			return Map.of();
 		}
-		ensureTokenMappingsBuilt();
+		ensureModelNameMappingsBuilt();
 		Map<String, String> all = new LinkedHashMap<>();
-		all.putAll(tableTokenToName);
-		// For column tokens, include table context
-		columnTokenToName.forEach((key, value) -> {
-			// key is "tableToken.columnToken", extract just the column token for display
+		all.putAll(modelNameToTableName);
+		// For column model names, include table context
+		modelNameToColumnName.forEach((key, value) -> {
+			// key is "tableModelName.columnModelName", extract just the column model name for display
 			String[] parts = key.split("\\.", 2);
 			if (parts.length == 2) {
-				String tableToken = parts[0];
-				String columnToken = parts[1];
-				String tableName = tableTokenToName.get(tableToken);
-				all.put(columnToken, tableName + "." + value);
+				String tableModelName = parts[0];
+				String columnModelName = parts[1];
+				String tableName = modelNameToTableName.get(tableModelName);
+				all.put(columnModelName, tableName + "." + value);
 			}
 		});
 		return Collections.unmodifiableMap(all);
 	}
 
 	/**
-	 * Invalidates token mappings so they will be rebuilt on next access.
+	 * Invalidates model name mappings so they will be rebuilt on next access.
 	 */
-	private void invalidateTokenMappings() {
-		tableNameToToken = null;
-		tableTokenToName = null;
-		columnNameToToken = null;
-		columnTokenToName = null;
+	private void invalidateModelNameMappings() {
+		tableNameToModelName = null;
+		modelNameToTableName = null;
+		columnNameToModelName = null;
+		modelNameToColumnName = null;
 	}
 
 	/**
-	 * Lazily builds token mappings for all tables and columns.
+	 * Lazily builds model name mappings for all tables and columns.
 	 * 
-	 * <p>Token strategy:</p>
+	 * <p>Model name strategy:</p>
 	 * <ul>
-	 *   <li>If synonyms are defined, the first synonym becomes the token (more readable)</li>
-	 *   <li>If no synonyms, falls back to cryptic hash-based token (full obfuscation)</li>
+	 *   <li>If synonyms are defined, the first synonym becomes the model name (more readable)</li>
+	 *   <li>If no synonyms, falls back to generated identifier (full obfuscation)</li>
 	 * </ul>
 	 */
-	private void ensureTokenMappingsBuilt() {
-		if (tableNameToToken != null) {
+	private void ensureModelNameMappingsBuilt() {
+		if (tableNameToModelName != null) {
 			return; // Already built
 		}
 
-		tableNameToToken = new HashMap<>();
-		tableTokenToName = new HashMap<>();
-		columnNameToToken = new HashMap<>();
-		columnTokenToName = new HashMap<>();
+		tableNameToModelName = new HashMap<>();
+		modelNameToTableName = new HashMap<>();
+		columnNameToModelName = new HashMap<>();
+		modelNameToColumnName = new HashMap<>();
 
 		for (TableBuilder table : tables.values()) {
-			// Use first synonym as token if available, otherwise generate cryptic token
-			String tableToken;
+			// Use first synonym as model name if available, otherwise generate one
+			String tableModelName;
 			if (!table.synonyms.isEmpty()) {
-				tableToken = table.synonyms.get(0);  // First synonym is the token
+				tableModelName = table.synonyms.get(0);  // First synonym is the model name
 			} else {
 				String[] tagsArray = table.tags.toArray(new String[0]);
-				tableToken = TokenGenerator.tableToken(table.name, tagsArray);  // Cryptic fallback
+				tableModelName = TokenGenerator.tableToken(table.name, tagsArray);  // Generated fallback
 			}
-			tableNameToToken.put(table.name, tableToken);
-			tableTokenToName.put(tableToken, table.name);
+			tableNameToModelName.put(table.name, tableModelName);
+			modelNameToTableName.put(tableModelName, table.name);
 
-			// Generate column tokens (same strategy)
+			// Generate column model names (same strategy)
 			for (ColumnBuilder column : table.columns.values()) {
-				String columnToken;
+				String columnModelName;
 				if (!column.synonyms.isEmpty()) {
-					columnToken = column.synonyms.get(0);  // First synonym is the token
+					columnModelName = column.synonyms.get(0);  // First synonym is the model name
 				} else {
-					columnToken = TokenGenerator.columnToken(table.name, column.name);  // Cryptic fallback
+					columnModelName = TokenGenerator.columnToken(table.name, column.name);  // Generated fallback
 				}
 				String nameKey = table.name + "." + column.name;
-				String tokenKey = tableToken + "." + columnToken;
-				columnNameToToken.put(nameKey, columnToken);
-				columnTokenToName.put(tokenKey, column.name);
+				String modelKey = tableModelName + "." + columnModelName;
+				columnNameToModelName.put(nameKey, columnModelName);
+				modelNameToColumnName.put(modelKey, column.name);
 			}
 		}
 	}
@@ -239,7 +240,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 			return this;
 		}
 		tables.putIfAbsent(tableName, new TableBuilder(tableName, description, tags));
-		invalidateTokenMappings();
+		invalidateModelNameMappings();
 		return this;
 	}
 
@@ -311,7 +312,7 @@ public final class InMemorySqlCatalog implements SqlCatalog {
 		}
 		TableBuilder table = tables.computeIfAbsent(tableName, t -> new TableBuilder(tableName, null, null));
 		table.columns.put(columnName, new ColumnBuilder(columnName, description, dataType, tags, constraints));
-		invalidateTokenMappings();
+		invalidateModelNameMappings();
 		return this;
 	}
 

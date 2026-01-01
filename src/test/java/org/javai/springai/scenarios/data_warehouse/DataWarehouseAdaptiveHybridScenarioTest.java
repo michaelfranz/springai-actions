@@ -169,7 +169,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
 			// Verify generated SQL references the orders table
-			String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+			String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 			assertThat(sql).contains("ORDER_VALUE");
 			
 			System.out.println("Cold start query succeeded: " + sql);
@@ -285,7 +285,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			if (plan.status() == org.javai.springai.actions.PlanStatus.READY) {
 				PlanExecutionResult executed = executor.execute(plan);
 				if (executed.success()) {
-					String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+					String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 					System.out.println("Cold table query SQL: " + sql);
 					assertThat(sql).containsAnyOf("DIM_DATE", "DATE");
 				}
@@ -408,8 +408,8 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 
 			if (turn3.plan().status() == org.javai.springai.actions.PlanStatus.READY) {
 				PlanExecutionResult executed = executor.execute(turn3.plan());
-				if (executed.success() && dataWarehouseActions.lastQuery() != null) {
-					System.out.println("Final SQL: " + dataWarehouseActions.lastQuery().sqlString());
+				if (executed.success() && dataWarehouseActions.lastQuery().isPresent()) {
+					System.out.println("Final SQL: " + dataWarehouseActions.lastQuery().get().sqlString());
 				}
 			}
 		}

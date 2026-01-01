@@ -35,8 +35,8 @@ public record TableDetail(
 		List<ColumnDetail> columns = new ArrayList<>();
 		if (table.columns() != null) {
 			for (var col : table.columns()) {
-				String columnDisplayName = catalog.isTokenized() 
-						? catalog.getColumnToken(canonicalTableName, col.name()).orElse(col.name())
+				String columnDisplayName = catalog.usesModelNames() 
+						? catalog.getColumnModelName(canonicalTableName, col.name()).orElse(col.name())
 						: col.name();
 				columns.add(ColumnDetail.from(columnDisplayName, col));
 			}

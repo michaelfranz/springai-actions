@@ -228,9 +228,9 @@ public class JsonConversationStateSerializer implements ConversationStateSeriali
 
 	private ConversationState jsonToState(ObjectNode json, PayloadTypeRegistry typeRegistry) 
 			throws JsonProcessingException {
-		String originalInstruction = json.has("originalInstruction") 
+		String originalInstruction = json.has("originalInstruction") && !json.get("originalInstruction").isNull()
 				? json.get("originalInstruction").asText() : null;
-		String latestUserMessage = json.has("latestUserMessage") 
+		String latestUserMessage = json.has("latestUserMessage") && !json.get("latestUserMessage").isNull()
 				? json.get("latestUserMessage").asText() : null;
 
 		// Pending params

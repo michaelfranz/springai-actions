@@ -202,7 +202,7 @@ class AdaptiveSqlCatalogContributorTest {
 		@BeforeEach
 		void enableTokenization() {
 			catalog = new InMemorySqlCatalog()
-					.withTokenization(true)
+					.withModelNames(true)
 					.addTable("fct_orders", "Fact table for orders", "fact")
 					.withSynonyms("fct_orders", "orders")  // "orders" becomes token
 					.addColumn("fct_orders", "order_value", "Order amount", "double", 

@@ -193,7 +193,7 @@ public class DataWarehouseToolBasedScenarioTest {
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 			
 			// Verify the generated SQL uses correct table/column names
-			String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+			String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 			assertThat(sql).contains("ORDER_VALUE");
 			assertThat(sql).contains("FCT_ORDERS");
 		}
@@ -219,7 +219,7 @@ public class DataWarehouseToolBasedScenarioTest {
 			if (plan.status() == PlanStatus.READY) {
 				PlanExecutionResult executed = executor.execute(plan);
 				if (executed.success() && dataWarehouseActions.showSqlQueryInvoked()) {
-					String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+					String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 					assertThat(sql).contains("JOIN");
 				}
 			}
@@ -240,7 +240,7 @@ public class DataWarehouseToolBasedScenarioTest {
 			PlanExecutionResult executed = executor.execute(plan);
 			assertExecutionSuccess(executed);
 			
-			String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+			String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 			assertThat(sql).contains("FCT_ORDERS");
 			assertThat(sql).contains("DIM_CUSTOMER");
 			assertThat(sql).contains("JOIN");
@@ -266,7 +266,7 @@ public class DataWarehouseToolBasedScenarioTest {
 			PlanExecutionResult executed = executor.execute(plan);
 			assertExecutionSuccess(executed);
 			
-			String sql = dataWarehouseActions.lastQuery().sqlString().toUpperCase();
+			String sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString().toUpperCase();
 			assertThat(sql).contains("CUSTOMER_NAME");
 			assertThat(sql).contains("DIM_CUSTOMER");
 			
@@ -307,8 +307,8 @@ public class DataWarehouseToolBasedScenarioTest {
 				if (plan.status() == PlanStatus.READY) {
 					PlanExecutionResult executed = executor.execute(plan);
 					if (executed.success()) {
-						org.javai.springai.actions.sql.Query query = dataWarehouseActions.lastQuery();
-						if (query != null) {
+					if (dataWarehouseActions.lastQuery().isPresent()) {
+						org.javai.springai.actions.sql.Query query = dataWarehouseActions.lastQuery().orElseThrow();
 							String sql = query.sqlString().toUpperCase();
 							System.out.println("  Generated SQL: " + sql);
 						}

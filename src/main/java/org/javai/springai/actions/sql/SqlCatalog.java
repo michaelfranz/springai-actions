@@ -75,69 +75,81 @@ public interface SqlCatalog {
 		return Optional.empty();
 	}
 
-	// ==================== TOKENIZATION ====================
+	// ==================== MODEL NAME MAPPING ====================
+	// 
+	// When model name mapping is enabled, the catalog provides alternative names
+	// (derived from synonyms or generated) for tables and columns. The LLM sees
+	// and generates SQL using these "model names" rather than real schema names.
+	// The framework automatically resolves model names to canonical names.
 
 	/**
-	 * Returns whether tokenization is enabled for this catalog.
+	 * Returns whether model name mapping is enabled for this catalog.
 	 * 
-	 * <p>When tokenization is enabled, the catalog provides opaque tokens for
-	 * table and column names that hide the real schema from external LLMs.
-	 * The framework will automatically de-tokenize LLM responses before validation.</p>
+	 * <p>When enabled, the catalog provides model-facing names (derived from 
+	 * synonyms or generated) for table and column names. The LLM sees and 
+	 * generates SQL using these model names. The framework automatically 
+	 * resolves model names back to canonical names during query processing.</p>
 	 * 
-	 * @return true if tokenization is enabled
+	 * @return true if model name mapping is enabled
 	 */
-	default boolean isTokenized() {
+	default boolean usesModelNames() {
 		return false;
 	}
 
 	/**
-	 * Gets the token for a table name.
+	 * Gets the model-facing name for a table.
+	 * 
+	 * <p>The model name is derived from the first synonym if available,
+	 * otherwise a generated identifier is used.</p>
 	 * 
 	 * @param tableName the canonical table name
-	 * @return the token, or empty if tokenization is disabled or table not found
+	 * @return the model name, or empty if mapping is disabled or table not found
 	 */
-	default Optional<String> getTableToken(String tableName) {
+	default Optional<String> getTableModelName(String tableName) {
 		return Optional.empty();
 	}
 
 	/**
-	 * Gets the token for a column name.
+	 * Gets the model-facing name for a column.
+	 * 
+	 * <p>The model name is derived from the first synonym if available,
+	 * otherwise a generated identifier is used.</p>
 	 * 
 	 * @param tableName the canonical table name containing the column
 	 * @param columnName the canonical column name
-	 * @return the token, or empty if tokenization is disabled or column not found
+	 * @return the model name, or empty if mapping is disabled or column not found
 	 */
-	default Optional<String> getColumnToken(String tableName, String columnName) {
+	default Optional<String> getColumnModelName(String tableName, String columnName) {
 		return Optional.empty();
 	}
 
 	/**
-	 * Resolves a table token back to the canonical table name.
+	 * Resolves a model table name back to the canonical table name.
 	 * 
-	 * @param token the table token
-	 * @return the canonical table name, or empty if token not found
+	 * @param modelName the model-facing table name
+	 * @return the canonical table name, or empty if not found
 	 */
-	default Optional<String> resolveTableToken(String token) {
+	default Optional<String> resolveTableFromModelName(String modelName) {
 		return Optional.empty();
 	}
 
 	/**
-	 * Resolves a column token back to the canonical column name.
+	 * Resolves a model column name back to the canonical column name.
 	 * 
-	 * @param tableToken the table token (for context)
-	 * @param columnToken the column token
-	 * @return the canonical column name, or empty if token not found
+	 * @param tableModelName the model-facing table name (for context)
+	 * @param columnModelName the model-facing column name
+	 * @return the canonical column name, or empty if not found
 	 */
-	default Optional<String> resolveColumnToken(String tableToken, String columnToken) {
+	default Optional<String> resolveColumnFromModelName(String tableModelName, String columnModelName) {
 		return Optional.empty();
 	}
 
 	/**
-	 * Returns all token mappings for debugging purposes.
+	 * Returns all model name mappings for debugging purposes.
 	 * 
-	 * @return map of token to canonical name for all tokenized objects
+	 * @return map of model name to canonical name for all mapped objects
 	 */
-	default Map<String, String> tokenMappings() {
+	default Map<String, String> modelNameMappings() {
 		return Map.of();
 	}
 

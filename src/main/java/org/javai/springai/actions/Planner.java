@@ -176,7 +176,7 @@ public final class Planner {
 			
 			EXAMPLES:
 			
-			1. For SQL queries (showSqlQuery, runSqlQuery):
+			1. For new SQL queries (showSqlQuery, runSqlQuery):
 			{
 			  "message": "Query orders with customer names and dates",
 			  "steps": [
@@ -190,7 +190,23 @@ public final class Planner {
 			  ]
 			}
 			
-			2. For aggregateOrderValue:
+			2. For REFINING an existing query (when CURRENT QUERY CONTEXT is present):
+			If the current query is: SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id
+			And user says: "filter by region = 'East'"
+			{
+			  "message": "Add region filter to the current query",
+			  "steps": [
+			    {
+			      "actionId": "showSqlQuery",
+			      "description": "Add WHERE clause to existing query",
+			      "parameters": {
+			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id WHERE o.region = 'East'" }
+			      }
+			    }
+			  ]
+			}
+			
+			3. For aggregateOrderValue:
 			{
 			  "message": "Calculate total order value for Mike in January 2024",
 			  "steps": [
@@ -204,12 +220,13 @@ public final class Planner {
 			  ]
 			}
 			
-			RULES:
-			- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS (e.g., "query" for SQL, "orderValueQuery" for aggregates)
-			- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
-			- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
-			- SQL MUST derive exact table/column names from the descriptions in the SQL CATALOG
-			- NEVER invent columns - only use columns listed in the SQL CATALOG
+		RULES:
+		- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS (e.g., "query" for SQL, "orderValueQuery" for aggregates)
+		- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
+		- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
+		- SQL MUST derive exact table/column names from the descriptions in the SQL CATALOG
+		- NEVER invent columns - only use columns listed in the SQL CATALOG
+		- 🔴 IF there is a CURRENT QUERY CONTEXT above, you MUST start from that query and MODIFY it - do NOT create a new query from scratch
 			
 			STOP after the closing brace. Emit nothing else.""";
 
@@ -239,11 +256,19 @@ public final class Planner {
 		}
 
 		// Add contributions from prompt contributors (e.g., SqlCatalogContextContributor)
+		// Merge conversation state into prompt context for context-aware contributors
+		Map<String, Object> mergedContext = new java.util.HashMap<>(this.promptContext);
+		if (state != null) {
+			mergedContext.put("conversationState", state);
+			if (state.workingContext() != null) {
+				mergedContext.put("workingContext", state.workingContext());
+			}
+		}
 		SystemPromptContext ctx = new SystemPromptContext(
 				collectedActions.registry(), 
 				actionDescriptors, 
 				ActionDescriptorFilter.ALL, 
-				this.promptContext);
+				mergedContext);
 		for (PromptContributor contributor : this.promptContributors) {
 			if (contributor != null) {
 				contributor.contribute(ctx).ifPresent(systemMessages::add);

@@ -187,7 +187,7 @@ class SqlCatalogToolTest {
 		@BeforeEach
 		void enableTokenization() {
 			catalog = new InMemorySqlCatalog()
-					.withTokenization(true)
+					.withModelNames(true)
 					.addTable("fct_orders", "Fact table for orders", "fact")
 					.withSynonyms("fct_orders", "orders", "sales")  // "orders" becomes token
 					.addColumn("fct_orders", "customer_id", "FK to customer", "string", 
