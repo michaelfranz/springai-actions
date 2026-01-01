@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
 import org.javai.springai.scenarios.shopping.store.model.Product;
 import org.javai.springai.scenarios.shopping.store.model.StockLevel;

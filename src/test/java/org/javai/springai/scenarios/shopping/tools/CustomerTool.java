@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
 import org.javai.springai.scenarios.shopping.store.CustomerProfileService;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.store.model.CustomerProfile;

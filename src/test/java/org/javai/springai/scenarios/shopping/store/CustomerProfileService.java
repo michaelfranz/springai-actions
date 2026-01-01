@@ -12,7 +12,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
 import org.javai.springai.scenarios.shopping.store.model.CustomerProfile;
 import org.javai.springai.scenarios.shopping.store.model.Product;
 import org.javai.springai.scenarios.shopping.store.model.PurchaseHistory;

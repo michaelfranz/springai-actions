@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Map;
 import java.util.Optional;
-
 import org.javai.springai.scenarios.shopping.store.model.BudgetStatus;
 import org.javai.springai.scenarios.shopping.store.model.PricingBreakdown;
 import org.javai.springai.scenarios.shopping.store.model.Product;

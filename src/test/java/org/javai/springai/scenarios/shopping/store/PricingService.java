@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
 import org.javai.springai.scenarios.shopping.store.model.AppliedDiscount;
 import org.javai.springai.scenarios.shopping.store.model.DiscountType;
 import org.javai.springai.scenarios.shopping.store.model.LineItem;

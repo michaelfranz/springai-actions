@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
 import org.javai.springai.scenarios.shopping.store.model.BudgetStatus;
 import org.javai.springai.scenarios.shopping.store.model.MissionPlan;

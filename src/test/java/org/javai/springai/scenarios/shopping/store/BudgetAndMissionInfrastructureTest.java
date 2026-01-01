@@ -1,12 +1,10 @@
 package org.javai.springai.scenarios.shopping.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 import org.javai.springai.scenarios.shopping.store.model.BudgetStatus;
 import org.javai.springai.scenarios.shopping.store.model.MissionItem;
 import org.javai.springai.scenarios.shopping.store.model.MissionPlan;

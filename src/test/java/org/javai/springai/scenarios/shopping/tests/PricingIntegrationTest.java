@@ -1,9 +1,7 @@
 package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import java.math.BigDecimal;
-
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;

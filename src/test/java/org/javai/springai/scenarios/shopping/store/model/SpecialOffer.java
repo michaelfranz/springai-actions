@@ -33,10 +33,7 @@ public record SpecialOffer(
 			return true;
 		}
 		// Check category-wide offers
-		if (applicableCategory != null && applicableCategory.equalsIgnoreCase(product.category())) {
-			return true;
-		}
-		return false;
+		return applicableCategory != null && applicableCategory.equalsIgnoreCase(product.category());
 	}
 
 	/**

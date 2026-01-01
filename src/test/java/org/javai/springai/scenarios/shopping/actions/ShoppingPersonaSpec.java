@@ -1,7 +1,6 @@
 package org.javai.springai.scenarios.shopping.actions;
 
 import java.util.List;
-
 import org.javai.springai.actions.PersonaSpec;
 
 /**

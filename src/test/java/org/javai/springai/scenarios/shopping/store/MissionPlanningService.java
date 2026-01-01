@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
 import org.javai.springai.scenarios.shopping.store.model.MissionPlan;
 import org.javai.springai.scenarios.shopping.store.model.MissionRequest;
