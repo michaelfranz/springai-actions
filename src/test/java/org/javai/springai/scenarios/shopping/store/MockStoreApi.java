@@ -7,8 +7,12 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
+import org.javai.springai.scenarios.shopping.store.model.BudgetStatus;
+import org.javai.springai.scenarios.shopping.store.model.MissionPlan;
+import org.javai.springai.scenarios.shopping.store.model.MissionRequest;
 import org.javai.springai.scenarios.shopping.store.model.PricingBreakdown;
 import org.javai.springai.scenarios.shopping.store.model.Product;
+import org.javai.springai.scenarios.shopping.store.model.ShoppingSession;
 import org.javai.springai.scenarios.shopping.store.model.SpecialOffer;
 import org.javai.springai.scenarios.shopping.store.model.StockLevel;
 
@@ -25,6 +29,8 @@ public class MockStoreApi {
 	private final InventoryService inventory;
 	private final PricingService pricing;
 	private final CustomerProfileService customers;
+	private final BudgetService budget;
+	private final MissionPlanningService missionPlanning;
 
 	/**
 	 * Create a MockStoreApi with default services.
@@ -34,6 +40,8 @@ public class MockStoreApi {
 		this.inventory = new InventoryService(catalog);
 		this.pricing = new PricingService(catalog);
 		this.customers = new CustomerProfileService(catalog);
+		this.budget = new BudgetService(pricing, catalog);
+		this.missionPlanning = new MissionPlanningService(catalog, inventory, pricing);
 	}
 
 	/**
@@ -44,6 +52,8 @@ public class MockStoreApi {
 		this.inventory = inventory;
 		this.pricing = pricing;
 		this.customers = new CustomerProfileService(catalog);
+		this.budget = new BudgetService(pricing, catalog);
+		this.missionPlanning = new MissionPlanningService(catalog, inventory, pricing);
 	}
 
 	/**
@@ -55,6 +65,8 @@ public class MockStoreApi {
 		this.inventory = inventory;
 		this.pricing = pricing;
 		this.customers = customers;
+		this.budget = new BudgetService(pricing, catalog);
+		this.missionPlanning = new MissionPlanningService(catalog, inventory, pricing);
 	}
 
 	// ========== CATALOG QUERIES ==========
@@ -272,6 +284,73 @@ public class MockStoreApi {
 			List<Product> alternatives
 	) {}
 
+	// ========== BUDGET OPERATIONS ==========
+
+	/**
+	 * Get the current budget status for a session.
+	 */
+	public BudgetStatus getBudgetStatus(ShoppingSession session) {
+		return budget.getBudgetStatus(session);
+	}
+
+	/**
+	 * Check if adding an item would exceed the budget.
+	 */
+	public BudgetStatus checkBudgetForAddition(ShoppingSession session, String productName, int quantity) {
+		return budget.checkAddition(session, productName, quantity);
+	}
+
+	/**
+	 * Get the remaining budget for a session.
+	 */
+	public Optional<BigDecimal> getRemainingBudget(ShoppingSession session) {
+		return budget.getRemainingBudget(session);
+	}
+
+	/**
+	 * Check if the session would exceed budget with additional cost.
+	 */
+	public boolean wouldExceedBudget(ShoppingSession session, BigDecimal additionalCost) {
+		return budget.wouldExceedBudget(session, additionalCost);
+	}
+
+	/**
+	 * Get maximum affordable quantity for a product within remaining budget.
+	 */
+	public int getMaxAffordableQuantity(ShoppingSession session, String productName) {
+		return budget.getMaxAffordableQuantity(session, productName);
+	}
+
+	/**
+	 * Format budget status as human-readable message.
+	 */
+	public String formatBudgetStatus(BudgetStatus status) {
+		return budget.formatBudgetStatus(status);
+	}
+
+	// ========== MISSION PLANNING ==========
+
+	/**
+	 * Plan a shopping mission based on constraints.
+	 */
+	public MissionPlan planMission(MissionRequest request) {
+		return missionPlanning.planMission(request);
+	}
+
+	/**
+	 * Refine an existing mission plan with adjustments.
+	 */
+	public MissionPlan refineMissionPlan(MissionPlan originalPlan, Map<String, Integer> adjustments) {
+		return missionPlanning.refinePlan(originalPlan, adjustments);
+	}
+
+	/**
+	 * Suggest additional items that would complement a mission plan.
+	 */
+	public List<Product> suggestMissionAdditions(MissionPlan plan, int maxSuggestions) {
+		return missionPlanning.suggestAdditions(plan, maxSuggestions);
+	}
+
 	// ========== UTILITY ==========
 
 	/**
@@ -307,6 +386,20 @@ public class MockStoreApi {
 	 */
 	public CustomerProfileService getCustomers() {
 		return customers;
+	}
+
+	/**
+	 * Get direct access to budget service (for advanced operations).
+	 */
+	public BudgetService getBudget() {
+		return budget;
+	}
+
+	/**
+	 * Get direct access to mission planning service (for advanced operations).
+	 */
+	public MissionPlanningService getMissionPlanning() {
+		return missionPlanning;
 	}
 }
 
