@@ -69,7 +69,7 @@ public class DefaultPlanExecutor implements PlanExecutor {
 
 	private StepExecutionResult executeActionStep(PlanStep.ActionStep step, ActionContext context) {
 		ActionBinding binding = step.binding();
-		if (binding == null || binding.method() == null || binding.bean() == null) {
+		if (binding == null) {
 			return new StepExecutionResult(null, false, null, null, "Action binding is incomplete");
 		}
 		String actionId = binding.id();
@@ -105,12 +105,12 @@ public class DefaultPlanExecutor implements PlanExecutor {
 						"Argument count mismatch for action " + actionId);
 			}
 			Object returnValue = method.invoke(target, invokeArgs);
-			if (binding.contextKey() != null && !binding.contextKey().isBlank()) {
+			if (!binding.contextKey().isBlank()) {
 				context.put(binding.contextKey(), returnValue);
 			}
 			if (emitter != null) {
 				long durationMs = (System.nanoTime() - start) / 1_000_000;
-				String contextKeyValue = binding.contextKey() != null ? binding.contextKey() : "";
+				String contextKeyValue = binding.contextKey();
 				emitter.emit(InvocationKind.ACTION, InvocationEventType.SUCCEEDED, actionId, invocationId, null, durationMs,
 						Map.of("actionId", actionId, "contextKey", contextKeyValue));
 			}
