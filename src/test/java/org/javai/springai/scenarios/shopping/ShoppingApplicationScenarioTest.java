@@ -3,8 +3,10 @@ package org.javai.springai.scenarios.shopping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
+
 import java.util.Map;
 import java.util.Objects;
+
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -12,6 +14,8 @@ import org.javai.springai.actions.PlanExecutionResult;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
@@ -27,6 +31,7 @@ import org.springframework.ai.openai.api.OpenAiApi;
 
 public class ShoppingApplicationScenarioTest {
 
+	private static final Logger log = LoggerFactory.getLogger(ShoppingApplicationScenarioTest.class);
 	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 
@@ -81,7 +86,22 @@ public class ShoppingApplicationScenarioTest {
 				.tools(specialOfferTool)
 				.actions(shoppingActions)
 				.build();
-		executor = new DefaultPlanExecutor();
+		executor = DefaultPlanExecutor.builder()
+				.onPending((plan, context) -> {
+					log.info("Plan pending - missing params: {}", plan.pendingParameterNames());
+					return PlanExecutionResult.notExecuted(plan, context, 
+							"Awaiting input: " + plan.pendingParameterNames());
+				})
+				.onError((plan, context) -> {
+					String errorMsg = plan.planSteps().stream()
+							.filter(s -> s instanceof PlanStep.ErrorStep)
+							.map(s -> ((PlanStep.ErrorStep) s).reason())
+							.findFirst()
+							.orElse("Unknown error");
+					log.warn("Plan error: {}", errorMsg);
+					return PlanExecutionResult.notExecuted(plan, context, errorMsg);
+				})
+				.build();
 		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
