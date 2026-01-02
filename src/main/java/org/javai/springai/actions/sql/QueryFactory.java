@@ -5,9 +5,6 @@ package org.javai.springai.actions.sql;
  * 
  * <p>This factory is used by the plan resolver to convert SQL strings from LLM output
  * into validated Query objects for action parameters.</p>
- * 
- * <p>Unlike the previous SXL-based approach, this factory expects standard ANSI SQL
- * strings directly from the LLM, which are then parsed and validated using JSqlParser.</p>
  */
 public class QueryFactory {
 

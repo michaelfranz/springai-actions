@@ -69,7 +69,7 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		List<ActionParameterDescriptor> params = binding.parameters();
-		Map<String, Object> stepParams = step.parameters();
+		Map<String, Object> stepParams = step.parameters() != null ? step.parameters() : Map.of();
 
 		// Check arity
 		if (stepParams.size() != params.size()) {

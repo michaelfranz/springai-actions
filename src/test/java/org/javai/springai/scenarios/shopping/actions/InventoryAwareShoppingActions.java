@@ -13,6 +13,7 @@ import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.api.FromContext;
 import org.javai.springai.scenarios.shopping.store.CustomerProfileService;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
+import org.javai.springai.scenarios.shopping.store.OfferNotificationService;
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
 import org.javai.springai.scenarios.shopping.store.model.CustomerProfile;
 import org.javai.springai.scenarios.shopping.store.model.LineItem;
@@ -30,6 +31,7 @@ import org.javai.springai.scenarios.shopping.store.model.ShoppingSession;
 public class InventoryAwareShoppingActions {
 
 	private final MockStoreApi storeApi;
+	private final OfferNotificationService offerService;
 
 	// Tracking flags for test assertions
 	private final AtomicBoolean startSessionInvoked = new AtomicBoolean(false);
@@ -56,6 +58,7 @@ public class InventoryAwareShoppingActions {
 
 	public InventoryAwareShoppingActions(MockStoreApi storeApi) {
 		this.storeApi = storeApi;
+		this.offerService = new OfferNotificationService(storeApi);
 	}
 
 	@Action(description = """
@@ -93,6 +96,10 @@ public class InventoryAwareShoppingActions {
 		
 		storeApi.reset(); // Reset any stock reservations
 
+		// CRITICAL: Programmatically attach applicable offers - NOT left to LLM discretion
+		// This is a business requirement: offers must be surfaced when applicable
+		List<Notification> offerNotifications = offerService.getApplicableOfferNotifications(customerId);
+
 		if (customerId != null) {
 			Optional<CustomerProfile> profileOpt = storeApi.getCustomers().getProfile(customerId);
 			if (profileOpt.isPresent()) {
@@ -106,11 +113,11 @@ public class InventoryAwareShoppingActions {
 				}
 				
 				greeting.append("Your basket is empty.");
-				return ActionResult.success(greeting.toString());
+				return ActionResult.success(greeting.toString(), offerNotifications);
 			}
 		}
 		
-		return ActionResult.success("Shopping session started. Your basket is empty.");
+		return ActionResult.success("Shopping session started. Your basket is empty.", offerNotifications);
 	}
 
 	@Action(description = "Present current special offers to the shopper.")

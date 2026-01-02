@@ -74,7 +74,7 @@ public final class SystemPromptBuilder {
 	 * Generate an example JSON plan from action descriptors with example values.
 	 */
 	public static String generateExamplePlan(List<ActionDescriptor> descriptors) {
-		if (descriptors == null || descriptors.isEmpty()) {
+		if (descriptors.isEmpty()) {
 			return "";
 		}
 
@@ -92,7 +92,7 @@ public final class SystemPromptBuilder {
 			example.append("      \"parameters\": {");
 
 			List<ActionParameterDescriptor> params = action.actionParameterSpecs();
-			if (params != null && !params.isEmpty()) {
+			if (!params.isEmpty()) {
 				example.append("\n");
 				for (int j = 0; j < params.size(); j++) {
 					ActionParameterDescriptor param = params.get(j);
@@ -119,7 +119,7 @@ public final class SystemPromptBuilder {
 	}
 
 	private static String getExampleValue(ActionParameterDescriptor param) {
-		if (param.examples() != null && param.examples().length > 0) {
+		if (param.examples().length > 0) {
 			String ex = param.examples()[0];
 			if (ex.trim().startsWith("{") || ex.trim().startsWith("[")) {
 				return ex;
@@ -127,17 +127,8 @@ public final class SystemPromptBuilder {
 			return "\"" + escapeJson(ex) + "\"";
 		}
 
-		String dslId = param.dslId();
-		if (dslId != null && !dslId.isBlank()) {
-			if ("sql-query".equalsIgnoreCase(dslId)) {
-				// SQL Query uses { "sql": "..." } format
-				return "{ \"sql\": \"SELECT column FROM table WHERE condition = 'value'\" }";
-			}
-			return "\"<" + param.name() + ">\"";
-		}
-
 		String typeId = param.typeId();
-		if (typeId != null && (typeId.contains(".") || Character.isUpperCase(typeId.charAt(0)))) {
+		if (typeId.contains(".") || Character.isUpperCase(typeId.charAt(0))) {
 			return "{ \"...\": \"...\" }";
 		}
 
@@ -145,7 +136,6 @@ public final class SystemPromptBuilder {
 	}
 
 	private static String escapeJson(String s) {
-		if (s == null) return "";
 		return s.replace("\\", "\\\\")
 				.replace("\"", "\\\"")
 				.replace("\n", "\\n")

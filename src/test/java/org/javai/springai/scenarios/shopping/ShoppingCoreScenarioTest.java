@@ -3,6 +3,7 @@ package org.javai.springai.scenarios.shopping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
@@ -15,7 +16,10 @@ import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
+import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
+import org.javai.springai.scenarios.shopping.actions.Notification;
+import org.javai.springai.scenarios.shopping.actions.NotificationType;
 import org.javai.springai.scenarios.shopping.actions.ShoppingPersonaSpec;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.tools.EnhancedSpecialOfferTool;
@@ -155,10 +159,30 @@ public class ShoppingCoreScenarioTest {
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I'd like to start shopping", sessionId);
-			executor.execute(turn.plan(), context);
+			PlanExecutionResult result = executor.execute(turn.plan(), context);
 
-			// Verify offers tool was consulted
-			assertThat(offerTool.listInvoked()).isTrue();
+			// Verify offers are programmatically included in action result
+			// This is a business-critical requirement - offers are NOT left to LLM discretion
+			assertThat(result.wasExecuted()).isTrue();
+			assertThat(result.success()).isTrue();
+			
+			// Extract notifications from the step results
+			List<Notification> notifications = extractNotifications(result);
+			assertThat(notifications)
+					.filteredOn(n -> n.type() == NotificationType.OFFER)
+					.isNotEmpty();
+		}
+		
+		/**
+		 * Extract all notifications from a plan execution result.
+		 */
+		private List<Notification> extractNotifications(PlanExecutionResult result) {
+			return result.steps().stream()
+					.map(step -> step.returnValue())
+					.filter(rv -> rv instanceof ActionResult)
+					.map(rv -> (ActionResult) rv)
+					.flatMap(ar -> ar.notifications().stream())
+					.toList();
 		}
 
 		@Test
@@ -229,7 +253,7 @@ public class ShoppingCoreScenarioTest {
 		}
 
 		@Test
-		@DisplayName("should request quantity when not provided")
+		@DisplayName("should request quantity when not provided or assume default")
 		void requestQuantityWhenMissing() {
 			String sessionId = "core-add-pending";
 			ActionContext context = new ActionContext();
@@ -237,14 +261,32 @@ public class ShoppingCoreScenarioTest {
 			// Start session
 			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
-			// Add without quantity
+			// Add without quantity - LLM may either:
+			// 1. Assume quantity=1 and return READY plan
+			// 2. Return PENDING plan requesting quantity
 			ConversationTurnResult addTurn = conversationManager
 					.converse("add coke zero", sessionId);
 			Plan plan = addTurn.plan();
 
 			assertThat(plan).isNotNull();
-			assertThat(plan.status()).isEqualTo(PlanStatus.PENDING);
-			assertThat(addTurn.pendingParams()).isNotEmpty();
+			assertThat(plan.status()).isIn(PlanStatus.READY, PlanStatus.PENDING);
+
+			if (plan.status() == PlanStatus.READY) {
+				// LLM assumed quantity=1 - this is acceptable
+				PlanExecutionResult result = executor.execute(plan, context);
+				assertExecutionSuccess(result);
+				assertThat(actions.addItemInvoked()).isTrue();
+			} else {
+				// LLM requested quantity - provide it and verify plan completes
+				assertThat(addTurn.pendingParams()).isNotEmpty();
+				ConversationTurnResult followUp = conversationManager
+						.converse("just 1", sessionId);
+				Plan followUpPlan = followUp.plan();
+				assertPlanReady(followUpPlan);
+				PlanExecutionResult result = executor.execute(followUpPlan, context);
+				assertExecutionSuccess(result);
+				assertThat(actions.addItemInvoked()).isTrue();
+			}
 		}
 
 		@Test

@@ -16,6 +16,7 @@ import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
@@ -169,85 +170,122 @@ public final class Planner {
 		return buildPromptPreview(nonNullRequest, Objects.requireNonNull(safeDescriptors), null);
 	}
 
-	private static final String PLANNING_DIRECTIVE_TEMPLATE = """
-			🔴 OUTPUT FORMAT - JSON ONLY:
-			
-			Respond with a JSON object. No prose. No markdown. Just JSON.
-			
-			EXAMPLES:
-			
-			1. To SHOW/DISPLAY a query (user says "show", "generate", "create"):
-			{
-			  "message": "Show query for orders with customer names",
-			  "steps": [
-			    {
-			      "actionId": "showSqlQuery",
-			      "description": "Join fct_orders with dim_customer",
-			      "parameters": {
-			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id" }
-			      }
-			    }
-			  ]
-			}
-			
-			2. To RUN/EXECUTE a query (user says "run", "execute", "get data"):
-			{
-			  "message": "Run query to get order values for Smith",
-			  "steps": [
-			    {
-			      "actionId": "runSqlQuery",
-			      "description": "Execute query filtering by customer name",
-			      "parameters": {
-			        "query": { "sql": "SELECT o.order_value FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id WHERE c.customer_name LIKE '%Smith%'" }
-			      }
-			    }
-			  ]
-			}
-			
-			3. For REFINING an existing query (when CURRENT QUERY CONTEXT is present):
-			If the current query is: SELECT o.order_value FROM fct_orders o
-			And user says: "add customer names"
-			{
-			  "message": "Add customer names to the query",
-			  "steps": [
-			    {
-			      "actionId": "showSqlQuery",
-			      "description": "Add JOIN to include customer_name",
-			      "parameters": {
-			        "query": { "sql": "SELECT o.order_value, c.customer_name FROM fct_orders o JOIN dim_customer c ON o.customer_id = c.id" }
-			      }
-			    }
-			  ]
-			}
-			
-			4. For aggregateOrderValue:
-			{
-			  "message": "Calculate total order value for Mike in January 2024",
-			  "steps": [
-			    {
-			      "actionId": "aggregateOrderValue",
-			      "description": "Sum orders for customer Mike in date range",
-			      "parameters": {
-			        "orderValueQuery": { "customer_name": "Mike", "period": { "start": "2024-01-01", "end": "2024-01-31" } }
-			      }
-			    }
-			  ]
-			}
-			
-		RULES:
-		- Choose actionId based on user intent: "show/generate" → showSqlQuery, "run/execute/get" → runSqlQuery
-		- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS
-		- For showSqlQuery/runSqlQuery: use "query": { "sql": "<SELECT statement>" }
-		- For aggregateOrderValue: use "orderValueQuery": { "customer_name": "...", "period": { "start": "...", "end": "..." } }
-		- SQL MUST derive exact table/column names from the descriptions in the SQL CATALOG
-		- NEVER invent columns - only use columns listed in the SQL CATALOG
-		- 🔴 IF there is a CURRENT QUERY CONTEXT above, you MUST start from that query and MODIFY it - do NOT create a new query from scratch
-			
-			STOP after the closing brace. Emit nothing else.""";
-
 	private static String buildPlanningDirective(List<ActionDescriptor> actionDescriptors) {
-		// The planning directive is now a static template - action details are in PLAN STEP OPTIONS
-		return PLANNING_DIRECTIVE_TEMPLATE;
+		StringBuilder sb = new StringBuilder();
+		sb.append("🔴 OUTPUT FORMAT - JSON ONLY:\n\n");
+		sb.append("Respond with a JSON object. No prose. No markdown. Just JSON.\n\n");
+		
+		// Generate dynamic examples based on actual registered actions
+		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
+			// Explicitly list valid action IDs
+			sb.append("VALID ACTION IDs (use EXACTLY one of these):\n");
+			for (ActionDescriptor ad : actionDescriptors) {
+				sb.append("  - \"").append(ad.id()).append("\"\n");
+			}
+			sb.append("\n");
+			
+			sb.append("EXAMPLE:\n");
+			
+			// Pick the simplest action for example (prefer no params, then fewest params)
+			ActionDescriptor example = pickExampleAction(actionDescriptors);
+			sb.append("{\n");
+			sb.append("  \"message\": \"Brief description of what you're doing\",\n");
+			sb.append("  \"steps\": [\n");
+			sb.append("    {\n");
+			sb.append("      \"actionId\": \"").append(example.id()).append("\",\n");
+			sb.append("      \"description\": \"").append(truncateForExample(example.description())).append("\"");
+			
+			if (example.actionParameterSpecs() != null && !example.actionParameterSpecs().isEmpty()) {
+				sb.append(",\n      \"parameters\": {\n");
+				boolean firstParam = true;
+				for (ActionParameterDescriptor param : example.actionParameterSpecs()) {
+					if (!firstParam) {
+						sb.append(",\n");
+					}
+					firstParam = false;
+					sb.append("        \"").append(param.name()).append("\": ");
+					sb.append(generateExampleValue(param));
+				}
+				sb.append("\n      }");
+			}
+			sb.append("\n    }\n");
+			sb.append("  ]\n");
+			sb.append("}\n\n");
+		}
+		
+		sb.append("🚨 CRITICAL RULES:\n");
+		sb.append("- actionId MUST be EXACTLY one of the strings from VALID ACTION IDs above - NO EXCEPTIONS\n");
+		sb.append("- If no exact match exists in VALID ACTION IDs, the action does NOT exist\n");
+		sb.append("- NEVER create, invent, or imagine action names not in the list\n");
+		sb.append("- Parameters MUST be nested inside a \"parameters\" object, NOT at step level\n");
+		sb.append("- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS\n");
+		sb.append("- Actions already handle their internal logic (e.g., addItem validates availability)\n");
+		sb.append("- Include a brief \"description\" explaining what this step does\n");
+		sb.append("\nSTOP after the closing brace. Emit nothing else.");
+		
+		return sb.toString();
+	}
+	
+	/**
+	 * Pick the best action to use as an example - prefer actions with 1-3 params to demonstrate structure.
+	 * Actions with too few params don't show the parameters structure well.
+	 */
+	private static ActionDescriptor pickExampleAction(List<ActionDescriptor> descriptors) {
+		// Prefer actions with 1-3 params to show the parameters structure
+		return descriptors.stream()
+				.filter(a -> {
+					int params = a.actionParameterSpecs() != null ? a.actionParameterSpecs().size() : 0;
+					return params >= 1 && params <= 3;
+				})
+				.findFirst()
+				.orElse(descriptors.getFirst());
+	}
+	
+	private static String truncateForExample(String description) {
+		if (description == null) return "Perform action";
+		String trimmed = description.trim();
+		// Take first sentence or first 50 chars
+		int endIdx = Math.min(50, trimmed.length());
+		int periodIdx = trimmed.indexOf('.');
+		if (periodIdx > 0 && periodIdx < endIdx) {
+			return trimmed.substring(0, periodIdx);
+		}
+		if (endIdx < trimmed.length()) {
+			return trimmed.substring(0, endIdx) + "...";
+		}
+		return trimmed;
+	}
+	
+	private static String generateExampleValue(ActionParameterDescriptor param) {
+		// Check for explicit examples first
+		if (param.examples() != null && param.examples().length > 0) {
+			String example = param.examples()[0];
+			// If it looks like JSON, use as-is; otherwise quote it
+			if (example.startsWith("{") || example.startsWith("[") || 
+				example.equals("true") || example.equals("false") ||
+				example.matches("-?\\d+(\\.\\d+)?")) {
+				return example;
+			}
+			return "\"" + example + "\"";
+		}
+		
+		// Check for allowed values
+		if (param.allowedValues() != null && param.allowedValues().length > 0) {
+			return "\"" + param.allowedValues()[0] + "\"";
+		}
+		
+		// Generate based on type
+		String typeId = param.typeId();
+		if (typeId == null) typeId = "String";
+		
+		return switch (typeId.toLowerCase()) {
+			case "int", "integer", "long" -> "1";
+			case "double", "float", "bigdecimal" -> "10.00";
+			case "boolean" -> "true";
+			case "map" -> "{}";
+			case "list" -> "[]";
+			default -> "\"<" + param.name() + ">\"";
+		};
 	}
 
 	private PromptPreview buildPromptPreview(@NonNull String requestText,

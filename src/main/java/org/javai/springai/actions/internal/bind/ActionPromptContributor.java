@@ -15,7 +15,7 @@ import org.javai.springai.actions.api.TypeSpecProvider;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 
 /**
- * Emits action specs for inclusion in system prompts, in either SXL or JSON style.
+ * Emits action specs for inclusion in system prompts.
  */
 public final class ActionPromptContributor {
 

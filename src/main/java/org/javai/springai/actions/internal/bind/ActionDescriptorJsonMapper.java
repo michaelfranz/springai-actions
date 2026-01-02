@@ -26,9 +26,6 @@ public final class ActionDescriptorJsonMapper {
 			p.put("type", param.typeName());
 			p.put("typeId", param.typeId());
 			p.put("description", param.description());
-			if (param.dslId() != null) {
-				p.put("dslId", param.dslId());
-			}
 		}
 		return node;
 	}

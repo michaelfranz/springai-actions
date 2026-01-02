@@ -73,14 +73,12 @@ class ActionRegistryTest {
 		assertThat(p0.typeName()).isEqualTo(String.class.getName());
 		assertThat(p0.typeId()).isEqualTo("String");
 		assertThat(p0.description()).contains("name");
-		assertThat(p0.dslId()).isNull();
 
 		ActionParameterDescriptor p1 = params.get(1);
 		assertThat(p1.name()).isEqualTo("note");
 		assertThat(p1.typeName()).isEqualTo(String.class.getName());
 		assertThat(p1.typeId()).isEqualTo("String");
 		assertThat(p1.description()).isEqualTo("short note");
-		assertThat(p1.dslId()).isNull();
 	}
 
 	private static class SampleActions {

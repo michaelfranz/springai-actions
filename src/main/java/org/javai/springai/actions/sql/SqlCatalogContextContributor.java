@@ -47,7 +47,6 @@ public final class SqlCatalogContextContributor implements PromptContributor {
 		SqlCatalog effectiveCatalog = catalog != null ? catalog
 				: context != null
 						? context.contextFor("sql")
-								.or(() -> context.contextFor("sxl-sql"))  // backward compatibility
 								.filter(SqlCatalog.class::isInstance)
 								.map(SqlCatalog.class::cast)
 								.orElse(null)

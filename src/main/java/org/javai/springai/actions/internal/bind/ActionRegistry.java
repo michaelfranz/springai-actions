@@ -11,6 +11,7 @@ import java.util.Optional;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.api.FromContext;
 import org.javai.springai.actions.sql.Query;
 
 public final class ActionRegistry {
@@ -37,7 +38,7 @@ public final class ActionRegistry {
 	private static List<ActionParameterDescriptor> createActionParameterDefinitions(Object bean, Method method) {
 		List<ActionParameterDescriptor> actionParameterDefinitions = new ArrayList<>();
 		for (Parameter parameter : method.getParameters()) {
-			if (parameter.getType() == ActionContext.class) {
+			if (parameter.getType() == ActionContext.class || parameter.isAnnotationPresent(FromContext.class)) {
 				// Injected at execution time; not exposed to LLM
 				continue;
 			}
@@ -50,15 +51,14 @@ public final class ActionRegistry {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
 		Optional<String> dslId = getDslIdForType(parameter.getType());
 		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
-		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
-		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
-		String[] examples = annotation != null ? annotation.examples() : new String[0];
+		String allowedRegex = annotation.allowedRegex();
+		boolean caseInsensitive = annotation.caseInsensitive();
+		String[] examples = annotation.examples();
 		return new ActionParameterDescriptor(
 				parameter.getName(),
 				parameter.getType().getName(),
 				deriveShortTypeId(parameter.getType(), dslId),
 				createActionParameterDescription(annotation, parameter.getName()),
-				dslId.orElse(null),
 				derivedAllowedValues,
 				allowedRegex,
 				caseInsensitive,
@@ -79,7 +79,7 @@ public final class ActionRegistry {
 
 	private static String[] deriveAllowedValues(Parameter parameter, ActionParam annotation) {
 		// Explicit allowedValues wins
-		if (annotation != null && annotation.allowedValues().length > 0) {
+		if (annotation.allowedValues().length > 0) {
 			return annotation.allowedValues();
 		}
 		Class<?> type = parameter.getType();
@@ -93,7 +93,7 @@ public final class ActionRegistry {
 	}
 
 	private static String createActionParameterDescription(ActionParam actionParam, String name) {
-		if (actionParam != null && !actionParam.description().isBlank()) {
+		if (!actionParam.description().isBlank()) {
 			return actionParam.description();
 		}
 		return "Parameter to " + nameBreakdown(name);
@@ -117,7 +117,7 @@ public final class ActionRegistry {
 	private static String nameBreakdown(String name) {
 		// Split method name based on camelCase / PascalCase / acronym boundaries
 		// e.g. "getTableName" -> "get table name", "HTTPServerURL" -> "http server url"
-		if (name == null || name.isBlank()) return "";
+		if (name.isBlank()) return "";
 
 		String withAcronymSplit = name
 				// Split between an acronym and a normal word: HTTPServer -> HTTP Server
