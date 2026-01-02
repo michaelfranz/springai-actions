@@ -49,10 +49,12 @@ public final class QuerySpecProvider implements TypeSpecProvider {
 	public String guidance() {
 		return """
 			QUERY PARAMETER FORMAT:
-			When providing a Query parameter, use: { "sql": "<SELECT statement>" }
-			- The sql field must contain a valid ANSI SQL SELECT statement
+			YOU must generate the SQL query. Use: { "sql": "<SELECT statement>" }
+			- Generate a valid ANSI SQL SELECT statement based on the user's request
+			- If CURRENT QUERY CONTEXT exists, modify that query to fulfill the request
 			- Use ONLY the exact table and column names from the SQL CATALOG above
 			- For data across multiple tables, use JOINs based on FK relationships
+			- NEVER use PENDING to ask for the query - YOU generate it
 			""";
 	}
 }

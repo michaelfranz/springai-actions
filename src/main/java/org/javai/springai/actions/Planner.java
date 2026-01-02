@@ -260,7 +260,8 @@ public final class Planner {
 		sb.append("- actionId is REQUIRED for ACTION and PENDING steps, FORBIDDEN for NO ACTION and ERROR steps.\n");
 		sb.append("- Parameter names MUST be EXACTLY as shown in PLAN STEP OPTIONS—never invent keys.\n");
 		sb.append("- If PLAN STEP OPTIONS shows NO parameters for an action, use ACTION STEP with empty \"parameters\": {}\n");
-		sb.append("- NEVER assume default values for missing required parameters—use PENDING instead.\n");
+		sb.append("- For 'query' parameters: YOU generate the SQL from the user request and catalog. NEVER use PENDING.\n");
+		sb.append("- For user-provided params (names, dates, amounts): use PENDING if missing.\n");
 		sb.append("- NEVER use PENDING to ask for system data (basket, session, inventory)—actions have this automatically.\n");
 		sb.append("- The 'message' is a SHORT UI summary. NEVER ask questions in it.\n");
 		sb.append("\nSTOP after the closing brace. Emit nothing else.");

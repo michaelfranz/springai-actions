@@ -61,6 +61,9 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 	private PayloadTypeRegistry typeRegistry;
 	private ConversationStateSerializer serializer;
 
+	// SQL Explorer actions - focused action set for SQL exploration scenarios
+	private SqlExplorerActions sqlExplorerActions;
+
 	// Simulates application's session storage
 	private Map<String, byte[]> applicationBlobStore;
 
@@ -98,17 +101,20 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 	@Override
 	protected PersonaSpec createDefaultPersona() {
 		return PersonaSpec.builder()
-				.name("SQLDataWarehouseAssistant")
-				.role("Assistant for data warehouse query planning")
+				.name("SQLSelectQueryBuilder")
+				.role("Expert at building SQL SELECT statements for data exploration. This is your ONLY role.")
 				.principles(List.of(
-						"Understand what the user wants from a domain perspective",
-						"Use exact table/column names from the SQL CATALOG",
-						"When user says 'that' or 'those results', refer to the PREVIOUS QUERY CONTEXT",
-						"For refinements like 'filter by X', modify the previous query"))
+						"You build SELECT queries - never INSERT, UPDATE, DELETE, or any other statement type",
+						"'add X' or 'include X' means add column X to the SELECT clause",
+						"'filter by X' means add a WHERE condition",
+						"When CURRENT QUERY CONTEXT shows an existing query, modify it based on the user's request"))
 				.constraints(List.of(
-						"Only use the available actions",
-						"Only use table and column names from the catalog",
-						"If any required parameter is unclear, use PENDING"))
+						"ONLY generate SELECT statements",
+						"The query parameter format is: {\"query\": {\"sql\": \"SELECT ...\"}}",
+						"Use exact table/column names from the SQL CATALOG"))
+				.styleGuidance(List.of(
+						"EXAMPLE - User says 'include customer_name' when CURRENT QUERY is 'SELECT order_value FROM fct_orders':",
+						"Response: {\"message\":\"Added customer_name.\",\"steps\":[{\"actionId\":\"showSqlQuery\",\"description\":\"...\",\"parameters\":{\"query\":{\"sql\":\"SELECT order_value, customer_name FROM fct_orders JOIN dim_customer ON fct_orders.customer_id = dim_customer.id\"}}}]}"))
 				.build();
 	}
 
@@ -116,14 +122,26 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 	protected void initializePlanner() {
 		PersonaSpec persona = createDefaultPersona();
 
+		// Use focused SQL Explorer actions - no aggregateOrderValue to avoid semantic confusion
+		sqlExplorerActions = new SqlExplorerActions();
+
 		planner = Planner.builder()
-				.defaultChatClient(defaultChatClient, 2, DEFAULT_CHAT_MODEL_VERSION)
-				.fallbackChatClient(fallbackChatClient, 2, FALLBACK_CHAT_MODEL_VERSION)
+				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION)  // gpt-4o
+				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION)
 				.persona(persona)
-				.actions(dataWarehouseActions)
+				.actions(sqlExplorerActions)
 				.addPromptContext("sql", catalog)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.promptContributor(new SqlWorkingContextContributor())
+				.promptContribution("""
+					⚠️ OVERRIDE FOR SQL ACTIONS:
+					For showSqlQuery and runSqlQuery, you MUST generate the SQL yourself.
+					- Look at CURRENT QUERY CONTEXT for the existing query
+					- Modify it based on the user's request
+					- Return: {"query": {"sql": "SELECT ..."}}
+					- NEVER use PENDING for the query parameter
+					- NEVER invent parameters like 'table' or 'columns' - only 'query' exists
+					""")
 				.build();
 
 		// Set up blob-based conversation infrastructure
@@ -247,8 +265,10 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			if (result.plan().status() == PlanStatus.READY) {
 				executor.execute(result.plan());
 				
-				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery().isPresent()) {
-					Query query = dataWarehouseActions.lastQuery().get();
+				// Store working context if either SQL action was invoked
+				boolean sqlActionInvoked = sqlExplorerActions.showSqlQueryInvoked() || sqlExplorerActions.runSqlQueryInvoked();
+				if (sqlActionInvoked && sqlExplorerActions.lastQuery().isPresent()) {
+					Query query = sqlExplorerActions.lastQuery().get();
 					SqlQueryPayload payload = SqlQueryPayload.fromQuery(query);
 					
 					var updatedState = result.state().withWorkingContext(
@@ -270,18 +290,18 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Turn 1: Initial query formulation")
 		void turn1InitialQuery() {
 			String sessionId = "multi-turn-session-1";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult result = processUserMessage(sessionId,
 					"show me order values with customer names");
 
 			assertPlanReady(result.plan());
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
-			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+			assertThat(sqlExplorerActions.showSqlQueryInvoked() || sqlExplorerActions.runSqlQueryInvoked())
 					.as("Expected either showSqlQuery or runSqlQuery to be invoked")
 					.isTrue();
 
-			Query query = dataWarehouseActions.lastQuery().orElseThrow();
+			Query query = sqlExplorerActions.lastQuery().orElseThrow();
 			String sql = query.sqlString().toUpperCase();
 			assertThat(sql).contains("FCT_ORDERS");
 			assertThat(sql).contains("DIM_CUSTOMER");
@@ -296,31 +316,31 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Two-turn conversation: query then refine")
 		void twoTurnConversation() {
 			String sessionId = "multi-turn-session-2";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn1 = processUserMessage(sessionId,
 					"show me order values with customer names");
 			assertPlanReady(turn1.plan());
 			
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
-			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+			assertThat(sqlExplorerActions.showSqlQueryInvoked() || sqlExplorerActions.runSqlQueryInvoked())
 					.as("Expected either showSqlQuery or runSqlQuery to be invoked")
 					.isTrue();
-			String turn1Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String turn1Sql = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", turn1Sql);
 
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn2 = processUserMessage(sessionId,
 					"now filter that by region = 'West'");
 
 			assertPlanReady(turn2.plan());
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
-			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+			assertThat(sqlExplorerActions.showSqlQueryInvoked() || sqlExplorerActions.runSqlQueryInvoked())
 					.as("Expected either showSqlQuery or runSqlQuery to be invoked for turn 2")
 					.isTrue();
 
-			String turn2Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String turn2Sql = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 2 SQL: {}", turn2Sql);
 
 			assertThat(turn2Sql.toUpperCase()).contains("REGION");
@@ -335,7 +355,7 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Session expiry clears context")
 		void sessionExpiryClearsContext() {
 			String sessionId = "expiry-session";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			processUserMessage(sessionId, "show me all orders");
 			assertThat(applicationBlobStore.get(sessionId)).isNotNull();
@@ -381,7 +401,7 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			byte[] storedBlob = result1.blob();
 			log.info("Request 1 complete. Blob size: {} bytes", storedBlob.length);
 
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			byte[] blob2 = storedBlob;
 			ConversationTurnResult result2 = manager.converse("group that by customer", blob2);
@@ -414,13 +434,27 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 
 		private ConversationTurnResult processAndTrack(String sessionId, String message) {
 			byte[] priorBlob = applicationBlobStore.get(sessionId);
-			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
+			
+			// If there's a prior blob with a SQL query, include it in the message
+			String augmentedMessage = message;
+			if (priorBlob != null && priorBlob.length > 0) {
+				ConversationState priorState = conversationManager.fromBlob(priorBlob);
+				if (priorState.hasWorkingContext() && 
+						priorState.workingContext().payload() instanceof SqlQueryPayload payload) {
+					String existingSql = payload.modelSql();
+					augmentedMessage = "Current query: " + existingSql + "\n\nUser request: " + message;
+				}
+			}
+			
+			ConversationTurnResult result = conversationManager.converse(augmentedMessage, priorBlob);
 
 			if (result.plan().status() == PlanStatus.READY) {
 				executor.execute(result.plan());
 				
-				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery().isPresent()) {
-					Query query = dataWarehouseActions.lastQuery().orElseThrow();
+				// Store working context if either SQL action was invoked
+				boolean sqlActionInvoked = sqlExplorerActions.showSqlQueryInvoked() || sqlExplorerActions.runSqlQueryInvoked();
+				if (sqlActionInvoked && sqlExplorerActions.lastQuery().isPresent()) {
+					Query query = sqlExplorerActions.lastQuery().orElseThrow();
 					SqlQueryPayload payload = SqlQueryPayload.fromQuery(query);
 					
 					var updatedState = result.state().withWorkingContext(
@@ -442,19 +476,19 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Filter refinement - 'filter that by region = West'")
 		void filterRefinement() {
 			String sessionId = "filter-refinement";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
 			assertPlanReady(turn1.plan());
-			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql1 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", sql1);
 
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn2 = processAndTrack(sessionId, "now filter that by region = 'West'");
 			assertPlanReady(turn2.plan());
 			
-			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql2 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 2 SQL: {}", sql2);
 
 			assertThat(sql2.toUpperCase()).contains("WHERE");
@@ -463,22 +497,23 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		}
 
 		@Test
-		@DisplayName("Column addition - 'add customer name to those results'")
+		@DisplayName("Column addition - 'also include customer_name column'")
 		void columnAddition() {
 			String sessionId = "column-addition";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values from the orders table");
 			assertPlanReady(turn1.plan());
-			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql1 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", sql1);
 
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
-			ConversationTurnResult turn2 = processAndTrack(sessionId, "add the customer name to those results");
+			// More explicit phrasing to avoid INSERT vs SELECT ambiguity
+			ConversationTurnResult turn2 = processAndTrack(sessionId, "also include the customer_name column in the results");
 			assertPlanReady(turn2.plan());
 			
-			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql2 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 2 SQL: {}", sql2);
 
 			assertThat(sql2.toUpperCase()).contains("CUSTOMER_NAME");
@@ -489,19 +524,19 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Date substitution - 'show same query for 2023'")
 		void dateSubstitution() {
 			String sessionId = "date-substitution";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values for January 2024");
 			assertPlanReady(turn1.plan());
-			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql1 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", sql1);
 
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
 			ConversationTurnResult turn2 = processAndTrack(sessionId, "show the same query but for January 2023");
 			assertPlanReady(turn2.plan());
 			
-			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String sql2 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 2 SQL: {}", sql2);
 
 			assertThat(sql2).contains("2023");
@@ -512,20 +547,26 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		@DisplayName("Context persists across multiple turns")
 		void contextPersistsAcrossTurns() {
 			String sessionId = "multi-turn-persist";
-			dataWarehouseActions.reset();
+			sqlExplorerActions.reset();
 
-			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
+			// Turn 1: Explicitly ask for SQL query generation
+			ConversationTurnResult turn1 = processAndTrack(sessionId, 
+					"generate a SQL query to show order_value from fct_orders");
 			assertPlanReady(turn1.plan());
 
-			dataWarehouseActions.reset();
-			ConversationTurnResult turn2 = processAndTrack(sessionId, "add customer names");
+			sqlExplorerActions.reset();
+			// Turn 2: Modify the existing query
+			ConversationTurnResult turn2 = processAndTrack(sessionId, 
+					"modify the query to also select customer_name by joining to dim_customer");
 			assertPlanReady(turn2.plan());
 
-			dataWarehouseActions.reset();
-			ConversationTurnResult turn3 = processAndTrack(sessionId, "filter by region = 'East'");
+			sqlExplorerActions.reset();
+			// Turn 3: Add a filter
+			ConversationTurnResult turn3 = processAndTrack(sessionId, 
+					"modify the query to add WHERE region = 'East'");
 			assertPlanReady(turn3.plan());
 
-			String finalSql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
+			String finalSql = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Final SQL: {}", finalSql);
 
 			assertThat(finalSql.toUpperCase()).contains("ORDER_VALUE");

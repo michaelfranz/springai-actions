@@ -52,10 +52,9 @@ public class SqlWorkingContextContributor implements PromptContributor {
 
 		StringBuilder sb = new StringBuilder();
 		sb.append(SECTION_HEADER).append("\n");
-		sb.append("🔴 CRITICAL: The user is refining this existing query. Your response MUST be based on this query:\n\n");
-		sb.append("```sql\n");
-		sb.append(sqlPayload.modelSql()).append("\n");
-		sb.append("```\n\n");
+		sb.append("🔴🔴🔴 YOU HAVE ALL THE INFORMATION NEEDED. DO NOT USE PENDING. 🔴🔴🔴\n\n");
+		sb.append("Existing query to modify:\n");
+		sb.append(sqlPayload.modelSql()).append("\n\n");
 
 		// Add metadata summary
 		sb.append("Query details:\n");
@@ -69,7 +68,9 @@ public class SqlWorkingContextContributor implements PromptContributor {
 			sb.append("- Current filter: ").append(sqlPayload.whereClause()).append("\n");
 		}
 
-		sb.append("\n🔴 MODIFY the query above. Keep all existing SELECT columns, JOINs, and conditions. Only ADD or CHANGE what the user asks for.\n");
+		sb.append("\n🎯 YOUR TASK: Take the query above, apply the user's modification, and return it in this EXACT format:\n");
+		sb.append("{\"message\":\"...\",\"steps\":[{\"actionId\":\"showSqlQuery\",\"description\":\"...\",\"parameters\":{\"query\":{\"sql\":\"YOUR_MODIFIED_SQL_HERE\"}}}]}\n\n");
+		sb.append("⚠️ Do NOT use PENDING. Do NOT invent parameters. Only use 'query' with the 'sql' field.\n");
 
 		return Optional.of(sb.toString());
 	}

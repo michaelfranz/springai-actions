@@ -53,7 +53,7 @@ class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScena
 				.build();
 
 		return Planner.builder()
-				.defaultChatClient(defaultChatClient)
+				.defaultChatClient(modestChatClient)
 				.persona(sqlAnalystPersona)
 				.promptContributor(adaptiveContributor)
 				.tools(trackingTool)

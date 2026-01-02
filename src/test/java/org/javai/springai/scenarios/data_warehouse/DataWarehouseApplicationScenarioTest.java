@@ -270,7 +270,7 @@ class DataWarehouseApplicationScenarioTest extends AbstractDataWarehouseScenario
 					.build();
 
 			pendingAwarePlanner = Planner.builder()
-					.defaultChatClient(defaultChatClient)
+					.defaultChatClient(modestChatClient)
 					.persona(pendingAwarePersona)
 					.actions(pendingTestActions)
 					.promptContributor(new SqlCatalogContextContributor(pendingCatalog))

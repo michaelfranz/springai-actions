@@ -45,8 +45,9 @@ public abstract class AbstractDataWarehouseScenarioTest {
 	protected static final Logger log = LoggerFactory.getLogger(AbstractDataWarehouseScenarioTest.class);
 	protected static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	protected static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
-	public static final String DEFAULT_CHAT_MODEL_VERSION = "gpt-4.1-mini";
-	public static final String FALLBACK_CHAT_MODEL_VERSION = "gpt-4o-mini";
+	public static final String MODEST_CHAT_MODEL_VERSION = "gpt-4.1-mini";
+	public static final String CAPABLE_CHAT_MODEL_VERSION = "gpt-4o";
+	public static final String MOST_CAPABLE_CHAT_MODEL_VERSION = "gpt-4-turbo";
 
 	// SQL infrastructure
 	protected InMemorySqlCatalog catalog;
@@ -59,8 +60,9 @@ public abstract class AbstractDataWarehouseScenarioTest {
 	protected DataWarehouseActions dataWarehouseActions;
 
 	// LLM infrastructure
-	protected ChatClient defaultChatClient;
-	protected ChatClient fallbackChatClient;
+	protected ChatClient modestChatClient;
+	protected ChatClient capableChatClient;
+	protected ChatClient mostCapableChatClient;
 	protected Planner planner;
 	protected DefaultPlanExecutor executor;
 	protected ConversationManager conversationManager;
@@ -76,21 +78,9 @@ public abstract class AbstractDataWarehouseScenarioTest {
 
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
 
-		defaultChatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(OpenAiChatOptions.builder()
-						.model(DEFAULT_CHAT_MODEL_VERSION)
-						.temperature(0.0)
-						.topP(1.0)
-						.build()))
-				.build();
-
-		fallbackChatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(OpenAiChatOptions.builder()
-						.model(FALLBACK_CHAT_MODEL_VERSION)
-						.temperature(0.0)
-						.topP(1.0)
-						.build()))
-				.build();
+		modestChatClient = getChatClient(chatModel, MODEST_CHAT_MODEL_VERSION);
+		capableChatClient = getChatClient(chatModel, CAPABLE_CHAT_MODEL_VERSION);
+		mostCapableChatClient = getChatClient(chatModel, MOST_CAPABLE_CHAT_MODEL_VERSION);
 
 		// Initialize actions
 		dataWarehouseActions = new DataWarehouseActions();
@@ -108,6 +98,16 @@ public abstract class AbstractDataWarehouseScenarioTest {
 
 		// Allow subclasses to customize planner and conversation manager
 		initializePlanner();
+	}
+
+	protected static ChatClient getChatClient(OpenAiChatModel chatModel, String chatModelVersion) {
+		return ChatClient.builder(Objects.requireNonNull(chatModel))
+				.defaultOptions(Objects.requireNonNull(OpenAiChatOptions.builder()
+						.model(chatModelVersion)
+						.temperature(0.0)
+						.topP(1.0)
+						.build()))
+				.build();
 	}
 
 	/**
@@ -175,8 +175,9 @@ public abstract class AbstractDataWarehouseScenarioTest {
 		PersonaSpec sqlAnalystPersona = createDefaultPersona();
 
 		planner = Planner.builder()
-				.defaultChatClient(defaultChatClient, 2)
-				.fallbackChatClient(fallbackChatClient, 2)
+				.defaultChatClient(modestChatClient, 2)
+				.fallbackChatClient(capableChatClient, 2)
+				.fallbackChatClient(mostCapableChatClient, 2)
 				.persona(sqlAnalystPersona)
 				.actions(dataWarehouseActions)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
