@@ -53,7 +53,7 @@ import org.junit.jupiter.api.Test;
  * action requires a date range. The handler prompts for the missing information.</p>
  */
 @DisplayName("Plan State Handlers Scenario")
-public class PlanStateHandlersScenarioTest {
+class PlanStateHandlersScenarioTest {
 
 	// Simulates application response buffer (what would be sent to the user)
 	private List<String> applicationResponses;

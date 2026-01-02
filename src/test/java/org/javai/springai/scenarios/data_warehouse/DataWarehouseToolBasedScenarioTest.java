@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
-import java.util.Objects;
-import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
@@ -14,17 +12,10 @@ import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
-import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.SqlCatalogTool;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
  * Data warehouse scenario tests using tool-based dynamic schema discovery.
@@ -42,64 +33,13 @@ import org.springframework.ai.openai.api.OpenAiApi;
  * </ul>
  */
 @DisplayName("Data Warehouse Scenario - Tool-Based Dynamic Discovery")
-public class DataWarehouseToolBasedScenarioTest {
+class DataWarehouseToolBasedScenarioTest extends AbstractDataWarehouseScenarioTest {
 
-	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
-	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
+	private SqlCatalogTool catalogTool;
 
-	Planner planner;
-	DefaultPlanExecutor executor;
-	ConversationManager conversationManager;
-	DataWarehouseActions dataWarehouseActions;
-	SqlCatalogTool catalogTool;
-	InMemorySqlCatalog catalog;
-	ChatClient chatClient;
-
-	@BeforeEach
-	void setUp() {
-		Assumptions.assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable LLM integration tests");
-		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
-				"OPENAI_API_KEY must be set for this integration test");
-
-		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
-				.temperature(0.0)
-				.topP(1.0)
-				.build();
-		chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
-				.build();
-
-		dataWarehouseActions = new DataWarehouseActions();
-
-		// Create SQL catalog - same schema as static approach
-		catalog = new InMemorySqlCatalog()
-				.addTable("fct_orders", "Fact table for orders containing order transactions", "fact")
-				.withSynonyms("fct_orders", "orders", "order", "sales")
-				.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
-						new String[] { "fk:dim_customer.id" }, null)
-				.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
-						new String[] { "fk:dim_date.id" }, null)
-				.addColumn("fct_orders", "order_value", "Order amount in dollars", "double",
-						new String[] { "measure" }, null)
-				.withColumnSynonyms("fct_orders", "order_value", "value", "amount", "total")
-				.addTable("dim_customer", "Customer dimension with customer details", "dimension")
-				.withSynonyms("dim_customer", "customers", "customer", "cust")
-				.addColumn("dim_customer", "id", "Customer primary key", "string",
-						new String[] { "pk" }, new String[] { "unique" })
-				.addColumn("dim_customer", "customer_name", "Customer full name", "string",
-						new String[] { "attribute" }, null)
-				.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name")
-				.addTable("dim_date", "Date dimension with calendar dates", "dimension")
-				.withSynonyms("dim_date", "dates", "date", "calendar")
-				.addColumn("dim_date", "id", "Date primary key", "string",
-						new String[] { "pk" }, new String[] { "unique" })
-				.addColumn("dim_date", "date", "Calendar date value", "date",
-						new String[] { "attribute" }, null);
-
-		// Create the catalog tool
+	@Override
+	protected void initializePlanner() {
+		// Create the catalog tool from base class catalog
 		catalogTool = new SqlCatalogTool(catalog);
 
 		PersonaSpec sqlAnalystPersona = PersonaSpec.builder()
@@ -125,7 +65,7 @@ public class DataWarehouseToolBasedScenarioTest {
 				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)  // Still needed for Query resolution
 				.build();
-		executor = new DefaultPlanExecutor();
+		
 		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());
 	}
 
@@ -150,9 +90,9 @@ public class DataWarehouseToolBasedScenarioTest {
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 			
 			// Log tool usage for analysis
-			System.out.println("Tool usage for simple query:");
-			System.out.println("  listTables: " + catalogTool.listTablesInvokedCount());
-			System.out.println("  getTableDetails: " + catalogTool.getTableDetailsInvokedCount());
+			log.info("Tool usage for simple query:");
+			log.info("  listTables: {}", catalogTool.listTablesInvokedCount());
+			log.info("  getTableDetails: {}", catalogTool.getTableDetailsInvokedCount());
 		}
 
 		@Test
@@ -171,9 +111,9 @@ public class DataWarehouseToolBasedScenarioTest {
 			assertExecutionSuccess(executed);
 			
 			// Log tool usage for analysis  
-			System.out.println("Tool usage for customer query:");
-			System.out.println("  listTables: " + catalogTool.listTablesInvokedCount());
-			System.out.println("  getTableDetails: " + catalogTool.getTableDetailsInvokedCount());
+			log.info("Tool usage for customer query:");
+			log.info("  listTables: {}", catalogTool.listTablesInvokedCount());
+			log.info("  getTableDetails: {}", catalogTool.getTableDetailsInvokedCount());
 		}
 
 		@Test
@@ -271,9 +211,9 @@ public class DataWarehouseToolBasedScenarioTest {
 			assertThat(sql).contains("DIM_CUSTOMER");
 			
 			// Log tool usage for comparison purposes
-			System.out.println("Tool invocations for 'show me all customer names':");
-			System.out.println("  listTables: " + catalogTool.listTablesInvokedCount());
-			System.out.println("  getTableDetails: " + catalogTool.getTableDetailsInvokedCount());
+			log.info("Tool invocations for 'show me all customer names':");
+			log.info("  listTables: {}", catalogTool.listTablesInvokedCount());
+			log.info("  getTableDetails: {}", catalogTool.getTableDetailsInvokedCount());
 		}
 	}
 
@@ -299,32 +239,29 @@ public class DataWarehouseToolBasedScenarioTest {
 				assertThat(plan).isNotNull();
 				
 				// Log what happened for analysis
-				System.out.println("Plan status for non-existent concept: " + plan.status());
-				System.out.println("  listTables invoked: " + catalogTool.listTablesInvokedCount());
+				log.info("Plan status for non-existent concept: {}", plan.status());
+				log.info("  listTables invoked: {}", catalogTool.listTablesInvokedCount());
 				
 				// Any status is acceptable for this test - the key is that 
 				// the system handles the non-existent concept without crashing
 				if (plan.status() == PlanStatus.READY) {
 					PlanExecutionResult executed = executor.execute(plan);
 					if (executed.success()) {
-					if (dataWarehouseActions.lastQuery().isPresent()) {
-						org.javai.springai.actions.sql.Query query = dataWarehouseActions.lastQuery().orElseThrow();
+						if (dataWarehouseActions.lastQuery().isPresent()) {
+							org.javai.springai.actions.sql.Query query = dataWarehouseActions.lastQuery().orElseThrow();
 							String sql = query.sqlString().toUpperCase();
-							System.out.println("  Generated SQL: " + sql);
+							log.info("  Generated SQL: {}", sql);
 						}
 					} else {
-						System.out.println("  Execution failed (expected for non-existent concept)");
+						log.info("  Execution failed (expected for non-existent concept)");
 					}
 				} else {
-					System.out.println("  Non-READY status: " + plan.status() + " (acceptable)");
+					log.info("  Non-READY status: {} (acceptable)", plan.status());
 				}
 			} catch (Exception e) {
 				// Even exceptions are "graceful" handling - the system didn't crash unexpectedly
-				System.out.println("Exception handling non-existent concept: " + e.getMessage());
-				// For now, we'll accept this as the system attempting to handle the error
-				// In production, we'd want better error handling
+				log.info("Exception handling non-existent concept: {}", e.getMessage());
 			}
 		}
 	}
 }
-

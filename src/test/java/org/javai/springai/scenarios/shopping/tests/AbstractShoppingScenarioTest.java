@@ -9,6 +9,7 @@ import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
+import org.javai.springai.actions.internal.exec.StepExecutionResult;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.actions.Notification;
@@ -47,6 +48,7 @@ public abstract class AbstractShoppingScenarioTest {
 	protected static final Logger log = LoggerFactory.getLogger(AbstractShoppingScenarioTest.class);
 	protected static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
 	protected static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
+	public static final String CHAT_MODEL_VERSION = "gpt-4o-mini"; // "gpt-4.1-mini";
 
 	// Store infrastructure
 	protected MockStoreApi storeApi;
@@ -81,7 +83,7 @@ public abstract class AbstractShoppingScenarioTest {
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
 		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
+				.model(CHAT_MODEL_VERSION)
 				.temperature(0.1)
 				.topP(1.0)
 				.build();
@@ -125,7 +127,7 @@ public abstract class AbstractShoppingScenarioTest {
 	 */
 	protected List<Notification> extractNotifications(PlanExecutionResult result) {
 		return result.steps().stream()
-				.map(step -> step.returnValue())
+				.map(StepExecutionResult::returnValue)
 				.filter(rv -> rv instanceof ActionResult)
 				.map(rv -> (ActionResult) rv)
 				.flatMap(ar -> ar.notifications().stream())
@@ -140,6 +142,36 @@ public abstract class AbstractShoppingScenarioTest {
 			org.javai.springai.actions.api.ActionContext context) {
 		Plan plan = conversationManager.converse(message, sessionId).plan();
 		return executor.execute(plan, context);
+	}
+
+	/**
+	 * Start a shopping session and populate the context with the basket.
+	 * Tries multiple phrasings if the LLM doesn't recognize the initial intent.
+	 * 
+	 * @param sessionId the conversation session ID
+	 * @param context the action context to populate with the basket
+	 * @return true if the session was successfully started, false if the LLM didn't recognize any phrasing
+	 */
+	protected boolean startSession(String sessionId, org.javai.springai.actions.api.ActionContext context) {
+		String[] phrasings = {
+			"start a new shopping session",
+			"begin shopping session",
+			"I want to start shopping"
+		};
+		
+		for (String phrasing : phrasings) {
+			Plan plan = conversationManager.converse(phrasing, sessionId).plan();
+			if (plan.status() == org.javai.springai.actions.PlanStatus.READY) {
+				PlanExecutionResult result = executor.execute(plan, context);
+				if (result.success() && context.contains("basket")) {
+					log.info("Session started with phrasing: '{}'", phrasing);
+					return true;
+				}
+			}
+		}
+		
+		log.warn("Failed to start session with any phrasing. LLM did not invoke startSession.");
+		return false;
 	}
 }
 

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.javai.springai.actions.api.Action;
@@ -83,7 +84,7 @@ public class InventoryAwareShoppingActions {
 		// Create a fresh basket and session - these are placed into context
 		Map<String, Integer> basket = new HashMap<>();
 		currentSession = ShoppingSession.create(
-				java.util.UUID.randomUUID().toString(),
+				UUID.randomUUID().toString(),
 				customerId
 		);
 		
@@ -456,7 +457,7 @@ public class InventoryAwareShoppingActions {
 
 		if (currentSession == null) {
 			currentSession = ShoppingSession.create(
-					java.util.UUID.randomUUID().toString(),
+					UUID.randomUUID().toString(),
 					currentCustomerId
 			);
 		}
@@ -540,7 +541,7 @@ public class InventoryAwareShoppingActions {
 		// Store mission in session
 		if (currentSession == null) {
 			currentSession = ShoppingSession.create(
-					java.util.UUID.randomUUID().toString(),
+					UUID.randomUUID().toString(),
 					currentCustomerId
 			);
 		}

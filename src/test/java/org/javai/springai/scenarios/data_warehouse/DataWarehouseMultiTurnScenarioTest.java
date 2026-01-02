@@ -5,7 +5,6 @@ import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.Planner;
@@ -22,15 +21,10 @@ import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.javai.springai.actions.sql.SqlQueryPayload;
 import org.javai.springai.actions.sql.SqlWorkingContextContributor;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
  * Demonstrates multi-turn conversation patterns for data warehouse queries.
@@ -61,46 +55,19 @@ import org.springframework.ai.openai.api.OpenAiApi;
  * }</pre>
  */
 @DisplayName("Data Warehouse Multi-Turn Conversation Scenario")
-public class DataWarehouseMultiTurnScenarioTest {
+class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTest {
 
-	// Enable with: export RUN_LLM_TESTS=true
-	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
-
-	private DataWarehouseActions dataWarehouseActions;
-	private InMemorySqlCatalog catalog;
-	private Planner planner;
-	private DefaultPlanExecutor executor;
-	private ConversationManager conversationManager;
+	// Multi-turn specific infrastructure
 	private PayloadTypeRegistry typeRegistry;
 	private ConversationStateSerializer serializer;
 
 	// Simulates application's session storage
 	private Map<String, byte[]> applicationBlobStore;
 
-	@BeforeEach
-	void setUp() {
-		// Skip setup if LLM tests aren't enabled
-		if (!RUN_LLM_TESTS) {
-			return;
-		}
-
-		String apiKey = System.getenv("OPENAI_API_KEY");
-		if (apiKey == null || apiKey.isBlank()) {
-			throw new IllegalStateException("OPENAI_API_KEY must be set");
-		}
-
-		OpenAiApi api = OpenAiApi.builder().apiKey(apiKey).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
-				.temperature(0.0)
-				.build();
-		var chatModel = OpenAiChatModel.builder().openAiApi(api).defaultOptions(options).build();
-		var chatClient = ChatClient.builder(chatModel).defaultOptions(options).build();
-
-		dataWarehouseActions = new DataWarehouseActions();
-
-		// Build schema with synonyms for better LLM understanding
-		catalog = new InMemorySqlCatalog()
+	@Override
+	protected InMemorySqlCatalog createDefaultCatalog() {
+		// Extended catalog with region column for multi-turn tests
+		return new InMemorySqlCatalog()
 				.addTable("fct_orders", "Fact table containing order transactions", "fact")
 				.withSynonyms("fct_orders", "orders", "order", "sales")
 				.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
@@ -109,6 +76,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 						new String[] { "fk:dim_date.id" }, null)
 				.addColumn("fct_orders", "order_value", "Order amount in dollars", "double",
 						new String[] { "measure" }, null)
+				.withColumnSynonyms("fct_orders", "order_value", "value", "amount", "total")
 				.addColumn("fct_orders", "region", "Geographic region", "string",
 						new String[] { "attribute" }, null)
 				.addTable("dim_customer", "Customer dimension table", "dimension")
@@ -117,6 +85,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 						new String[] { "pk" }, new String[] { "unique" })
 				.addColumn("dim_customer", "customer_name", "Customer full name", "string",
 						new String[] { "attribute" }, null)
+				.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name")
 				.addTable("dim_date", "Date dimension table", "dimension")
 				.withSynonyms("dim_date", "dates", "date")
 				.addColumn("dim_date", "id", "Date ID (YYYYMMDD)", "string",
@@ -124,8 +93,11 @@ public class DataWarehouseMultiTurnScenarioTest {
 				.addColumn("dim_date", "date", "Calendar date", "date",
 						new String[] { "attribute" }, null)
 				.withDialect(Query.Dialect.ANSI);
+	}
 
-		PersonaSpec persona = PersonaSpec.builder()
+	@Override
+	protected PersonaSpec createDefaultPersona() {
+		return PersonaSpec.builder()
 				.name("SQLDataWarehouseAssistant")
 				.role("Assistant for data warehouse query planning")
 				.principles(List.of(
@@ -138,6 +110,11 @@ public class DataWarehouseMultiTurnScenarioTest {
 						"Only use table and column names from the catalog",
 						"If any required parameter is unclear, use PENDING"))
 				.build();
+	}
+
+	@Override
+	protected void initializePlanner() {
+		PersonaSpec persona = createDefaultPersona();
 
 		planner = Planner.builder()
 				.withChatClient(chatClient)
@@ -147,8 +124,6 @@ public class DataWarehouseMultiTurnScenarioTest {
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.promptContributor(new SqlWorkingContextContributor())
 				.build();
-
-		executor = new DefaultPlanExecutor();
 
 		// Set up blob-based conversation infrastructure
 		typeRegistry = new PayloadTypeRegistry();
@@ -180,7 +155,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 			PayloadTypeRegistry registry = new PayloadTypeRegistry();
 			registry.register("test.context", String.class);
 
-			ConversationStateSerializer serializer = new JsonConversationStateSerializer();
+			ConversationStateSerializer testSerializer = new JsonConversationStateSerializer();
 
 			// Create state with working context
 			ConversationState state =
@@ -188,12 +163,12 @@ public class DataWarehouseMultiTurnScenarioTest {
 							.withWorkingContext(WorkingContext.of("test.context", "test payload"), 10);
 
 			// Serialize
-			byte[] blob = serializer.serialize(state, registry);
+			byte[] blob = testSerializer.serialize(state, registry);
 			assertThat(blob).isNotNull();
 			assertThat(blob.length).isGreaterThan(10);
 
 			// Deserialize
-			var restored = serializer.deserialize(blob, registry);
+			var restored = testSerializer.deserialize(blob, registry);
 			assertThat(restored.originalInstruction()).isEqualTo("show me orders");
 			assertThat(restored.workingContext()).isNotNull();
 			assertThat(restored.workingContext().contextType()).isEqualTo("test.context");
@@ -206,13 +181,13 @@ public class DataWarehouseMultiTurnScenarioTest {
 			PayloadTypeRegistry registry = new PayloadTypeRegistry();
 			registry.register("test.context", String.class);
 
-			ConversationStateSerializer serializer = new JsonConversationStateSerializer();
+			ConversationStateSerializer testSerializer = new JsonConversationStateSerializer();
 
 			var state = ConversationState.initial("test query")
 					.withWorkingContext(WorkingContext.of("test.context", "payload"), 10);
 
-			byte[] blob = serializer.serialize(state, registry);
-			String json = serializer.toReadableJson(blob);
+			byte[] blob = testSerializer.serialize(state, registry);
+			String json = testSerializer.toReadableJson(blob);
 
 			assertThat(json).contains("originalInstruction");
 			assertThat(json).contains("test query");
@@ -223,8 +198,6 @@ public class DataWarehouseMultiTurnScenarioTest {
 		@Test
 		@DisplayName("expire() creates empty state with blob")
 		void expireCreatesEmptyState() {
-			if (!RUN_LLM_TESTS) return;
-
 			ConversationTurnResult expired = conversationManager.expire();
 
 			assertThat(expired.state().originalInstruction()).isNull();
@@ -265,33 +238,18 @@ public class DataWarehouseMultiTurnScenarioTest {
 
 		/**
 		 * Simulates the application's session handling.
-		 * 
-		 * <p>This demonstrates the recommended pattern:</p>
-		 * <ol>
-		 *   <li>Load prior blob from storage</li>
-		 *   <li>Process the turn with ConversationManager</li>
-		 *   <li>Execute the plan if ready</li>
-		 *   <li>Extract working context from execution results</li>
-		 *   <li>Store updated blob for next turn</li>
-		 * </ol>
 		 */
 		private ConversationTurnResult processUserMessage(String sessionId, String message) {
-			// Load prior blob from "database"
 			byte[] priorBlob = applicationBlobStore.get(sessionId);
-
-			// Process the turn
 			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
 
-			// Execute plan if ready and extract working context
 			if (result.plan().status() == PlanStatus.READY) {
 				executor.execute(result.plan());
 				
-				// If we got a Query, create a working context from it
 				if (dataWarehouseActions.showSqlQueryInvoked() && dataWarehouseActions.lastQuery().isPresent()) {
 					Query query = dataWarehouseActions.lastQuery().get();
 					SqlQueryPayload payload = SqlQueryPayload.fromQuery(query);
 					
-					// Update state with working context and re-serialize
 					var updatedState = result.state().withWorkingContext(
 							WorkingContext.of(SqlQueryPayload.CONTEXT_TYPE, payload),
 							conversationManager.config().maxHistorySize());
@@ -303,9 +261,7 @@ public class DataWarehouseMultiTurnScenarioTest {
 				}
 			}
 
-			// Store blob for next turn
 			applicationBlobStore.put(sessionId, result.blob());
-
 			return result;
 		}
 
@@ -315,7 +271,6 @@ public class DataWarehouseMultiTurnScenarioTest {
 			String sessionId = "multi-turn-session-1";
 			dataWarehouseActions.reset();
 
-			// Turn 1: Initial query
 			ConversationTurnResult result = processUserMessage(sessionId,
 					"show me order values with customer names");
 
@@ -327,13 +282,10 @@ public class DataWarehouseMultiTurnScenarioTest {
 			assertThat(sql).contains("FCT_ORDERS");
 			assertThat(sql).contains("DIM_CUSTOMER");
 
-			// Blob should be stored
 			assertThat(applicationBlobStore.get(sessionId)).isNotNull();
 
-			// Log for inspection
-			System.out.println("Turn 1 SQL: " + query.sqlString());
-			System.out.println("Turn 1 Blob (readable):");
-			System.out.println(conversationManager.toReadableJson(result.blob()));
+			log.info("Turn 1 SQL: {}", query.sqlString());
+			log.info("Turn 1 Blob (readable): {}", conversationManager.toReadableJson(result.blob()));
 		}
 
 		@Test
@@ -342,18 +294,15 @@ public class DataWarehouseMultiTurnScenarioTest {
 			String sessionId = "multi-turn-session-2";
 			dataWarehouseActions.reset();
 
-			// Turn 1: Initial query
 			ConversationTurnResult turn1 = processUserMessage(sessionId,
 					"show me order values with customer names");
 			assertPlanReady(turn1.plan());
 			
 			String turn1Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 1 SQL: " + turn1Sql);
+			log.info("Turn 1 SQL: {}", turn1Sql);
 
 			dataWarehouseActions.reset();
 
-			// Turn 2: Refine the query
-			// The blob contains the prior context, which the LLM should use
 			ConversationTurnResult turn2 = processUserMessage(sessionId,
 					"now filter that by region = 'West'");
 
@@ -361,16 +310,14 @@ public class DataWarehouseMultiTurnScenarioTest {
 			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
 
 			String turn2Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 2 SQL: " + turn2Sql);
+			log.info("Turn 2 SQL: {}", turn2Sql);
 
-			// The refined query should include the filter
 			assertThat(turn2Sql.toUpperCase()).contains("REGION");
 			assertThat(turn2Sql.toUpperCase()).contains("WEST");
 
-			// Verify state has history
 			var state = conversationManager.fromBlob(turn2.blob());
-			System.out.println("Turn 2 State has working context: " + state.hasWorkingContext());
-			System.out.println("Turn 2 History size: " + state.turnHistory().size());
+			log.info("Turn 2 State has working context: {}", state.hasWorkingContext());
+			log.info("Turn 2 History size: {}", state.turnHistory().size());
 		}
 
 		@Test
@@ -379,22 +326,18 @@ public class DataWarehouseMultiTurnScenarioTest {
 			String sessionId = "expiry-session";
 			dataWarehouseActions.reset();
 
-			// Establish a conversation
 			processUserMessage(sessionId, "show me all orders");
 			assertThat(applicationBlobStore.get(sessionId)).isNotNull();
 
-			// Expire the session
 			ConversationTurnResult expired = conversationManager.expire();
 			applicationBlobStore.put(sessionId, expired.blob());
 
-			// Verify the state is empty
 			var state = conversationManager.fromBlob(applicationBlobStore.get(sessionId));
 			assertThat(state.originalInstruction()).isNull();
 			assertThat(state.workingContext()).isNull();
 			assertThat(state.turnHistory()).isEmpty();
 
-			System.out.println("Expired state:");
-			System.out.println(conversationManager.toReadableJson(expired.blob()));
+			log.info("Expired state: {}", conversationManager.toReadableJson(expired.blob()));
 		}
 	}
 
@@ -406,11 +349,6 @@ public class DataWarehouseMultiTurnScenarioTest {
 		@Test
 		@DisplayName("demonstrates full application workflow")
 		void fullApplicationWorkflow() {
-			// This test demonstrates the recommended pattern for applications
-
-			// ========================================
-			// SETUP (done once at application startup)
-			// ========================================
 			PayloadTypeRegistry registry = new PayloadTypeRegistry();
 			registry.register(SqlQueryPayload.CONTEXT_TYPE, SqlQueryPayload.class);
 
@@ -422,80 +360,47 @@ public class DataWarehouseMultiTurnScenarioTest {
 			ConversationManager manager = new ConversationManager(
 					planner, localSerializer, registry, config);
 
-			// ========================================
-			// REQUEST 1: New conversation
-			// ========================================
-			
-			// Application loads blob (null for new session)
-			byte[] blob1 = null;  // sessionRepository.getBlob(sessionId);
+			byte[] blob1 = null;
+			ConversationTurnResult result1 = manager.converse("show me total order values", blob1);
 
-			// Process turn
-			ConversationTurnResult result1 = manager.converse(
-					"show me total order values", blob1);
-
-			// Execute if ready
 			if (result1.status() == PlanStatus.READY) {
 				executor.execute(result1.plan());
 			}
 
-			// Application stores blob
-			// sessionRepository.saveBlob(sessionId, result1.blob());
 			byte[] storedBlob = result1.blob();
+			log.info("Request 1 complete. Blob size: {} bytes", storedBlob.length);
 
-			System.out.println("Request 1 complete. Blob size: " + storedBlob.length + " bytes");
-
-			// ========================================
-			// REQUEST 2: Follow-up (uses stored blob)
-			// ========================================
 			dataWarehouseActions.reset();
 
-			// Application loads blob
-			byte[] blob2 = storedBlob;  // sessionRepository.getBlob(sessionId);
-
-			// Process turn with prior context
-			ConversationTurnResult result2 = manager.converse(
-					"group that by customer", blob2);
+			byte[] blob2 = storedBlob;
+			ConversationTurnResult result2 = manager.converse("group that by customer", blob2);
 
 			if (result2.status() == PlanStatus.READY) {
 				executor.execute(result2.plan());
 			}
 
-			// Store updated blob
 			storedBlob = result2.blob();
+			log.info("Request 2 complete. Blob size: {} bytes", storedBlob.length);
 
-			System.out.println("Request 2 complete. Blob size: " + storedBlob.length + " bytes");
-
-			// ========================================
-			// DEBUG: Inspect state
-			// ========================================
 			String readable = manager.toReadableJson(storedBlob);
-			System.out.println("Final state (readable JSON):");
-			System.out.println(readable);
+			log.info("Final state (readable JSON): {}", readable);
 
-			// ========================================
-			// USER CANCELS
-			// ========================================
 			ConversationTurnResult expired = manager.expire();
-			// sessionRepository.saveBlob(sessionId, expired.blob());
-
 			var finalState = manager.fromBlob(expired.blob());
 			assertThat(finalState.workingContext()).isNull();
-			System.out.println("Session cancelled/expired");
+			log.info("Session cancelled/expired");
 		}
 	}
 
 	// ========================================================================
-	// 5.4x Integration Tests - Query Refinement Patterns
+	// Query Refinement Patterns
 	// ========================================================================
 
 	@Nested
-	@DisplayName("Query Refinement Patterns (5.4x)")
+	@DisplayName("Query Refinement Patterns")
 	@EnabledIfEnvironmentVariable(named = "RUN_LLM_TESTS", matches = "true")
 	class QueryRefinementPatterns {
 
-		/**
-		 * Processes a message and tracks working context.
-		 */
 		private ConversationTurnResult processAndTrack(String sessionId, String message) {
 			byte[] priorBlob = applicationBlobStore.get(sessionId);
 			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
@@ -523,126 +428,105 @@ public class DataWarehouseMultiTurnScenarioTest {
 		}
 
 		@Test
-		@DisplayName("5.4a: Filter refinement - 'filter that by region = West'")
+		@DisplayName("Filter refinement - 'filter that by region = West'")
 		void filterRefinement() {
 			String sessionId = "filter-refinement";
 			dataWarehouseActions.reset();
 
-			// Turn 1: Initial query
-			ConversationTurnResult turn1 = processAndTrack(sessionId,
-					"show me order values");
+			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
 			assertPlanReady(turn1.plan());
 			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 1 SQL: " + sql1);
+			log.info("Turn 1 SQL: {}", sql1);
 
 			dataWarehouseActions.reset();
 
-			// Turn 2: Add filter
-			ConversationTurnResult turn2 = processAndTrack(sessionId,
-					"now filter that by region = 'West'");
+			ConversationTurnResult turn2 = processAndTrack(sessionId, "now filter that by region = 'West'");
 			assertPlanReady(turn2.plan());
 			
 			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 2 SQL: " + sql2);
+			log.info("Turn 2 SQL: {}", sql2);
 
-			// Verify the filter was added
 			assertThat(sql2.toUpperCase()).contains("WHERE");
 			assertThat(sql2.toUpperCase()).contains("REGION");
 			assertThat(sql2).contains("West");
 		}
 
 		@Test
-		@DisplayName("5.4b: Column addition - 'add customer name to those results'")
+		@DisplayName("Column addition - 'add customer name to those results'")
 		void columnAddition() {
 			String sessionId = "column-addition";
 			dataWarehouseActions.reset();
 
-			// Turn 1: Initial query with single column
-			ConversationTurnResult turn1 = processAndTrack(sessionId,
-					"show me order values from the orders table");
+			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values from the orders table");
 			assertPlanReady(turn1.plan());
 			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 1 SQL: " + sql1);
+			log.info("Turn 1 SQL: {}", sql1);
 
 			dataWarehouseActions.reset();
 
-			// Turn 2: Add column
-			ConversationTurnResult turn2 = processAndTrack(sessionId,
-					"add the customer name to those results");
+			ConversationTurnResult turn2 = processAndTrack(sessionId, "add the customer name to those results");
 			assertPlanReady(turn2.plan());
 			
 			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 2 SQL: " + sql2);
+			log.info("Turn 2 SQL: {}", sql2);
 
-			// Verify customer_name was added (implies JOIN to dim_customer)
 			assertThat(sql2.toUpperCase()).contains("CUSTOMER_NAME");
 			assertThat(sql2.toUpperCase()).contains("DIM_CUSTOMER");
 		}
 
 		@Test
-		@DisplayName("5.4c: Date substitution - 'show same query for 2023'")
+		@DisplayName("Date substitution - 'show same query for 2023'")
 		void dateSubstitution() {
 			String sessionId = "date-substitution";
 			dataWarehouseActions.reset();
 
-			// Turn 1: Query with date filter
-			ConversationTurnResult turn1 = processAndTrack(sessionId,
-					"show me order values for January 2024");
+			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values for January 2024");
 			assertPlanReady(turn1.plan());
 			String sql1 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 1 SQL: " + sql1);
+			log.info("Turn 1 SQL: {}", sql1);
 
 			dataWarehouseActions.reset();
 
-			// Turn 2: Change date
-			ConversationTurnResult turn2 = processAndTrack(sessionId,
-					"show the same query but for January 2023");
+			ConversationTurnResult turn2 = processAndTrack(sessionId, "show the same query but for January 2023");
 			assertPlanReady(turn2.plan());
 			
 			String sql2 = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Turn 2 SQL: " + sql2);
+			log.info("Turn 2 SQL: {}", sql2);
 
-			// Verify year changed
 			assertThat(sql2).contains("2023");
 			assertThat(sql2).doesNotContain("2024");
 		}
 
 		@Test
-		@DisplayName("5.4d: Context persists across multiple turns")
+		@DisplayName("Context persists across multiple turns")
 		void contextPersistsAcrossTurns() {
 			String sessionId = "multi-turn-persist";
 			dataWarehouseActions.reset();
 
-			// Turn 1
 			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
 			assertPlanReady(turn1.plan());
 
-			// Turn 2
 			dataWarehouseActions.reset();
 			ConversationTurnResult turn2 = processAndTrack(sessionId, "add customer names");
 			assertPlanReady(turn2.plan());
 
-			// Turn 3
 			dataWarehouseActions.reset();
 			ConversationTurnResult turn3 = processAndTrack(sessionId, "filter by region = 'East'");
 			assertPlanReady(turn3.plan());
 
-			// Verify final query has all refinements
 			String finalSql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
-			System.out.println("Final SQL: " + finalSql);
+			log.info("Final SQL: {}", finalSql);
 
 			assertThat(finalSql.toUpperCase()).contains("ORDER_VALUE");
 			assertThat(finalSql.toUpperCase()).contains("CUSTOMER_NAME");
 			assertThat(finalSql.toUpperCase()).contains("REGION");
 			assertThat(finalSql).contains("East");
 
-			// Verify history is tracked
 			var state = conversationManager.fromBlob(turn3.blob());
 			assertThat(state.hasWorkingContext()).isTrue();
 			assertThat(state.turnHistory()).hasSizeGreaterThanOrEqualTo(1);
 			
-			System.out.println("History size: " + state.turnHistory().size());
+			log.info("History size: {}", state.turnHistory().size());
 		}
 	}
 }
-

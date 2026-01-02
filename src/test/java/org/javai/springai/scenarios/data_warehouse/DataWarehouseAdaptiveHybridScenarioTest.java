@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
-import java.util.Objects;
-import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
@@ -14,19 +12,9 @@ import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.javai.springai.actions.sql.AdaptiveSqlCatalogContributor;
-import org.javai.springai.actions.sql.FrequencyAwareSqlCatalogTool;
-import org.javai.springai.actions.sql.InMemorySchemaAccessTracker;
-import org.javai.springai.actions.sql.InMemorySqlCatalog;
-import org.javai.springai.actions.sql.SqlCatalogTool;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
  * Integration tests for the adaptive hybrid approach.
@@ -41,76 +29,13 @@ import org.springframework.ai.openai.api.OpenAiApi;
  * <p>Run with {@code RUN_LLM_TESTS=true} to enable these tests.</p>
  */
 @DisplayName("Data Warehouse Scenario - Adaptive Hybrid Approach")
-public class DataWarehouseAdaptiveHybridScenarioTest {
-
-	private static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
-	private static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
-
-	InMemorySqlCatalog catalog;
-	InMemorySchemaAccessTracker tracker;
-	SqlCatalogTool baseTool;
-	FrequencyAwareSqlCatalogTool trackingTool;
-	AdaptiveSqlCatalogContributor contributor;
-	DataWarehouseActions dataWarehouseActions;
-	DefaultPlanExecutor executor;
-	ChatClient chatClient;
-
-	@BeforeEach
-	void setUp() {
-		Assumptions.assumeTrue(RUN_LLM_TESTS, "Set RUN_LLM_TESTS=true to enable LLM integration tests");
-		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
-				"OPENAI_API_KEY must be set for this integration test");
-
-		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
-				.temperature(0.0)
-				.topP(1.0)
-				.build();
-		chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
-				.build();
-
-		dataWarehouseActions = new DataWarehouseActions();
-		executor = new DefaultPlanExecutor();
-
-		// Create SQL catalog
-		catalog = new InMemorySqlCatalog()
-				.addTable("fct_orders", "Fact table for orders containing order transactions", "fact")
-				.withSynonyms("fct_orders", "orders", "order", "sales")
-				.addColumn("fct_orders", "customer_id", "FK to dim_customer", "string",
-						new String[] { "fk:dim_customer.id" }, null)
-				.addColumn("fct_orders", "date_id", "FK to dim_date", "string",
-						new String[] { "fk:dim_date.id" }, null)
-				.addColumn("fct_orders", "order_value", "Order amount in dollars", "double",
-						new String[] { "measure" }, null)
-				.withColumnSynonyms("fct_orders", "order_value", "value", "amount", "total")
-				.addTable("dim_customer", "Customer dimension with customer details", "dimension")
-				.withSynonyms("dim_customer", "customers", "customer", "cust")
-				.addColumn("dim_customer", "id", "Customer primary key", "string",
-						new String[] { "pk" }, new String[] { "unique" })
-				.addColumn("dim_customer", "customer_name", "Customer full name", "string",
-						new String[] { "attribute" }, null)
-				.withColumnSynonyms("dim_customer", "customer_name", "name", "cust_name")
-				.addTable("dim_date", "Date dimension with calendar dates", "dimension")
-				.withSynonyms("dim_date", "dates", "date", "calendar")
-				.addColumn("dim_date", "id", "Date primary key", "string",
-						new String[] { "pk" }, new String[] { "unique" })
-				.addColumn("dim_date", "date", "Calendar date value", "date",
-						new String[] { "attribute" }, null);
-
-		// Create tracker and tools
-		tracker = new InMemorySchemaAccessTracker();
-		baseTool = new SqlCatalogTool(catalog);
-		trackingTool = new FrequencyAwareSqlCatalogTool(baseTool, tracker);
-	}
+class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScenarioTest {
 
 	/**
 	 * Creates a planner with the given hot threshold.
 	 */
 	private Planner createPlanner(int hotThreshold) {
-		contributor = new AdaptiveSqlCatalogContributor(catalog, tracker, hotThreshold);
+		adaptiveContributor = new AdaptiveSqlCatalogContributor(catalog, tracker, hotThreshold);
 
 		PersonaSpec sqlAnalystPersona = PersonaSpec.builder()
 				.name("SQLDataWarehouseAssistant")
@@ -130,7 +55,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 		return Planner.builder()
 				.withChatClient(chatClient)
 				.persona(sqlAnalystPersona)
-				.promptContributor(contributor)
+				.promptContributor(adaptiveContributor)
 				.tools(trackingTool)
 				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)
@@ -152,7 +77,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			assertThat(tracker.getHotTables(2)).isEmpty();
 			
 			// Verify contributor reflects cold state
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 			assertThat(contribution).contains("No frequently-used tables");
 
 			// First request - LLM may use tools OR extract info from examples
@@ -179,9 +104,9 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 		@Test
 		@DisplayName("contributor returns no-tables message on cold start")
 		void contributorReturnsNoTablesMessage() {
-			contributor = new AdaptiveSqlCatalogContributor(catalog, tracker, 2);
+			adaptiveContributor = new AdaptiveSqlCatalogContributor(catalog, tracker, 2);
 
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 
 			assertThat(contribution).contains("No frequently-used tables");
 			assertThat(contribution).contains("listTables");
@@ -216,7 +141,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			assertThat(tracker.getHotTables(2)).isNotEmpty();
 
 			// Verify contributor now includes the hot table
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 			System.out.println("Contribution after warm-up:\n" + contribution);
 			
 			assertThat(contribution).doesNotContain("No frequently-used tables");
@@ -247,7 +172,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			// Both should be hot now
 			assertThat(tracker.getHotTables(2).size()).isGreaterThanOrEqualTo(2);
 
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 			System.out.println("Contribution with multiple hot tables:\n" + contribution);
 		}
 	}
@@ -312,7 +237,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			// Should be hot after just one access
 			assertThat(tracker.getHotTables(1)).isNotEmpty();
 
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 			assertThat(contribution).doesNotContain("No frequently-used tables");
 		}
 
@@ -335,7 +260,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 			// Should NOT be hot yet (threshold is 5)
 			assertThat(tracker.getHotTables(5)).isEmpty();
 
-			String contribution = contributor.contribute(null).orElse("");
+			String contribution = adaptiveContributor.contribute(null).orElse("");
 			assertThat(contribution).contains("No frequently-used tables");
 		}
 
@@ -373,7 +298,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 
 			// === Phase 1: Cold Start ===
 			System.out.println("=== Phase 1: Cold Start ===");
-			String coldContribution = contributor.contribute(null).orElse("");
+			String coldContribution = adaptiveContributor.contribute(null).orElse("");
 			assertThat(coldContribution).contains("No frequently-used tables");
 			System.out.println("Cold contribution: " + coldContribution.substring(0, Math.min(100, coldContribution.length())) + "...");
 
@@ -392,7 +317,7 @@ public class DataWarehouseAdaptiveHybridScenarioTest {
 
 			// === Phase 3: Warm State ===
 			System.out.println("\n=== Phase 3: Warm State ===");
-			String warmContribution = contributor.contribute(null).orElse("");
+			String warmContribution = adaptiveContributor.contribute(null).orElse("");
 			System.out.println("Warm contribution preview: " + warmContribution.substring(0, Math.min(200, warmContribution.length())) + "...");
 
 			// Verify the transition happened

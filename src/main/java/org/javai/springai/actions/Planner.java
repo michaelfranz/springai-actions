@@ -181,8 +181,7 @@ public final class Planner {
 		// Core identity - framework level
 		sb.append("🎯 CORE DIRECTIVE:\n\n");
 		sb.append("You are a PLANNER producing an execution plan. You are NOT a chatbot.\n");
-		sb.append("Your output is a JSON plan that the application will execute.\n");
-		sb.append("The 'message' field is a SHORT UI summary—it must NEVER ask questions or request information.\n\n");
+		sb.append("Your output is a JSON plan that the application will execute.\n\n");
 		
 		// Output format
 		sb.append("🔴 OUTPUT FORMAT - JSON ONLY:\n\n");
@@ -190,59 +189,68 @@ public final class Planner {
 		
 		// List valid action IDs
 		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
-			sb.append("VALID ACTION IDs (use EXACTLY one of these):\n");
+			sb.append("VALID ACTION IDs:\n");
 			for (ActionDescriptor ad : actionDescriptors) {
 				sb.append("  - \"").append(ad.id()).append("\"\n");
 			}
 			sb.append("\n");
-			
-			// Generate a generic example based on registered actions
-			sb.append("EXAMPLE FORMAT:\n");
-			ActionDescriptor example = pickExampleAction(actionDescriptors);
-			sb.append("{\n");
-			sb.append("  \"message\": \"Short summary of what the plan does.\",\n");
-			sb.append("  \"steps\": [\n");
-			sb.append("    {\n");
-			sb.append("      \"actionId\": \"").append(example.id()).append("\",\n");
-			sb.append("      \"description\": \"").append(truncateForExample(example.description())).append("\"");
-			
-			if (!example.actionParameterSpecs().isEmpty()) {
-				sb.append(",\n      \"parameters\": {\n");
-				boolean firstParam = true;
-				for (ActionParameterDescriptor param : example.actionParameterSpecs()) {
-					if (!firstParam) {
-						sb.append(",\n");
-					}
-					firstParam = false;
-					sb.append("        \"").append(param.name()).append("\": ");
-					sb.append(generateExampleValue(param));
-				}
-				sb.append("\n      }");
-			} else {
-				sb.append(",\n      \"parameters\": {}");
-			}
-			sb.append("\n    }\n");
-			sb.append("  ]\n");
-			sb.append("}\n\n");
-			
-			// Example for noAction if available
-			if (hasAction(actionDescriptors, "noAction")) {
-				sb.append("For out-of-scope requests, use noAction:\n");
-				sb.append("{\"message\": \"Cannot help with that.\", \"steps\": [{\"actionId\": \"noAction\", ");
-				sb.append("\"description\": \"Request outside scope.\", \"parameters\": {\"reason\": \"...\"}}]}\n\n");
-			}
 		}
+		
+		// Step types - tightened per expert feedback to eliminate common misfires
+		sb.append("📋 STEP TYPES (choose exactly one):\n\n");
+		
+		// 1. Action Step
+		sb.append("ACTION STEP:\n");
+		sb.append("- Use ONLY when ALL required params are present.\n");
+		sb.append("- MUST include actionId and parameters.\n");
+		sb.append("{\n");
+		sb.append("  \"message\": \"Short summary.\",\n");
+		sb.append("  \"steps\": [{\"actionId\": \"<id>\", \"description\": \"...\", \"parameters\": {...}}]\n");
+		sb.append("}\n\n");
+		
+		// 2. Pending Step - with partial providedParams example
+		sb.append("PENDING STEP:\n");
+		sb.append("- Use when the correct action is known but a REQUIRED user-facing param is missing.\n");
+		sb.append("- MUST include actionId, status:\"pending\", pendingParams, and providedParams.\n");
+		sb.append("- IMPORTANT: NEVER assume missing required values. If a required field is not given, use PENDING.\n");
+		sb.append("- providedParams should contain any values you DO have; pendingParams lists what's missing.\n");
+		sb.append("{\n");
+		sb.append("  \"message\": \"I need more information.\",\n");
+		sb.append("  \"steps\": [{\n");
+		sb.append("    \"actionId\": \"<id>\",\n");
+		sb.append("    \"description\": \"...\",\n");
+		sb.append("    \"status\": \"pending\",\n");
+		sb.append("    \"pendingParams\": [{\"name\": \"<param>\", \"prompt\": \"What value?\"}],\n");
+		sb.append("    \"providedParams\": { <any params you already have> }\n");
+		sb.append("  }]\n");
+		sb.append("}\n\n");
+		
+		// 3. No Action Step - note: no actionId
+		sb.append("NO ACTION STEP:\n");
+		sb.append("- Use ONLY when request is outside domain.\n");
+		sb.append("- MUST NOT include actionId.\n");
+		sb.append("{\n");
+		sb.append("  \"message\": \"I can only help with [domain] tasks.\",\n");
+		sb.append("  \"steps\": [{\"noAction\": true, \"reason\": \"...\"}]\n");
+		sb.append("}\n\n");
+		
+		// 4. Error Step - note: no actionId
+		sb.append("ERROR STEP:\n");
+		sb.append("- Use ONLY when a tool/plan generation failure occurs.\n");
+		sb.append("- MUST NOT include actionId.\n");
+		sb.append("{\n");
+		sb.append("  \"message\": \"There was a problem.\",\n");
+		sb.append("  \"steps\": [{\"error\": true, \"reason\": \"...\"}]\n");
+		sb.append("}\n\n");
 		
 		// Critical rules - framework level
 		sb.append("🚨 CRITICAL RULES:\n");
-		sb.append("- actionId MUST be EXACTLY one of the VALID ACTION IDs listed above—NO EXCEPTIONS\n");
-		sb.append("- NEVER create, invent, or imagine action names not in the list\n");
-		sb.append("- Parameters MUST be nested inside a \"parameters\" object, NOT at step level\n");
-		sb.append("- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS\n");
-		sb.append("- steps[] must ALWAYS contain at least one action\n");
-		sb.append("- Actions have full access to system state (session, context, data). NEVER ask the user for this.\n");
-		sb.append("- The 'message' is a SHORT UI summary. NEVER ask questions or request information in it.\n");
-		sb.append("- If you cannot find an appropriate action, use 'noAction' with a reason—do NOT return empty steps.\n");
+		sb.append("- actionId is REQUIRED for ACTION and PENDING steps, FORBIDDEN for NO ACTION and ERROR steps.\n");
+		sb.append("- Parameter names MUST be EXACTLY as shown in PLAN STEP OPTIONS—never invent keys.\n");
+		sb.append("- If PLAN STEP OPTIONS shows NO parameters for an action, use ACTION STEP with empty \"parameters\": {}\n");
+		sb.append("- NEVER assume default values for missing required parameters—use PENDING instead.\n");
+		sb.append("- NEVER use PENDING to ask for system data (basket, session, inventory)—actions have this automatically.\n");
+		sb.append("- The 'message' is a SHORT UI summary. NEVER ask questions in it.\n");
 		sb.append("\nSTOP after the closing brace. Emit nothing else.");
 		
 		return sb.toString();

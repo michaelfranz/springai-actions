@@ -20,6 +20,7 @@ public final class ShoppingPersonaSpec {
 	 */
 	private static final String SHOPPING_ROUTING_RULES = """
 			SHOPPING DOMAIN ROUTING (follow exactly):
+			- start shopping/begin session/new basket → actionId "startSession"
 			- total/price/cost/amount → actionId "computeTotal"
 			- what's in basket/cart → actionId "viewBasketSummary"  
 			- offers/deals/discounts → actionId "presentOffers"

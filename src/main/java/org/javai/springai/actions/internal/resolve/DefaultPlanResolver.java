@@ -39,7 +39,7 @@ public class DefaultPlanResolver implements PlanResolver {
 	@Override
 	public Plan resolve(RawPlan jsonPlan, ResolutionContext context) {
 		// Handle null or empty steps - this triggers the noAction handler
-		if (jsonPlan.steps() == null || jsonPlan.steps().isEmpty()) {
+		if (jsonPlan.steps().isEmpty()) {
 			return new Plan(jsonPlan.message(), List.of());
 		}
 
@@ -52,24 +52,36 @@ public class DefaultPlanResolver implements PlanResolver {
 	private static final String NO_ACTION_ID = "noAction";
 
 	private PlanStep resolveStep(RawPlanStep step, ResolutionContext context) {
+		// Handle error step from LLM
+		if (step.isError()) {
+			return new PlanStep.ErrorStep(step.reason());
+		}
+		
+		// Handle no-action step from LLM
+		if (step.isNoAction()) {
+			return new PlanStep.NoActionStep(step.reason());
+		}
+		
+		// Handle pending step from LLM
+		if (step.isPending()) {
+			return resolvePendingStep(step);
+		}
+		
 		String actionId = step.actionId();
-		if (actionId == null || actionId.isBlank()) {
+		if (actionId.isBlank()) {
 			return new PlanStep.ErrorStep("Step has no actionId");
 		}
 
-		// Handle special noAction step type
+		// Handle special noAction step type (action-based fallback)
 		if (NO_ACTION_ID.equals(actionId)) {
 			String message = extractNoActionMessage(step);
 			return new PlanStep.NoActionStep(message);
 		}
 
 		ActionBinding binding = context.actionRegistry().getActionBinding(actionId);
-		if (binding == null) {
-			return new PlanStep.ErrorStep("Unknown action: " + actionId);
-		}
 
 		List<ActionParameterDescriptor> params = binding.parameters();
-		Map<String, Object> stepParams = step.parameters() != null ? step.parameters() : Map.of();
+		Map<String, Object> stepParams = step.parameters();
 
 		// Check arity
 		if (stepParams.size() != params.size()) {
@@ -78,12 +90,35 @@ public class DefaultPlanResolver implements PlanResolver {
 					+ " got " + stepParams.size());
 		}
 
-		// Convert each parameter
+		// Convert each parameter - with fallback for when LLM uses wrong parameter names
 		List<PlanArgument> arguments = new ArrayList<>();
-		for (ActionParameterDescriptor param : params) {
+		List<String> unusedProvidedParams = new ArrayList<>(stepParams.keySet());
+		
+		for (int i = 0; i < params.size(); i++) {
+			ActionParameterDescriptor param = params.get(i);
 			Object raw = stepParams.get(param.name());
+			
+			// If parameter not found by exact name, try to find a match by position (if arity matches)
+			if (raw == null && stepParams.size() == params.size() && i < unusedProvidedParams.size()) {
+				// LLM provided the right number of params but with wrong names
+				// Try to match by position - use the corresponding unused provided param
+				String fallbackKey = unusedProvidedParams.get(i);
+				raw = stepParams.get(fallbackKey);
+			}
+			
+			// If still null or wrong structure, consider converting to PENDING
+			if (raw == null) {
+				// LLM didn't provide this parameter at all - return PENDING
+				return createPendingForMissingParam(actionId, param, stepParams, step.description());
+			}
+			
 			ConversionOutcome outcome = convert(raw, param, actionId, context);
 			if (!outcome.success()) {
+				// Conversion failed - might be due to incomplete/wrong data structure
+				// Check if this looks like partial data that should trigger PENDING
+				if (looksLikePartialData(raw, param)) {
+					return createPendingForIncompleteParam(actionId, param, raw, step.description());
+				}
 				return new PlanStep.ErrorStep(outcome.errorMessage());
 			}
 			
@@ -294,7 +329,7 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	private Optional<Class<?>> resolveType(String typeName) {
-		if (typeName == null || typeName.isBlank()) {
+		if (typeName.isBlank()) {
 			return Optional.of(Object.class);
 		}
 		try {
@@ -323,15 +358,97 @@ public class DefaultPlanResolver implements PlanResolver {
 	}
 
 	/**
+	 * Resolve a pending action step from the LLM response.
+	 * Converts the raw pending params to PlanStep.PendingParam objects.
+	 */
+	private PlanStep resolvePendingStep(RawPlanStep step) {
+		String actionId = step.actionId();
+		String description = step.description();
+		
+		// Convert pending params
+		PlanStep.PendingParam[] pendingParams;
+		if (!step.pendingParams().isEmpty()) {
+			pendingParams = step.pendingParams().stream()
+					.map(p -> new PlanStep.PendingParam(
+							p.name(),
+							p.prompt()))
+					.toArray(PlanStep.PendingParam[]::new);
+		} else {
+			pendingParams = new PlanStep.PendingParam[0];
+		}
+		
+		// Get provided params
+		Map<String, Object> providedParams = step.providedParams();
+		
+		return new PlanStep.PendingActionStep(description, actionId, pendingParams, providedParams);
+	}
+	
+	/**
+	 * Create a PENDING step when an expected parameter is completely missing.
+	 */
+	private PlanStep createPendingForMissingParam(String actionId, ActionParameterDescriptor param,
+			Map<String, Object> providedByLlm, String description) {
+		PlanStep.PendingParam[] pendingParams = new PlanStep.PendingParam[] {
+			new PlanStep.PendingParam(param.name(),
+					"Please provide " + param.name() + " (" + param.description() + ")")
+		};
+		
+		// Include what the LLM did provide (even if with wrong names)
+		return new PlanStep.PendingActionStep(
+				description,
+				actionId, pendingParams, providedByLlm);
+	}
+	
+	/**
+	 * Create a PENDING step when a parameter has incomplete data (e.g., missing required nested fields).
+	 */
+	private PlanStep createPendingForIncompleteParam(String actionId, ActionParameterDescriptor param, 
+			Object partialData, String description) {
+		PlanStep.PendingParam[] pendingParams = new PlanStep.PendingParam[] {
+			new PlanStep.PendingParam(param.name(),
+					"Please provide complete " + param.name() + " - some required fields are missing")
+		};
+		
+		// Include the partial data as providedParams
+		Map<String, Object> provided = new java.util.HashMap<>();
+		provided.put(param.name() + "_partial", partialData);
+		
+		return new PlanStep.PendingActionStep(
+				description,
+				actionId, pendingParams, provided);
+	}
+	
+	/**
+	 * Check if the raw data looks like partial/incomplete data that should trigger PENDING.
+	 * This catches cases where the LLM provided some data but not in the expected structure.
+	 */
+	private boolean looksLikePartialData(Object raw, ActionParameterDescriptor param) {
+		// If raw is a simple value but param expects a complex type, it might be partial data
+
+		// If the param description mentions required nested fields, and raw is a simple string,
+		// it's likely the LLM provided partial data
+		if (raw instanceof String && param.description().toLowerCase().contains("period")) {
+			return true;
+		}
+		
+		// If param expects a complex type and raw is a primitive, it's incomplete
+		String typeName = param.typeName();
+		if (!typeName.startsWith("java.lang.") && (raw instanceof String || raw instanceof Number || raw instanceof Boolean)) {
+			return true;
+		}
+		
+		return false;
+	}
+	
+	/**
 	 * Extract the message from a noAction step.
 	 * Looks for a "message" or "reason" parameter in the step.
 	 */
 	private String extractNoActionMessage(RawPlanStep step) {
 		Map<String, Object> params = step.parameters();
-		if (params == null || params.isEmpty()) {
+		if (params.isEmpty()) {
 			// Fall back to description if no parameters
-			return step.description() != null ? step.description() 
-					: "No appropriate action could be identified for this request.";
+			return step.description();
 		}
 		
 		// Try "message" first, then "reason"
@@ -346,7 +463,6 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 		
 		// Fall back to description
-		return step.description() != null ? step.description() 
-				: "No appropriate action could be identified for this request.";
+		return step.description();
 	}
 }

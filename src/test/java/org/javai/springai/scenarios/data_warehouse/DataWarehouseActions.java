@@ -32,9 +32,15 @@ public class DataWarehouseActions {
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
-	@Action(description = "Calculate total order value for a customer over a date range.")
+	@Action(description = """
+			Calculate total order value for a customer over a date range.
+			REQUIRES both customer_name AND period. If period is missing, use PENDING step.
+			Parameter MUST be named 'orderValueQuery' - NOT 'customerName' (forbidden).""")
 	public void aggregateOrderValue(
-			@ActionParam(description = "Order value query with customer name and date period",
+			@ActionParam(description = """
+					EXACT SHAPE REQUIRED: {"customer_name":"<string>","period":{"start":"YYYY-MM-DD","end":"YYYY-MM-DD"}}
+					FORBIDDEN KEYS: customerName, customer, customerId.
+					If user doesn't provide date range, return PENDING step.""",
 				examples = {"{\"customer_name\": \"Mike\", \"period\": {\"start\": \"2024-01-01\", \"end\": \"2024-01-31\"}}"})
 			OrderValueQuery orderValueQuery) {
 		aggregateOrderValueInvoked.set(true);
