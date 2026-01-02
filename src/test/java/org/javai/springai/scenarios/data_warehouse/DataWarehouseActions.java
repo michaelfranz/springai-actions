@@ -9,11 +9,15 @@ import org.javai.springai.actions.sql.Query;
 /**
  * Actions for data warehouse and SQL query scenarios.
  */
+/**
+ * Actions for SQL query scenarios.
+ * 
+ * <p>This class provides only SQL query actions (show/run). For aggregate
+ * calculations that require structured parameters, see {@link AggregateActions}.</p>
+ */
 public class DataWarehouseActions {
 	private final AtomicBoolean displaySqlQueryInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean executeAndDisplaySqlQueryInvoked = new AtomicBoolean(false);
-	private final AtomicBoolean aggregateOrderValueInvoked = new AtomicBoolean(false);
-	private OrderValueQuery lastOrderValueQuery;
 	private Query lastQuery;
 
 	@Action(description = "Show a SQL query as text without executing it against the database.")
@@ -32,40 +36,12 @@ public class DataWarehouseActions {
 		System.out.println(query.sqlString(Query.Dialect.ANSI));
 	}
 
-	@Action(description = """
-			Calculate total order value for a customer over a date range.
-			REQUIRES both customer_name AND period. If period is missing, use PENDING step.
-			Parameter MUST be named 'orderValueQuery' - NOT 'customerName' (forbidden).""")
-	public void aggregateOrderValue(
-			@ActionParam(description = """
-					EXACT SHAPE REQUIRED: {"customer_name":"<string>","period":{"start":"YYYY-MM-DD","end":"YYYY-MM-DD"}}
-					FORBIDDEN KEYS: customerName, customer, customerId.
-					If user doesn't provide date range, return PENDING step.""",
-				examples = {"{\"customer_name\": \"Mike\", \"period\": {\"start\": \"2024-01-01\", \"end\": \"2024-01-31\"}}"})
-			OrderValueQuery orderValueQuery) {
-		aggregateOrderValueInvoked.set(true);
-		lastOrderValueQuery = orderValueQuery;
-		System.out.printf("Aggregating order value for %s from %s to %s%n",
-				orderValueQuery.customer_name(),
-				orderValueQuery.period().start(),
-				orderValueQuery.period().end());
-	}
-
-
 	public boolean showSqlQueryInvoked() {
 		return displaySqlQueryInvoked.get();
 	}
 
 	public boolean runSqlQueryInvoked() {
 		return executeAndDisplaySqlQueryInvoked.get();
-	}
-
-	public boolean aggregateOrderValueInvoked() {
-		return aggregateOrderValueInvoked.get();
-	}
-
-	public Optional<OrderValueQuery> lastOrderValueQuery() {
-		return Optional.ofNullable(lastOrderValueQuery);
 	}
 
 	public Optional<Query> lastQuery() {
@@ -78,8 +54,6 @@ public class DataWarehouseActions {
 	public void reset() {
 		displaySqlQueryInvoked.set(false);
 		executeAndDisplaySqlQueryInvoked.set(false);
-		aggregateOrderValueInvoked.set(false);
-		lastOrderValueQuery = null;
 		lastQuery = null;
 	}
 }

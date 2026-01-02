@@ -3,7 +3,7 @@ package org.javai.springai.scenarios.data_warehouse;
 import java.time.LocalDate;
 
 /**
- * Time period with start and end dates.
+ * Date range for order value queries.
  */
 public record Period(LocalDate start, LocalDate end) {
 }

@@ -33,6 +33,11 @@ class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScena
 
 	/**
 	 * Creates a planner with the given hot threshold.
+	 * 
+	 * <p>Note: Does NOT use addPromptContext("sql", catalog) because the adaptive
+	 * approach should rely solely on the AdaptiveSqlCatalogContributor (which provides
+	 * nothing on cold start) and discovery tools. If we provide the full catalog
+	 * via context, the LLM bypasses tools and the tracker never increments.</p>
 	 */
 	private Planner createPlanner(int hotThreshold) {
 		adaptiveContributor = new AdaptiveSqlCatalogContributor(catalog, tracker, hotThreshold);
@@ -43,22 +48,25 @@ class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScena
 				.principles(List.of(
 						"Understand what the user wants to accomplish from a domain perspective",
 						"If SQL CATALOG shows tables, use them directly",
-						"If SQL CATALOG says 'no frequently-used tables', use listTables/getTableDetails tools",
+						"If SQL CATALOG says 'no frequently-used tables', you MUST use listTables tool first, then getTableDetails",
 						"For JOINs, use FK info from column tags (e.g., fk:dim_customer.id)",
 						"Select the action whose purpose best matches the user's intent"))
 				.constraints(List.of(
 						"Only use the available actions",
-						"Only use table and column names from the catalog or discovered via tools",
+						"Only use table and column names discovered via listTables/getTableDetails tools or from SQL CATALOG",
 						"If any required parameter is unclear, use PENDING"))
 				.build();
 
+		// Use a more capable model for the adaptive scenario since it requires
+		// reliably following the tool-use instructions
 		return Planner.builder()
-				.defaultChatClient(modestChatClient)
+				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION) // gpt-4o
+				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION) // gpt-4-turbo
 				.persona(sqlAnalystPersona)
 				.promptContributor(adaptiveContributor)
 				.tools(trackingTool)
 				.actions(dataWarehouseActions)
-				.addPromptContext("sql", catalog)
+				// Note: No addPromptContext("sql", catalog) - adaptive approach relies on tools for discovery
 				.build();
 	}
 
