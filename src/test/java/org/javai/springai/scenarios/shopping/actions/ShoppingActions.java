@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.api.FromContext;
 
 /**
  * Actions supporting a shopping application scenario.
@@ -15,20 +16,19 @@ public class ShoppingActions {
 	private final AtomicBoolean startSessionInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean presentOffersInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean addItemInvoked = new AtomicBoolean(false);
-	private final AtomicBoolean addPartySnacksInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean computeTotalInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean checkoutInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean requestFeedbackInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean viewBasketInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean removeItemInvoked = new AtomicBoolean(false);
 	private AddItemRequest lastAddItem;
-	private final Map<String, Integer> basket = new HashMap<>();
+	private Map<String, Integer> lastBasketSnapshot;
 
 	@Action(description = """
 			Start or reset a shopping session and basket.""")
 	public void startSession(ActionContext context) {
 		startSessionInvoked.set(true);
-		basket.clear();
+		Map<String, Integer> basket = new HashMap<>();
 		context.put("basket", basket);
 	}
 
@@ -40,20 +40,13 @@ public class ShoppingActions {
 	@Action(description = """
 			Add a product and quantity to the current basket.""")
 	public void addItem(
+			@FromContext("basket") Map<String, Integer> basket,
 			@ActionParam(description = "Product name") String product,
 			@ActionParam(description = "Quantity", allowedRegex = "[0-9]+") int quantity) {
 		addItemInvoked.set(true);
 		lastAddItem = new AddItemRequest(product, quantity);
+		lastBasketSnapshot = basket;
 		basket.merge(product, quantity, Integer::sum);
-	}
-
-	@Action(description = """
-			Add snacks for a party of a given size (e.g., crisps and nuts).""")
-	public void addPartySnacks(
-			@ActionParam(description = "Party size", allowedRegex = "[0-9]+") int partySize) {
-		addPartySnacksInvoked.set(true);
-		basket.merge("crisps (party)", partySize, Integer::sum);
-		basket.merge("nuts (party)", partySize, Integer::sum);
 	}
 
 	@Action(description = """
@@ -65,8 +58,10 @@ public class ShoppingActions {
 	@Action(description = """
 			Remove a product from the current basket.""")
 	public void removeItem(
+			@FromContext("basket") Map<String, Integer> basket,
 			@ActionParam(description = "Product name to remove") String product) {
 		removeItemInvoked.set(true);
+		lastBasketSnapshot = basket;
 		basket.remove(product);
 	}
 
@@ -99,10 +94,6 @@ public class ShoppingActions {
 		return addItemInvoked.get();
 	}
 
-	public boolean addPartySnacksInvoked() {
-		return addPartySnacksInvoked.get();
-	}
-
 	public boolean computeTotalInvoked() {
 		return computeTotalInvoked.get();
 	}
@@ -128,7 +119,7 @@ public class ShoppingActions {
 	}
 
 	public Map<String, Integer> getBasketState() {
-		return new HashMap<>(basket);
+		return lastBasketSnapshot != null ? new HashMap<>(lastBasketSnapshot) : new HashMap<>();
 	}
 }
 

@@ -9,8 +9,7 @@ import org.javai.springai.actions.PlanExecutionResult;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
@@ -27,6 +26,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -129,10 +130,11 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should proactively surface offers at session start")
 		void surfaceOffersAtSessionStart() {
 			String sessionId = "rec-offers-start";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I want to start shopping", sessionId);
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Offer tool should have been consulted
 			assertThat(offerTool.listInvoked()).isTrue();
@@ -142,14 +144,15 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should mention relevant offers when adding product with promotion")
 		void mentionOffersWhenAddingPromotedProduct() {
 			String sessionId = "rec-offers-add";
+			ActionContext context = new ActionContext();
 
 			// Start session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Add a product that has an active offer (Coke Zero has 10% off)
 			ConversationTurnResult addTurn = conversationManager
 					.converse("add some Coca Cola", sessionId);
-			executor.execute(addTurn.plan());
+			executor.execute(addTurn.plan(), context);
 
 			// The assistant should have checked offers or added the item
 			assertThat(actions.addItemInvoked() || offerTool.listInvoked()).isTrue();
@@ -159,8 +162,9 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should list all current special offers on request")
 		void listAllOffersOnRequest() {
 			String sessionId = "rec-offers-list";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			ConversationTurnResult offersTurn = conversationManager
 					.converse("what special offers do you have today?", sessionId);
@@ -169,7 +173,7 @@ public class ShoppingRecommendationsScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			executor.execute(plan);
+			executor.execute(plan, context);
 			assertThat(offerTool.listInvoked()).isTrue();
 		}
 
@@ -177,13 +181,14 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should apply offer discount to basket total")
 		void applyOfferDiscountToTotal() {
 			String sessionId = "rec-offers-discount";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan(), context);
 
 			ConversationTurnResult totalTurn = conversationManager
 					.converse("what's my total with discounts?", sessionId);
-			executor.execute(totalTurn.plan());
+			executor.execute(totalTurn.plan(), context);
 
 			// Total should be computed (pricing is used internally)
 			assertThat(actions.computeTotalInvoked()).isTrue();
@@ -202,12 +207,13 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should recognise returning customer")
 		void recogniseReturningCustomer() {
 			String sessionId = "rec-customer-return";
+			ActionContext context = new ActionContext();
 
 			// Start session with customer identification
 			ConversationTurnResult turn = conversationManager
 					.converse("Hi, I'm customer cust-001, let me start shopping", sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Should identify the customer
 			assertThat(actions.currentCustomerId()).isEqualTo("cust-001");
@@ -217,9 +223,10 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should show personalised recommendations for known customer")
 		void showPersonalisedRecommendations() {
 			String sessionId = "rec-customer-recs";
+			ActionContext context = new ActionContext();
 
 			// Start as known customer
-			actions.startSessionForCustomer(null, "cust-001");
+			actions.startSessionForCustomer(context, "cust-001");
 
 			ConversationTurnResult recTurn = conversationManager
 					.converse("show me things I might like", sessionId);
@@ -228,7 +235,7 @@ public class ShoppingRecommendationsScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			executor.execute(plan);
+			executor.execute(plan, context);
 			assertThat(actions.showRecommendationsInvoked()).isTrue();
 		}
 
@@ -236,14 +243,15 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should recommend based on purchase history")
 		void recommendBasedOnHistory() {
 			String sessionId = "rec-customer-history";
+			ActionContext context = new ActionContext();
 
 			// Start as customer with purchase history
-			actions.startSessionForCustomer(null, "cust-001");
+			actions.startSessionForCustomer(context, "cust-001");
 
 			ConversationTurnResult recTurn = conversationManager
 					.converse("what do you recommend based on my previous purchases?", sessionId);
 
-			executor.execute(recTurn.plan());
+			executor.execute(recTurn.plan(), context);
 
 			// Customer tool should have been consulted for history
 			assertThat(customerTool.getFrequentPurchasesInvoked()).isTrue();
@@ -253,13 +261,14 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should offer personalised offers for known customer")
 		void offerPersonalisedOffers() {
 			String sessionId = "rec-customer-offers";
+			ActionContext context = new ActionContext();
 
-			actions.startSessionForCustomer(null, "cust-001");
+			actions.startSessionForCustomer(context, "cust-001");
 
 			ConversationTurnResult offersTurn = conversationManager
 					.converse("are there any special deals for me?", sessionId);
 
-			executor.execute(offersTurn.plan());
+			executor.execute(offersTurn.plan(), context);
 
 			// Should check for personalised offers
 			assertThat(customerTool.getPersonalizedOffersInvoked()).isTrue();
@@ -269,9 +278,10 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should fail recommendations gracefully for anonymous customer")
 		void failRecommendationsForAnonymous() {
 			String sessionId = "rec-customer-anon";
+			ActionContext context = new ActionContext();
 
 			// Start anonymous session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			ConversationTurnResult recTurn = conversationManager
 					.converse("show me things I might like", sessionId);
@@ -295,8 +305,9 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should warn about low stock when adding items")
 		void warnAboutLowStock() {
 			String sessionId = "rec-stock-low";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Request more than available (Coke Zero has limited stock)
 			ConversationTurnResult addTurn = conversationManager
@@ -312,8 +323,9 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should suggest alternatives for out-of-stock items")
 		void suggestAlternativesForOutOfStock() {
 			String sessionId = "rec-stock-alt";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Try to add an out-of-stock item
 			ConversationTurnResult addTurn = conversationManager
@@ -329,12 +341,13 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should check stock before adding to basket")
 		void checkStockBeforeAdding() {
 			String sessionId = "rec-stock-check";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			ConversationTurnResult addTurn = conversationManager
 					.converse("add 5 Coke Zero", sessionId);
-			executor.execute(addTurn.plan());
+			executor.execute(addTurn.plan(), context);
 
 			// Item should have been added (inventory is checked internally)
 			assertThat(actions.addItemInvoked()).isTrue();
@@ -344,8 +357,9 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should offer partial quantity when stock insufficient")
 		void offerPartialQuantity() {
 			String sessionId = "rec-stock-partial";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Request more than available
 			ConversationTurnResult addTurn = conversationManager
@@ -361,8 +375,9 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should suggest similar products when requested item unavailable")
 		void suggestSimilarProducts() {
 			String sessionId = "rec-stock-similar";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			ConversationTurnResult searchTurn = conversationManager
 					.converse("I want something like Coke but different", sessionId);
@@ -386,18 +401,19 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should remember customer preferences across turns")
 		void rememberPreferencesAcrossTurns() {
 			String sessionId = "rec-context-prefs";
+			ActionContext context = new ActionContext();
 
 			// Start as known customer with dietary restrictions
-			actions.startSessionForCustomer(null, "cust-003"); // Sam has gluten allergy
+			actions.startSessionForCustomer(context, "cust-003"); // Sam has gluten allergy
 
 			// Add an item
-			executor.execute(conversationManager.converse("add some snacks", sessionId).plan());
+			executor.execute(conversationManager.converse("add some snacks", sessionId).plan(), context);
 
 			// Request recommendations - should respect dietary restrictions
 			ConversationTurnResult recTurn = conversationManager
 					.converse("what else would you recommend?", sessionId);
 
-			executor.execute(recTurn.plan());
+			executor.execute(recTurn.plan(), context);
 
 			// Should have checked customer profile
 			assertThat(customerTool.getProfileInvoked()).isTrue();
@@ -407,13 +423,14 @@ public class ShoppingRecommendationsScenarioTest {
 		@DisplayName("should combine offers with customer preferences")
 		void combineOffersWithPreferences() {
 			String sessionId = "rec-context-combo";
+			ActionContext context = new ActionContext();
 
-			actions.startSessionForCustomer(null, "cust-001");
+			actions.startSessionForCustomer(context, "cust-001");
 
 			ConversationTurnResult turn = conversationManager
 					.converse("show me offers on products I usually buy", sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Customer profile or offers should have been consulted
 			assertThat(customerTool.getFrequentPurchasesInvoked() || 

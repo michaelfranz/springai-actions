@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.scenarios.shopping.ShoppingPromptContributor;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
@@ -38,6 +39,8 @@ class MissionIntegrationTest {
 	private MissionTool missionTool;
 	private GuardrailTool guardrailTool;
 	private ShoppingPromptContributor promptContributor;
+	private Map<String, Integer> basket;
+	private ActionContext context;
 
 	@BeforeEach
 	void setUp() {
@@ -46,6 +49,11 @@ class MissionIntegrationTest {
 		missionTool = new MissionTool(storeApi);
 		guardrailTool = new GuardrailTool();
 		promptContributor = new ShoppingPromptContributor(storeApi);
+		
+		// Set up shared basket and context for direct action method calls
+		basket = new HashMap<>();
+		context = new ActionContext();
+		context.put("basket", basket);
 	}
 
 	@Nested
@@ -55,7 +63,7 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should start a simple party mission")
 		void startSimplePartyMission() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			ActionResult result = actions.startMission(
 					null,
@@ -76,7 +84,7 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should start mission with dietary requirements")
 		void startMissionWithDietary() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			ActionResult result = actions.startMission(
 					null,
@@ -102,7 +110,7 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should start mission with allergen exclusions")
 		void startMissionWithAllergens() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			ActionResult result = actions.startMission(
 					null,
@@ -131,7 +139,7 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should start mission with budget constraint")
 		void startMissionWithBudget() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			ActionResult result = actions.startMission(
 					null,
@@ -153,14 +161,14 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should reject invalid mission parameters")
 		void rejectInvalidMission() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			// Missing description
-			ActionResult result1 = actions.startMission(null, "", 5, "PARTY", null, null, null);
+			ActionResult result1 = actions.startMission(context, "", 5, "PARTY", null, null, null);
 			assertThat(result1.success()).isFalse();
 
 			// Invalid headcount
-			ActionResult result2 = actions.startMission(null, "Test", 0, "PARTY", null, null, null);
+			ActionResult result2 = actions.startMission(context, "Test", 0, "PARTY", null, null, null);
 			assertThat(result2.success()).isFalse();
 		}
 	}
@@ -272,10 +280,10 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should review active mission plan")
 		void reviewActiveMission() {
-			actions.startSession(null);
-			actions.startMission(null, "Test party", 6, "PARTY", null, null, null);
+			actions.startSession(context);
+			actions.startMission(context, "Test party", 6, "PARTY", null, null, null);
 
-			ActionResult result = actions.reviewMissionPlan(null);
+			ActionResult result = actions.reviewMissionPlan(context.get("session", ShoppingSession.class));
 
 			assertThat(result.success()).isTrue();
 			assertThat(result.message()).contains("Mission Plan");
@@ -285,9 +293,9 @@ class MissionIntegrationTest {
 		@Test
 		@DisplayName("should fail when no active mission")
 		void failWhenNoMission() {
-			actions.startSession(null);
+			actions.startSession(context);
 
-			ActionResult result = actions.reviewMissionPlan(null);
+			ActionResult result = actions.reviewMissionPlan(context.get("session", ShoppingSession.class));
 
 			assertThat(result.success()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("no active mission");

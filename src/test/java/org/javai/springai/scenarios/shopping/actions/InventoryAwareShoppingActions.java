@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.api.ActionParam;
+import org.javai.springai.actions.api.FromContext;
 import org.javai.springai.scenarios.shopping.store.CustomerProfileService;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
 import org.javai.springai.scenarios.shopping.store.model.AvailabilityResult;
@@ -45,17 +46,13 @@ public class InventoryAwareShoppingActions {
 	private final AtomicBoolean startMissionInvoked = new AtomicBoolean(false);
 	private final AtomicBoolean reviewMissionPlanInvoked = new AtomicBoolean(false);
 
-	// Basket state: maps product SKU to quantity
-	private final Map<String, Integer> basket = new HashMap<>();
+	// Test tracking state (not session state - these track what was invoked for assertions)
 	private String lastWarning;
 	private List<Product> lastAlternatives;
 	private AddItemRequest lastAddItem;
-	
-	// Customer state
 	private String currentCustomerId;
-	
-	// Session state (budget and mission tracking)
 	private ShoppingSession currentSession;
+	private Map<String, Integer> lastBasketSnapshot;
 
 	public InventoryAwareShoppingActions(MockStoreApi storeApi) {
 		this.storeApi = storeApi;
@@ -76,24 +73,24 @@ public class InventoryAwareShoppingActions {
 			ActionContext context,
 			@ActionParam(description = "Customer ID for personalization") String customerId) {
 		startSessionInvoked.set(true);
-		basket.clear();
 		lastWarning = null;
 		lastAlternatives = null;
 		currentCustomerId = customerId;
 		
-		// Create a new shopping session
+		// Create a fresh basket and session - these are placed into context
+		Map<String, Integer> basket = new HashMap<>();
 		currentSession = ShoppingSession.create(
 				java.util.UUID.randomUUID().toString(),
 				customerId
 		);
 		
-		if (context != null) {
-			context.put("basket", basket);
-			context.put("session", currentSession);
-			if (customerId != null) {
-				context.put("customerId", customerId);
-			}
+		// Put session state into context for subsequent actions to use via @FromContext
+		context.put("basket", basket);
+		context.put("session", currentSession);
+		if (customerId != null) {
+			context.put("customerId", customerId);
 		}
+		
 		storeApi.reset(); // Reset any stock reservations
 
 		if (customerId != null) {
@@ -137,6 +134,7 @@ public class InventoryAwareShoppingActions {
 			Validates stock availability before adding.
 			Returns warnings if stock is low or suggests alternatives if unavailable.""")
 	public ActionResult addItem(
+			@FromContext("basket") Map<String, Integer> basket,
 			@ActionParam(description = "Product name") String product,
 			@ActionParam(description = "Quantity", allowedRegex = "[0-9]+") int quantity) {
 
@@ -144,6 +142,7 @@ public class InventoryAwareShoppingActions {
 		lastAddItem = new AddItemRequest(product, quantity);
 		lastWarning = null;
 		lastAlternatives = null;
+		lastBasketSnapshot = basket;
 
 		// Check availability
 		AvailabilityResult availability = storeApi.checkAvailability(product, quantity);
@@ -214,10 +213,12 @@ public class InventoryAwareShoppingActions {
 			Update the quantity of an existing item in the basket.
 			Can increase or decrease quantity. Use 0 to remove the item.""")
 	public ActionResult updateItemQuantity(
+			@FromContext("basket") Map<String, Integer> basket,
 			@ActionParam(description = "Product name") String product,
 			@ActionParam(description = "New quantity (0 to remove)", allowedRegex = "[0-9]+") int newQuantity) {
 
 		updateQuantityInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		// Find the product
 		Optional<Product> productOpt = storeApi.findProduct(product);
@@ -270,8 +271,9 @@ public class InventoryAwareShoppingActions {
 
 	@Action(description = """
 			View the current contents of the shopping basket with prices.""")
-	public ActionResult viewBasketSummary() {
+	public ActionResult viewBasketSummary(@FromContext("basket") Map<String, Integer> basket) {
 		viewBasketInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		if (basket.isEmpty()) {
 			return ActionResult.success("Your basket is empty.");
@@ -305,9 +307,11 @@ public class InventoryAwareShoppingActions {
 	@Action(description = """
 			Remove a product from the current basket.""")
 	public ActionResult removeItem(
+			@FromContext("basket") Map<String, Integer> basket,
 			@ActionParam(description = "Product name to remove") String product) {
 
 		removeItemInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		Optional<Product> productOpt = storeApi.findProduct(product);
 		if (productOpt.isEmpty()) {
@@ -327,8 +331,9 @@ public class InventoryAwareShoppingActions {
 
 	@Action(description = """
 			Compute the basket total including any applicable discounts.""")
-	public ActionResult computeTotal() {
+	public ActionResult computeTotal(@FromContext("basket") Map<String, Integer> basket) {
 		computeTotalInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		if (basket.isEmpty()) {
 			return ActionResult.success("Your basket is empty. Total: £0.00");
@@ -351,8 +356,9 @@ public class InventoryAwareShoppingActions {
 	@Action(description = """
 			Checkout the basket and complete the purchase.
 			Commits the stock reservations and records purchase history.""")
-	public ActionResult checkoutBasket() {
+	public ActionResult checkoutBasket(@FromContext("basket") Map<String, Integer> basket) {
 		checkoutInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		if (basket.isEmpty()) {
 			return ActionResult.error("Cannot checkout - your basket is empty.");
@@ -376,8 +382,9 @@ public class InventoryAwareShoppingActions {
 	@Action(description = """
 			Show personalized product recommendations for the current customer.
 			Based on purchase history, preferences, and dietary requirements.""")
-	public ActionResult showRecommendations() {
+	public ActionResult showRecommendations(@FromContext("basket") Map<String, Integer> basket) {
 		showRecommendationsInvoked.set(true);
+		lastBasketSnapshot = basket;
 
 		if (currentCustomerId == null) {
 			return ActionResult.error("No customer identified. Start a session with a customer ID for recommendations.");
@@ -533,14 +540,14 @@ public class InventoryAwareShoppingActions {
 			Review the current mission plan.
 			Shows the proposed items, quantities, and estimated total.
 			Use this to check what's planned before adding items to your basket.""")
-	public ActionResult reviewMissionPlan(ActionContext context) {
+	public ActionResult reviewMissionPlan(@FromContext("session") ShoppingSession session) {
 		reviewMissionPlanInvoked.set(true);
 
-		if (currentSession == null || currentSession.activeMission().isEmpty()) {
+		if (session == null || session.activeMission().isEmpty()) {
 			return ActionResult.error("No active mission. Use startMission to create a shopping plan.");
 		}
 
-		MissionPlan plan = currentSession.activeMission().get();
+		MissionPlan plan = session.activeMission().get();
 		return ActionResult.success(formatMissionPlan(plan));
 	}
 
@@ -666,15 +673,18 @@ public class InventoryAwareShoppingActions {
 	}
 
 	public Map<String, Integer> getBasketState() {
-		return new HashMap<>(basket);
+		return lastBasketSnapshot != null ? new HashMap<>(lastBasketSnapshot) : new HashMap<>();
 	}
 
 	/**
 	 * Get basket state with product names instead of SKUs.
 	 */
 	public Map<String, Integer> getBasketStateByName() {
+		if (lastBasketSnapshot == null) {
+			return new HashMap<>();
+		}
 		Map<String, Integer> namedBasket = new HashMap<>();
-		for (Map.Entry<String, Integer> entry : basket.entrySet()) {
+		for (Map.Entry<String, Integer> entry : lastBasketSnapshot.entrySet()) {
 			storeApi.findProductBySku(entry.getKey())
 					.ifPresent(p -> namedBasket.put(p.name(), entry.getValue()));
 		}

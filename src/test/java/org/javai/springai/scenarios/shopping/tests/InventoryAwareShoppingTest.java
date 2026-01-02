@@ -1,6 +1,9 @@
 package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.util.HashMap;
+import java.util.Map;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
@@ -23,6 +26,8 @@ class InventoryAwareShoppingTest {
 	private InventoryTool inventoryTool;
 	private ProductSearchTool productSearchTool;
 	private EnhancedSpecialOfferTool offerTool;
+	private Map<String, Integer> basket;
+	private ActionContext context;
 
 	@BeforeEach
 	void setUp() {
@@ -31,6 +36,11 @@ class InventoryAwareShoppingTest {
 		inventoryTool = new InventoryTool(storeApi);
 		productSearchTool = new ProductSearchTool(storeApi);
 		offerTool = new EnhancedSpecialOfferTool(storeApi);
+		
+		// Set up shared basket and context for direct action method calls
+		basket = new HashMap<>();
+		context = new ActionContext();
+		context.put("basket", basket);
 	}
 
 	@Nested
@@ -40,7 +50,7 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should add available product to basket")
 		void addAvailableProduct() {
-			ActionResult result = actions.addItem("Coke Zero", 3);
+			ActionResult result = actions.addItem(basket, "Coke Zero", 3);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Added 3 × Coke Zero");
@@ -51,10 +61,10 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should show basket with prices")
 		void viewBasketWithPrices() {
-			actions.addItem("Coke Zero", 2);
-			actions.addItem("Sea Salt Crisps", 1);
+			actions.addItem(basket, "Coke Zero", 2);
+			actions.addItem(basket, "Sea Salt Crisps", 1);
 
-			ActionResult result = actions.viewBasketSummary();
+			ActionResult result = actions.viewBasketSummary(basket);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Coke Zero");
@@ -67,9 +77,9 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should compute total with discounts")
 		void computeTotalWithDiscounts() {
 			// Coke Zero has 10% off (Summer Refresh)
-			actions.addItem("Coke Zero", 10);
+			actions.addItem(basket, "Coke Zero", 10);
 
-			ActionResult result = actions.computeTotal();
+			ActionResult result = actions.computeTotal(basket);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Subtotal:");
@@ -86,7 +96,7 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should warn when adding item with low stock")
 		void warnOnLowStock() {
 			// Sparkling Water has 8 units with threshold of 10 (low stock)
-			ActionResult result = actions.addItem("Sparkling Water", 3);
+			ActionResult result = actions.addItem(basket, "Sparkling Water", 3);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Added 3 × Sparkling Water");
@@ -107,10 +117,10 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should warn when update causes low stock")
 		void warnOnUpdateToLowStock() {
-			actions.addItem("Sparkling Water", 2);
+			actions.addItem(basket, "Sparkling Water", 2);
 
 			// Update to use more of the low stock
-			ActionResult result = actions.updateItemQuantity("Sparkling Water", 5);
+			ActionResult result = actions.updateItemQuantity(basket, "Sparkling Water", 5);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).containsIgnoringCase("low");
@@ -125,7 +135,7 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should reject out of stock product with alternatives")
 		void rejectOutOfStock() {
 			// Mixed Nuts has 0 stock
-			ActionResult result = actions.addItem("Mixed Nuts", 5);
+			ActionResult result = actions.addItem(basket, "Mixed Nuts", 5);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("out of stock");
@@ -135,7 +145,7 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should suggest alternatives when out of stock")
 		void suggestAlternatives() {
-			ActionResult result = actions.addItem("Mixed Nuts", 5);
+			ActionResult result = actions.addItem(basket, "Mixed Nuts", 5);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("consider");
@@ -174,7 +184,7 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should reject when requesting more than available")
 		void rejectPartialAvailability() {
 			// Sparkling Water has 8 units
-			ActionResult result = actions.addItem("Sparkling Water", 15);
+			ActionResult result = actions.addItem(basket, "Sparkling Water", 15);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).contains("Only 8 of 15");
@@ -184,7 +194,7 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should offer partial quantity option")
 		void offerPartialQuantity() {
-			ActionResult result = actions.addItem("Sparkling Water", 20);
+			ActionResult result = actions.addItem(basket, "Sparkling Water", 20);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).contains("Would you like to add");
@@ -207,7 +217,7 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should reject discontinued product")
 		void rejectDiscontinued() {
-			ActionResult result = actions.addItem("Discontinued Soda", 1);
+			ActionResult result = actions.addItem(basket, "Discontinued Soda", 1);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("discontinued");
@@ -230,7 +240,7 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should handle unknown product")
 		void handleUnknownProduct() {
-			ActionResult result = actions.addItem("NonExistentProduct", 1);
+			ActionResult result = actions.addItem(basket, "NonExistentProduct", 1);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("not found");
@@ -254,9 +264,9 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should increase quantity when stock available")
 		void increaseQuantity() {
-			actions.addItem("Coke Zero", 2);
+			actions.addItem(basket, "Coke Zero", 2);
 
-			ActionResult result = actions.updateItemQuantity("Coke Zero", 5);
+			ActionResult result = actions.updateItemQuantity(basket, "Coke Zero", 5);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Updated Coke Zero quantity to 5");
@@ -266,9 +276,9 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should decrease quantity")
 		void decreaseQuantity() {
-			actions.addItem("Coke Zero", 5);
+			actions.addItem(basket, "Coke Zero", 5);
 
-			ActionResult result = actions.updateItemQuantity("Coke Zero", 2);
+			ActionResult result = actions.updateItemQuantity(basket, "Coke Zero", 2);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Updated Coke Zero quantity to 2");
@@ -278,9 +288,9 @@ class InventoryAwareShoppingTest {
 		@Test
 		@DisplayName("should remove item when set to zero")
 		void removeWhenZero() {
-			actions.addItem("Coke Zero", 5);
+			actions.addItem(basket, "Coke Zero", 5);
 
-			ActionResult result = actions.updateItemQuantity("Coke Zero", 0);
+			ActionResult result = actions.updateItemQuantity(basket, "Coke Zero", 0);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).containsIgnoringCase("removed");
@@ -291,10 +301,10 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should reject increase beyond available stock")
 		void rejectIncreaseBeyondStock() {
 			// Sparkling Water has 8 units
-			actions.addItem("Sparkling Water", 5);
+			actions.addItem(basket, "Sparkling Water", 5);
 
 			// Try to increase to more than total available
-			ActionResult result = actions.updateItemQuantity("Sparkling Water", 20);
+			ActionResult result = actions.updateItemQuantity(basket, "Sparkling Water", 20);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("cannot increase");
@@ -423,7 +433,7 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should complete a shopping session with inventory checks")
 		void completeShoppingSession() {
 			// Start session
-			ActionResult start = actions.startSession(null);
+			ActionResult start = actions.startSession(context);
 			assertThat(start.isSuccess()).isTrue();
 
 			// Search for products
@@ -435,24 +445,24 @@ class InventoryAwareShoppingTest {
 			assertThat(avail).contains("✓");
 
 			// Add items
-			ActionResult add1 = actions.addItem("Caprese Skewers", 2);
+			ActionResult add1 = actions.addItem(basket, "Caprese Skewers", 2);
 			assertThat(add1.isSuccess()).isTrue();
 
-			ActionResult add2 = actions.addItem("Coke Zero", 6);
+			ActionResult add2 = actions.addItem(basket, "Coke Zero", 6);
 			assertThat(add2.isSuccess()).isTrue();
 
 			// View basket
-			ActionResult view = actions.viewBasketSummary();
+			ActionResult view = actions.viewBasketSummary(basket);
 			assertThat(view.isSuccess()).isTrue();
 			assertThat(view.message()).contains("Caprese Skewers");
 			assertThat(view.message()).contains("Coke Zero");
 
 			// Compute total
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 			assertThat(total.isSuccess()).isTrue();
 
 			// Checkout
-			ActionResult checkout = actions.checkoutBasket();
+			ActionResult checkout = actions.checkoutBasket(basket);
 			assertThat(checkout.isSuccess()).isTrue();
 			assertThat(checkout.message()).contains("Order complete");
 
@@ -464,11 +474,11 @@ class InventoryAwareShoppingTest {
 		@DisplayName("should handle mixed available and unavailable items")
 		void handleMixedAvailability() {
 			// Add available item
-			ActionResult add1 = actions.addItem("Coke Zero", 5);
+			ActionResult add1 = actions.addItem(basket, "Coke Zero", 5);
 			assertThat(add1.isSuccess()).isTrue();
 
 			// Try to add out of stock item
-			ActionResult add2 = actions.addItem("Mixed Nuts", 3);
+			ActionResult add2 = actions.addItem(basket, "Mixed Nuts", 3);
 			assertThat(add2.isSuccess()).isFalse();
 
 			// Basket should still have the first item
@@ -482,11 +492,11 @@ class InventoryAwareShoppingTest {
 			int initialStock = storeApi.getAvailableQuantity("BEV-002"); // Coke Zero
 
 			// Add to basket
-			actions.addItem("Coke Zero", 10);
+			actions.addItem(basket, "Coke Zero", 10);
 			assertThat(storeApi.getAvailableQuantity("BEV-002")).isEqualTo(initialStock - 10);
 
 			// Remove from basket
-			actions.removeItem("Coke Zero");
+			actions.removeItem(basket, "Coke Zero");
 			assertThat(storeApi.getAvailableQuantity("BEV-002")).isEqualTo(initialStock);
 		}
 
@@ -495,8 +505,8 @@ class InventoryAwareShoppingTest {
 		void commitStockOnCheckout() {
 			int initialStock = storeApi.getAvailableQuantity("BEV-002"); // Coke Zero
 
-			actions.addItem("Coke Zero", 10);
-			actions.checkoutBasket();
+			actions.addItem(basket, "Coke Zero", 10);
+			actions.checkoutBasket(basket);
 
 			// Reset the store API (which reloads initial stock levels)
 			// Stock should have been permanently reduced

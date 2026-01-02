@@ -3,6 +3,7 @@ package org.javai.springai.scenarios.shopping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
+import java.util.Map;
 import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.Plan;
@@ -10,6 +11,7 @@ import org.javai.springai.actions.PlanExecutionResult;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
@@ -128,6 +130,7 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should start a new shopping session")
 		void startNewSession() {
 			String sessionId = "core-start-session";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I want to start a new shopping basket", sessionId);
@@ -136,19 +139,23 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.startSessionInvoked()).isTrue();
+			
+			// Verify basket was placed in context
+			assertThat(context.contains("basket")).isTrue();
 		}
 
 		@Test
 		@DisplayName("should surface special offers when session starts")
 		void surfaceOffersOnSessionStart() {
 			String sessionId = "core-offers-session";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I'd like to start shopping", sessionId);
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Verify offers tool was consulted
 			assertThat(offerTool.listInvoked()).isTrue();
@@ -158,12 +165,14 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should complete checkout and end session")
 		void completeCheckoutAndEndSession() {
 			String sessionId = "core-checkout-session";
+			ActionContext context = new ActionContext();
 
-			// Start session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			// Start session - this puts the basket into context
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			assertThat(context.contains("basket")).isTrue();
 
-			// Add items
-			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan());
+			// Add items - uses basket from context
+			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
 
 			// Checkout
 			ConversationTurnResult checkoutTurn = conversationManager
@@ -173,9 +182,14 @@ public class ShoppingCoreScenarioTest {
 			assertThat(checkoutPlan).isNotNull();
 			assertPlanReady(checkoutPlan);
 
-			PlanExecutionResult result = executor.execute(checkoutPlan);
+			PlanExecutionResult result = executor.execute(checkoutPlan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.checkoutInvoked()).isTrue();
+			
+			// Verify basket is empty after checkout
+			@SuppressWarnings("unchecked")
+			Map<String, Integer> basket = context.get("basket", Map.class);
+			assertThat(basket).isEmpty();
 		}
 	}
 
@@ -191,9 +205,10 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should add item with explicit product and quantity")
 		void addItemWithExplicitQuantity() {
 			String sessionId = "core-add-explicit";
+			ActionContext context = new ActionContext();
 
-			// Start session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			// Start session - initializes basket in context
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Add with explicit quantity
 			ConversationTurnResult addTurn = conversationManager
@@ -203,18 +218,24 @@ public class ShoppingCoreScenarioTest {
 			assertThat(addPlan).isNotNull();
 			assertPlanReady(addPlan);
 
-			PlanExecutionResult result = executor.execute(addPlan);
+			PlanExecutionResult result = executor.execute(addPlan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.addItemInvoked()).isTrue();
+			
+			// Verify item was added to basket
+			@SuppressWarnings("unchecked")
+			Map<String, Integer> basket = context.get("basket", Map.class);
+			assertThat(basket).isNotEmpty();
 		}
 
 		@Test
 		@DisplayName("should request quantity when not provided")
 		void requestQuantityWhenMissing() {
 			String sessionId = "core-add-pending";
+			ActionContext context = new ActionContext();
 
 			// Start session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Add without quantity
 			ConversationTurnResult addTurn = conversationManager
@@ -230,9 +251,10 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should complete add after providing missing quantity")
 		void completeAddAfterProvidingQuantity() {
 			String sessionId = "core-add-followup";
+			ActionContext context = new ActionContext();
 
 			// Start session
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Add without quantity -> pending
 			conversationManager.converse("add coke zero", sessionId);
@@ -245,7 +267,7 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.addItemInvoked()).isTrue();
 		}
@@ -263,10 +285,11 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should show basket contents")
 		void showBasketContents() {
 			String sessionId = "core-view-basket";
+			ActionContext context = new ActionContext();
 
 			// Start and add items
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 3 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 3 Coke Zero", sessionId).plan(), context);
 
 			// View basket
 			ConversationTurnResult viewTurn = conversationManager
@@ -276,7 +299,7 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.viewBasketInvoked()).isTrue();
 		}
@@ -285,10 +308,16 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should remove item from basket")
 		void removeItemFromBasket() {
 			String sessionId = "core-remove-item";
+			ActionContext context = new ActionContext();
 
 			// Start and add items
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
+			
+			// Verify item is in basket before removal
+			@SuppressWarnings("unchecked")
+			Map<String, Integer> basket = context.get("basket", Map.class);
+			assertThat(basket).isNotEmpty();
 
 			// Remove item
 			ConversationTurnResult removeTurn = conversationManager
@@ -298,19 +327,23 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.removeItemInvoked()).isTrue();
+			
+			// Verify item was removed from basket
+			assertThat(basket).isEmpty();
 		}
 
 		@Test
 		@DisplayName("should change quantity of existing item")
 		void changeItemQuantity() {
 			String sessionId = "core-change-qty";
+			ActionContext context = new ActionContext();
 
 			// Start and add items
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan(), context);
 
 			// Change quantity
 			ConversationTurnResult changeTurn = conversationManager
@@ -320,7 +353,7 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.updateQuantityInvoked()).isTrue();
 		}
@@ -338,10 +371,11 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should compute basket total")
 		void computeBasketTotal() {
 			String sessionId = "core-total";
+			ActionContext context = new ActionContext();
 
 			// Start and add items
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 3 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 3 Coke Zero", sessionId).plan(), context);
 
 			// Compute total
 			ConversationTurnResult totalTurn = conversationManager
@@ -351,7 +385,7 @@ public class ShoppingCoreScenarioTest {
 			assertThat(plan).isNotNull();
 			assertPlanReady(plan);
 
-			PlanExecutionResult result = executor.execute(plan);
+			PlanExecutionResult result = executor.execute(plan, context);
 			assertExecutionSuccess(result);
 			assertThat(actions.computeTotalInvoked()).isTrue();
 		}
@@ -360,16 +394,17 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should apply discounts to total")
 		void applyDiscountsToTotal() {
 			String sessionId = "core-discount-total";
+			ActionContext context = new ActionContext();
 
 			// Start and add discounted item
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan(), context);
 
 			// Compute total - should reflect discount
 			ConversationTurnResult totalTurn = conversationManager
 					.converse("what's the total including discounts?", sessionId);
 
-			PlanExecutionResult result = executor.execute(totalTurn.plan());
+			PlanExecutionResult result = executor.execute(totalTurn.plan(), context);
 			assertExecutionSuccess(result);
 
 			// Verify total was computed (pricing is used internally)
@@ -380,10 +415,11 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should require confirmation before checkout")
 		void requireConfirmationBeforeCheckout() {
 			String sessionId = "core-confirm-checkout";
+			ActionContext context = new ActionContext();
 
 			// Start and add items
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
-			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
+			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
 
 			// Request checkout
 			ConversationTurnResult checkoutTurn = conversationManager
@@ -400,23 +436,28 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should persist basket across multiple turns")
 		void persistBasketAcrossTurns() {
 			String sessionId = "core-persistence";
+			ActionContext context = new ActionContext();
 
 			// Turn 1: Start
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			// Turn 2: Add first item
-			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan());
+			executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
 
 			// Turn 3: Add second item
-			executor.execute(conversationManager.converse("add 3 Sea Salt Crisps", sessionId).plan());
+			executor.execute(conversationManager.converse("add 3 Sea Salt Crisps", sessionId).plan(), context);
 
 			// Turn 4: View basket - should have both items
 			ConversationTurnResult viewTurn = conversationManager
 					.converse("what's in my basket?", sessionId);
-			executor.execute(viewTurn.plan());
+			executor.execute(viewTurn.plan(), context);
 
 			assertThat(actions.viewBasketInvoked()).isTrue();
-			// Basket should contain both items
+			
+			// Verify basket contains both items
+			@SuppressWarnings("unchecked")
+			Map<String, Integer> basket = context.get("basket", Map.class);
+			assertThat(basket).hasSize(2);
 		}
 	}
 
@@ -432,6 +473,7 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should reject non-shopping requests gracefully")
 		void rejectNonShoppingRequests() {
 			String sessionId = "core-error-nonshop";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("change the oil in my car", sessionId);
@@ -443,14 +485,14 @@ public class ShoppingCoreScenarioTest {
 			// The plan may have empty steps or a NoActionStep
 			if (plan.planSteps().isEmpty()) {
 				// Empty steps - noAction handler will be invoked on execute
-				PlanExecutionResult result = executor.execute(plan);
+				PlanExecutionResult result = executor.execute(plan, context);
 				assertThat(result.success()).isFalse();
 				// The assistant message should explain what the assistant can help with
 				assertThat(plan.assistantMessage()).isNotBlank();
 			} else if (plan.planSteps().getFirst() instanceof PlanStep.NoActionStep noAction) {
 				// Explicit noAction step with explanation
 				assertThat(noAction.message()).isNotBlank();
-				PlanExecutionResult result = executor.execute(plan);
+				PlanExecutionResult result = executor.execute(plan, context);
 				assertThat(result.success()).isFalse();
 			} else {
 				// Fallback: might still be an error step
@@ -462,8 +504,9 @@ public class ShoppingCoreScenarioTest {
 		@DisplayName("should handle unrecognised product gracefully")
 		void handleUnrecognisedProduct() {
 			String sessionId = "core-error-unknown";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start shopping", sessionId).plan());
+			executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 
 			ConversationTurnResult addTurn = conversationManager
 					.converse("add 5 bottles of NonExistentProduct", sessionId);

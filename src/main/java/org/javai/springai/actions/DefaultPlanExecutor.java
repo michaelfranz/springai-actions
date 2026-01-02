@@ -1,11 +1,13 @@
 package org.javai.springai.actions;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.javai.springai.actions.api.ActionContext;
+import org.javai.springai.actions.api.FromContext;
 import org.javai.springai.actions.internal.bind.ActionBinding;
 import org.javai.springai.actions.internal.exec.StepExecutionResult;
 import org.javai.springai.actions.internal.instrument.InvocationEmitter;
@@ -201,13 +203,25 @@ public class DefaultPlanExecutor implements PlanExecutor {
 						Map.of("actionId", actionId));
 			}
 			method.setAccessible(true);
-			var params = method.getParameters();
+			Parameter[] params = method.getParameters();
 			Object[] invokeArgs = new Object[params.length];
 			int argIdx = 0;
 			for (int i = 0; i < params.length; i++) {
-				if (params[i].getType() == ActionContext.class) {
+				Parameter param = params[i];
+				if (param.getType() == ActionContext.class) {
+					// Inject the ActionContext directly
 					invokeArgs[i] = context;
+				} else if (param.isAnnotationPresent(FromContext.class)) {
+					// Inject value from context using the annotation's key
+					FromContext fromContext = param.getAnnotation(FromContext.class);
+					String contextKey = fromContext.value();
+					if (!context.contains(contextKey)) {
+						return new StepExecutionResult(actionId, false, null, null,
+								"Missing context value for @FromContext key: " + contextKey);
+					}
+					invokeArgs[i] = context.get(contextKey);
 				} else {
+					// Regular plan argument
 					if (argIdx >= step.arguments().size()) {
 						return new StepExecutionResult(actionId, false, null, null,
 								"Argument count mismatch for action " + actionId);

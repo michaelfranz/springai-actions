@@ -2,6 +2,9 @@ package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
@@ -28,12 +31,19 @@ class BudgetIntegrationTest {
 	private MockStoreApi storeApi;
 	private InventoryAwareShoppingActions actions;
 	private BudgetTool budgetTool;
+	private Map<String, Integer> basket;
+	private ActionContext context;
 
 	@BeforeEach
 	void setUp() {
 		storeApi = new MockStoreApi();
 		actions = new InventoryAwareShoppingActions(storeApi);
 		budgetTool = new BudgetTool(storeApi);
+		
+		// Set up shared basket and context for direct action method calls
+		basket = new HashMap<>();
+		context = new ActionContext();
+		context.put("basket", basket);
 	}
 
 	@Nested
@@ -44,7 +54,7 @@ class BudgetIntegrationTest {
 		@DisplayName("should set budget on session")
 		void setBudgetOnSession() {
 			// Start a session
-			actions.startSession(null);
+			actions.startSession(context);
 
 			// Set a budget
 			ActionResult result = actions.setBudget(null, new BigDecimal("50.00"));
@@ -63,7 +73,7 @@ class BudgetIntegrationTest {
 		@Test
 		@DisplayName("should reject invalid budget amounts")
 		void rejectInvalidBudget() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			// Zero budget
 			ActionResult result1 = actions.setBudget(null, BigDecimal.ZERO);
@@ -82,7 +92,7 @@ class BudgetIntegrationTest {
 		@Test
 		@DisplayName("should allow updating budget mid-session")
 		void updateBudgetMidSession() {
-			actions.startSession(null);
+			actions.startSession(context);
 
 			// Set initial budget
 			actions.setBudget(null, new BigDecimal("30.00"));
@@ -171,12 +181,12 @@ class BudgetIntegrationTest {
 		@Test
 		@DisplayName("should track budget across item additions")
 		void trackBudgetAcrossAdditions() {
-			actions.startSession(null);
+			actions.startSession(context);
 			actions.setBudget(null, new BigDecimal("20.00"));
 
 			// Add items
-			actions.addItem("Coca Cola", 2); // ~£3.00
-			actions.addItem("Sparkling Water", 3); // ~£4.50
+			actions.addItem(basket, "Coca Cola", 2); // ~£3.00
+			actions.addItem(basket, "Sparkling Water", 3); // ~£4.50
 
 			ShoppingSession session = actions.getCurrentSession();
 			BudgetStatus status = storeApi.getBudgetStatus(session);
@@ -191,11 +201,11 @@ class BudgetIntegrationTest {
 		@Test
 		@DisplayName("should report exceeded budget but not block")
 		void exceededBudgetNotBlocking() {
-			actions.startSession(null);
+			actions.startSession(context);
 			actions.setBudget(null, new BigDecimal("5.00"));
 
 			// Add expensive items that exceed budget
-			ActionResult result = actions.addItem("Cheese Board Selection", 1); // £12.99
+			ActionResult result = actions.addItem(basket, "Cheese Board Selection", 1); // £12.99
 
 			// Should succeed (not blocked)
 			assertThat(result.success()).isTrue();

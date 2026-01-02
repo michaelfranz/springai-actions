@@ -2,10 +2,12 @@ package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.store.CustomerProfileService;
@@ -28,6 +30,8 @@ class CustomerPersonalisationTest {
 	private CustomerProfileService customerService;
 	private InventoryAwareShoppingActions actions;
 	private CustomerTool customerTool;
+	private Map<String, Integer> basket;
+	private ActionContext context;
 
 	@BeforeEach
 	void setUp() {
@@ -35,6 +39,11 @@ class CustomerPersonalisationTest {
 		customerService = storeApi.getCustomers();
 		actions = new InventoryAwareShoppingActions(storeApi);
 		customerTool = new CustomerTool(storeApi, customerService);
+		
+		// Set up shared basket and context for direct action method calls
+		basket = new HashMap<>();
+		context = new ActionContext();
+		context.put("basket", basket);
 	}
 
 	@Nested
@@ -321,7 +330,7 @@ class CustomerPersonalisationTest {
 		@Test
 		@DisplayName("should start session for known customer")
 		void startSessionForKnownCustomer() {
-			ActionResult result = actions.startSessionForCustomer(null, "cust-001");
+			ActionResult result = actions.startSessionForCustomer(context, "cust-001");
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Welcome back");
@@ -332,7 +341,7 @@ class CustomerPersonalisationTest {
 		@Test
 		@DisplayName("should mention allergens for customer with restrictions")
 		void mentionAllergens() {
-			ActionResult result = actions.startSessionForCustomer(null, "cust-003");
+			ActionResult result = actions.startSessionForCustomer(context, "cust-003");
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Sam");
@@ -342,9 +351,9 @@ class CustomerPersonalisationTest {
 		@Test
 		@DisplayName("should show recommendations for identified customer")
 		void showRecommendationsForCustomer() {
-			actions.startSessionForCustomer(null, "cust-001");
+			actions.startSessionForCustomer(context, "cust-001");
 
-			ActionResult result = actions.showRecommendations();
+			ActionResult result = actions.showRecommendations(basket);
 
 			assertThat(result.isSuccess()).isTrue();
 			assertThat(result.message()).contains("Recommended");
@@ -355,9 +364,9 @@ class CustomerPersonalisationTest {
 		@Test
 		@DisplayName("should fail recommendations without customer ID")
 		void failRecommendationsWithoutCustomer() {
-			actions.startSession(null); // No customer ID
+			actions.startSession(context); // No customer ID
 
-			ActionResult result = actions.showRecommendations();
+			ActionResult result = actions.showRecommendations(basket);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("no customer");
@@ -368,9 +377,9 @@ class CustomerPersonalisationTest {
 		void recordPurchaseOnCheckout() {
 			int initialOrders = customerService.getPurchaseHistory("cust-001").orders().size();
 
-			actions.startSessionForCustomer(null, "cust-001");
-			actions.addItem("Coke Zero", 3);
-			actions.checkoutBasket();
+			actions.startSessionForCustomer(context, "cust-001");
+			actions.addItem(basket, "Coke Zero", 3);
+			actions.checkoutBasket(basket);
 
 			int finalOrders = customerService.getPurchaseHistory("cust-001").orders().size();
 			assertThat(finalOrders).isEqualTo(initialOrders + 1);
@@ -390,11 +399,11 @@ class CustomerPersonalisationTest {
 			assertThat(profile).contains("vegetarian");
 
 			// 2. Start session for customer
-			ActionResult start = actions.startSessionForCustomer(null, "cust-001");
+			ActionResult start = actions.startSessionForCustomer(context, "cust-001");
 			assertThat(start.isSuccess()).isTrue();
 
 			// 3. Get recommendations
-			ActionResult recs = actions.showRecommendations();
+			ActionResult recs = actions.showRecommendations(basket);
 			assertThat(recs.isSuccess()).isTrue();
 
 			// 4. Get frequent purchases
@@ -402,14 +411,14 @@ class CustomerPersonalisationTest {
 			assertThat(frequent).contains("Coke Zero");
 
 			// 5. Add a frequently bought item
-			actions.addItem("Coke Zero", 4);
+			actions.addItem(basket, "Coke Zero", 4);
 
 			// 6. Get personalized offers
 			String offers = customerTool.getPersonalizedOffers("cust-001");
 			assertThat(offers).contains("Summer Refresh"); // Coke Zero offer
 
 			// 7. Checkout
-			ActionResult checkout = actions.checkoutBasket();
+			ActionResult checkout = actions.checkoutBasket(basket);
 			assertThat(checkout.isSuccess()).isTrue();
 		}
 
@@ -417,10 +426,10 @@ class CustomerPersonalisationTest {
 		@DisplayName("allergen-aware shopping for Sam")
 		void allergenAwareShoppingForSam() {
 			// Sam has nut allergies
-			actions.startSessionForCustomer(null, "cust-003");
+			actions.startSessionForCustomer(context, "cust-003");
 
 			// Get recommendations - should all be nut-free
-			ActionResult recs = actions.showRecommendations();
+			ActionResult recs = actions.showRecommendations(basket);
 			assertThat(recs.isSuccess()).isTrue();
 
 			// Check product safety before adding
@@ -431,9 +440,9 @@ class CustomerPersonalisationTest {
 			String safeCheck = customerTool.checkProductSafety("cust-003", "Guacamole");
 			assertThat(safeCheck).contains("safe");
 
-			actions.addItem("Guacamole", 2);
-			ActionResult basket = actions.viewBasketSummary();
-			assertThat(basket.message()).contains("Guacamole");
+			actions.addItem(basket, "Guacamole", 2);
+			ActionResult basketView = actions.viewBasketSummary(basket);
+			assertThat(basketView.message()).contains("Guacamole");
 		}
 
 		@Test
@@ -444,17 +453,17 @@ class CustomerPersonalisationTest {
 			assertThat(profile).contains("Taylor");
 			assertThat(profile).contains("party");
 
-			actions.startSessionForCustomer(null, "cust-004");
+			actions.startSessionForCustomer(context, "cust-004");
 
 			// Taylor's recommendations should include party items
-			ActionResult recs = actions.showRecommendations();
+			ActionResult recs = actions.showRecommendations(basket);
 			assertThat(recs.isSuccess()).isTrue();
 
 			// Add party items
-			actions.addItem("Caprese Skewers", 3);
-			actions.addItem("Coke Zero", 12);
+			actions.addItem(basket, "Caprese Skewers", 3);
+			actions.addItem(basket, "Coke Zero", 12);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 			assertThat(total.isSuccess()).isTrue();
 		}
 	}

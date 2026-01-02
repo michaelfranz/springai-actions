@@ -2,7 +2,10 @@ package org.javai.springai.scenarios.shopping.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import org.javai.springai.actions.PersonaSpec;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.actions.ShoppingPersonaSpec;
@@ -25,6 +28,8 @@ class PricingIntegrationTest {
 	private InventoryAwareShoppingActions actions;
 	private PricingTool pricingTool;
 	private EnhancedSpecialOfferTool offerTool;
+	private Map<String, Integer> basket;
+	private ActionContext context;
 
 	@BeforeEach
 	void setUp() {
@@ -32,6 +37,11 @@ class PricingIntegrationTest {
 		actions = new InventoryAwareShoppingActions(storeApi);
 		pricingTool = new PricingTool(storeApi);
 		offerTool = new EnhancedSpecialOfferTool(storeApi);
+		
+		// Set up shared basket and context for direct action method calls
+		basket = new HashMap<>();
+		context = new ActionContext();
+		context.put("basket", basket);
 	}
 
 	@Nested
@@ -42,9 +52,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply 10% off to Coke Zero (Summer Refresh)")
 		void applyCokeZeroDiscount() {
 			// Coke Zero: £1.50 x 10 = £15.00, 10% off = £1.50 discount
-			actions.addItem("Coke Zero", 10);
+			actions.addItem(basket, "Coke Zero", 10);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("Subtotal: £15.00");
@@ -56,9 +66,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply 15% off to snacks (Party Pack)")
 		void applySnacksDiscount() {
 			// Sea Salt Crisps: £2.00 x 4 = £8.00, 15% off = £1.20 discount
-			actions.addItem("Sea Salt Crisps", 4);
+			actions.addItem(basket, "Sea Salt Crisps", 4);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("Subtotal: £8.00");
@@ -70,9 +80,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply 20% off to party items (Party Platter Special)")
 		void applyPartyItemDiscount() {
 			// Caprese Skewers: £6.00 x 2 = £12.00, 20% off = £2.40 discount
-			actions.addItem("Caprese Skewers", 2);
+			actions.addItem(basket, "Caprese Skewers", 2);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("£12.00");
@@ -85,9 +95,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply 10% off to produce (Healthy Choice)")
 		void applyProduceDiscount() {
 			// Fruit Salad Bowl: £4.50 x 2 = £9.00, 10% off = £0.90 discount
-			actions.addItem("Fruit Salad Bowl", 2);
+			actions.addItem(basket, "Fruit Salad Bowl", 2);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("£9.00");
@@ -103,9 +113,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply £0.20 off per milk/yogurt (Dairy Deal)")
 		void applyDairyDeal() {
 			// Milk: £1.20 x 3 = £3.60, £0.20 off x 3 = £0.60 discount
-			actions.addItem("Semi-skimmed Milk", 3);
+			actions.addItem(basket, "Semi-skimmed Milk", 3);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("£3.60");
@@ -118,9 +128,9 @@ class PricingIntegrationTest {
 		@DisplayName("should apply dairy deal to yogurt")
 		void applyDairyDealToYogurt() {
 			// Greek Yogurt: £2.00 x 2 = £4.00, £0.20 off x 2 = £0.40 discount
-			actions.addItem("Greek Yogurt", 2);
+			actions.addItem(basket, "Greek Yogurt", 2);
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("£4.00");
@@ -135,11 +145,11 @@ class PricingIntegrationTest {
 		@Test
 		@DisplayName("should apply multiple discounts to mixed basket")
 		void applyMultipleDiscounts() {
-			actions.addItem("Coke Zero", 4);       // 10% off
-			actions.addItem("Sea Salt Crisps", 2); // 15% off
-			actions.addItem("Greek Yogurt", 1);    // £0.20 off
+			actions.addItem(basket, "Coke Zero", 4);       // 10% off
+			actions.addItem(basket, "Sea Salt Crisps", 2); // 15% off
+			actions.addItem(basket, "Greek Yogurt", 1);    // £0.20 off
 
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 
 			assertThat(total.isSuccess()).isTrue();
 			assertThat(total.message()).contains("Discounts");
@@ -151,10 +161,10 @@ class PricingIntegrationTest {
 		@Test
 		@DisplayName("basket summary should show discounts")
 		void basketSummaryShowsDiscounts() {
-			actions.addItem("Coke Zero", 5);
-			actions.addItem("Caprese Skewers", 1);
+			actions.addItem(basket, "Coke Zero", 5);
+			actions.addItem(basket, "Caprese Skewers", 1);
 
-			ActionResult summary = actions.viewBasketSummary();
+			ActionResult summary = actions.viewBasketSummary(basket);
 
 			assertThat(summary.isSuccess()).isTrue();
 			assertThat(summary.message()).contains("Coke Zero");
@@ -258,11 +268,11 @@ class PricingIntegrationTest {
 		@Test
 		@DisplayName("should show correct total at checkout")
 		void correctTotalAtCheckout() {
-			actions.addItem("Coke Zero", 6);       // £1.50 x 6 = £9.00, 10% off = £0.90, net = £8.10
-			actions.addItem("Sea Salt Crisps", 2); // £2.00 x 2 = £4.00, 15% off = £0.60, net = £3.40
+			actions.addItem(basket, "Coke Zero", 6);       // £1.50 x 6 = £9.00, 10% off = £0.90, net = £8.10
+			actions.addItem(basket, "Sea Salt Crisps", 2); // £2.00 x 2 = £4.00, 15% off = £0.60, net = £3.40
 			// Total: £11.50
 
-			ActionResult checkout = actions.checkoutBasket();
+			ActionResult checkout = actions.checkoutBasket(basket);
 
 			assertThat(checkout.isSuccess()).isTrue();
 			assertThat(checkout.message()).contains("Order complete");
@@ -272,8 +282,8 @@ class PricingIntegrationTest {
 		@Test
 		@DisplayName("should clear basket after checkout")
 		void clearBasketAfterCheckout() {
-			actions.addItem("Coke Zero", 3);
-			actions.checkoutBasket();
+			actions.addItem(basket, "Coke Zero", 3);
+			actions.checkoutBasket(basket);
 
 			assertThat(actions.getBasketState()).isEmpty();
 		}
@@ -281,7 +291,7 @@ class PricingIntegrationTest {
 		@Test
 		@DisplayName("should not checkout empty basket")
 		void noCheckoutEmptyBasket() {
-			ActionResult result = actions.checkoutBasket();
+			ActionResult result = actions.checkoutBasket(basket);
 
 			assertThat(result.isSuccess()).isFalse();
 			assertThat(result.message()).containsIgnoringCase("empty");
@@ -296,10 +306,10 @@ class PricingIntegrationTest {
 		@DisplayName("pricing tool and actions should give same total")
 		void pricingConsistency() {
 			// Add items via actions
-			actions.addItem("Coke Zero", 5);
-			actions.addItem("Hummus", 2);
+			actions.addItem(basket, "Coke Zero", 5);
+			actions.addItem(basket, "Hummus", 2);
 
-			ActionResult actionTotal = actions.computeTotal();
+			ActionResult actionTotal = actions.computeTotal(basket);
 
 			// Calculate same basket via pricing tool
 			String toolTotal = pricingTool.calculateBasketTotal("Coke Zero:5, Hummus:2");
@@ -315,8 +325,8 @@ class PricingIntegrationTest {
 		void estimateMatchesSingleItemBasket() {
 			String estimate = pricingTool.estimateCost("Coke Zero", 5);
 
-			actions.addItem("Coke Zero", 5);
-			ActionResult basketTotal = actions.computeTotal();
+			actions.addItem(basket, "Coke Zero", 5);
+			ActionResult basketTotal = actions.computeTotal(basket);
 
 			// Both should have the same final total (£6.75)
 			// £1.50 x 5 = £7.50, 10% off = £0.75, net = £6.75
@@ -465,26 +475,26 @@ class PricingIntegrationTest {
 			assertThat(estimate).contains("£8.10"); // After 10% discount
 
 			// 3. Add to basket
-			actions.addItem("Coke Zero", 6);
-			actions.addItem("Caprese Skewers", 2);
+			actions.addItem(basket, "Coke Zero", 6);
+			actions.addItem(basket, "Caprese Skewers", 2);
 
 			// 4. View basket with prices
-			ActionResult basket = actions.viewBasketSummary();
-			assertThat(basket.isSuccess()).isTrue();
-			assertThat(basket.message()).contains("Coke Zero");
-			assertThat(basket.message()).contains("Caprese Skewers");
-			assertThat(basket.message()).contains("Discounts applied");
+			ActionResult basketView = actions.viewBasketSummary(basket);
+			assertThat(basketView.isSuccess()).isTrue();
+			assertThat(basketView.message()).contains("Coke Zero");
+			assertThat(basketView.message()).contains("Caprese Skewers");
+			assertThat(basketView.message()).contains("Discounts applied");
 
 			// 5. Calculate savings
 			String savings = pricingTool.calculateSavings("Coke Zero:6, Caprese Skewers:2");
 			assertThat(savings).contains("savings");
 
 			// 6. Compute total
-			ActionResult total = actions.computeTotal();
+			ActionResult total = actions.computeTotal(basket);
 			assertThat(total.message()).contains("Discounts");
 
 			// 7. Checkout
-			ActionResult checkout = actions.checkoutBasket();
+			ActionResult checkout = actions.checkoutBasket(basket);
 			assertThat(checkout.isSuccess()).isTrue();
 			assertThat(checkout.message()).contains("Order complete");
 		}
@@ -493,10 +503,10 @@ class PricingIntegrationTest {
 		@DisplayName("verify pricing accuracy for complex basket")
 		void verifyPricingAccuracy() {
 			// Build a complex basket
-			actions.addItem("Coke Zero", 10);      // £15.00, 10% off = £1.50, net = £13.50
-			actions.addItem("Sea Salt Crisps", 5); // £10.00, 15% off = £1.50, net = £8.50
-			actions.addItem("Greek Yogurt", 3);    // £6.00, £0.20 x 3 = £0.60, net = £5.40
-			actions.addItem("Fruit Salad Bowl", 2);// £9.00, 10% off = £0.90, net = £8.10
+			actions.addItem(basket, "Coke Zero", 10);      // £15.00, 10% off = £1.50, net = £13.50
+			actions.addItem(basket, "Sea Salt Crisps", 5); // £10.00, 15% off = £1.50, net = £8.50
+			actions.addItem(basket, "Greek Yogurt", 3);    // £6.00, £0.20 x 3 = £0.60, net = £5.40
+			actions.addItem(basket, "Fruit Salad Bowl", 2);// £9.00, 10% off = £0.90, net = £8.10
 
 			// Expected subtotal: £40.00
 			// Expected discounts: £4.50

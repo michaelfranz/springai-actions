@@ -1,22 +1,17 @@
 package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
-
 import java.math.BigDecimal;
 import java.util.Objects;
-
 import java.util.Set;
-
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.javai.springai.actions.api.ActionContext;
 import org.javai.springai.actions.conversation.ConversationManager;
 import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
@@ -36,6 +31,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -144,6 +141,7 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should interpret party planning mission")
 		void interpretPartyMission() {
 			String sessionId = "mission-party-interpret";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("Help me prepare for a midday party of 10 vegetarians", sessionId);
@@ -158,14 +156,15 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should respect dietary requirements in mission")
 		void respectDietaryRequirements() {
 			String sessionId = "mission-party-dietary";
+			ActionContext context = new ActionContext();
 
-			executor.execute(conversationManager.converse("start a shopping session", sessionId).plan());
+			executor.execute(conversationManager.converse("start a shopping session", sessionId).plan(), context);
 
 			ConversationTurnResult missionTurn = conversationManager
 					.converse("I need food for 8 vegetarians for a dinner party", sessionId);
 
 			// The assistant should plan with vegetarian constraints
-			executor.execute(missionTurn.plan());
+			executor.execute(missionTurn.plan(), context);
 
 			// Verify the mission was understood (infrastructure test)
 			MissionRequest request = MissionRequest.builder()
@@ -185,12 +184,13 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should exclude allergens from mission plan")
 		void excludeAllergensFromMission() {
 			String sessionId = "mission-party-allergen";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager.converse(
 					"Help me plan snacks for 10 people, one has a severe peanut allergy",
 					sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Verify allergen exclusion in infrastructure
 			MissionRequest request = MissionRequest.builder()
@@ -209,11 +209,12 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should scale quantities for headcount")
 		void scaleQuantitiesForHeadcount() {
 			String sessionId = "mission-party-scale";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("Plan beverages for a party of 20 people", sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Verify scaling in infrastructure
 			MissionRequest request = MissionRequest.builder()
@@ -245,6 +246,7 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should propose mission plan for review")
 		void proposeMissionPlanForReview() {
 			String sessionId = "mission-party-review";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("Help me plan a picnic for 6 people", sessionId);
@@ -259,10 +261,11 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should allow modifications to proposed mission plan")
 		void allowMissionPlanModifications() {
 			String sessionId = "mission-party-modify";
+			ActionContext context = new ActionContext();
 
 			// Initial mission
 			executor.execute(conversationManager
-					.converse("Plan snacks for a party of 8", sessionId).plan());
+					.converse("Plan snacks for a party of 8", sessionId).plan(), context);
 
 			// Modify the plan
 			ConversationTurnResult modifyTurn = conversationManager
@@ -286,11 +289,12 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should respect budget constraint in mission")
 		void respectBudgetConstraint() {
 			String sessionId = "mission-budget-respect";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I need to feed 6 people dinner for under £30", sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Verify budget constraint in infrastructure
 			MissionRequest request = MissionRequest.builder()
@@ -308,6 +312,7 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should warn when budget is tight")
 		void warnWhenBudgetTight() {
 			String sessionId = "mission-budget-tight";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("Plan a party for 20 people with only £15 budget", sessionId);
@@ -328,6 +333,7 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should suggest budget-friendly alternatives")
 		void suggestBudgetFriendlyAlternatives() {
 			String sessionId = "mission-budget-alt";
+			ActionContext context = new ActionContext();
 
 			// Ask for recommendations with budget constraint expressed naturally
 			ConversationTurnResult recTurn = conversationManager
@@ -343,14 +349,15 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should track remaining budget during mission")
 		void trackRemainingBudgetDuringMission() {
 			String sessionId = "mission-budget-track";
+			ActionContext context = new ActionContext();
 
 			// Start with a budget constraint
 			executor.execute(conversationManager
-					.converse("I have a £50 budget for party supplies", sessionId).plan());
+					.converse("I have a £50 budget for party supplies", sessionId).plan(), context);
 
 			// Add items
 			executor.execute(conversationManager
-					.converse("add 5 Coke Zero", sessionId).plan());
+					.converse("add 5 Coke Zero", sessionId).plan(), context);
 
 			// Check remaining budget
 			ConversationTurnResult budgetTurn = conversationManager
@@ -366,10 +373,11 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should warn before exceeding budget")
 		void warnBeforeExceedingBudget() {
 			String sessionId = "mission-budget-warn";
+			ActionContext context = new ActionContext();
 
 			// Start with a tight budget
 			executor.execute(conversationManager
-					.converse("I only have £10 to spend today", sessionId).plan());
+					.converse("I only have £10 to spend today", sessionId).plan(), context);
 
 			// Try to add expensive items
 			ConversationTurnResult addTurn = conversationManager
@@ -394,11 +402,12 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should select appropriate products for party occasion")
 		void selectProductsForParty() {
 			String sessionId = "mission-occasion-party";
+			ActionContext context = new ActionContext();
 
 			ConversationTurnResult turn = conversationManager
 					.converse("I'm throwing a party, what do you suggest?", sessionId);
 
-			executor.execute(turn.plan());
+			executor.execute(turn.plan(), context);
 
 			// Infrastructure should prioritize party categories
 			MissionRequest request = MissionRequest.builder()
@@ -462,10 +471,11 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should allow basket additions beyond mission plan")
 		void allowAdditionalItems() {
 			String sessionId = "mission-ref-additive";
+			ActionContext context = new ActionContext();
 
 			// Start with a mission
 			executor.execute(conversationManager
-					.converse("Plan snacks for 6 people", sessionId).plan());
+					.converse("Plan snacks for 6 people", sessionId).plan(), context);
 
 			// Add something extra not in the plan
 			ConversationTurnResult addTurn = conversationManager
@@ -481,14 +491,15 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should answer queries about mission progress")
 		void answerMissionProgressQueries() {
 			String sessionId = "mission-ref-progress";
+			ActionContext context = new ActionContext();
 
 			// Start with a mission
 			executor.execute(conversationManager
-					.converse("Help me plan a party for 10", sessionId).plan());
+					.converse("Help me plan a party for 10", sessionId).plan(), context);
 
 			// Add some items
 			executor.execute(conversationManager
-					.converse("add 10 Coke Zero", sessionId).plan());
+					.converse("add 10 Coke Zero", sessionId).plan(), context);
 
 			// Ask about progress
 			ConversationTurnResult progressTurn = conversationManager
@@ -503,10 +514,11 @@ public class ShoppingMissionScenarioTest {
 		@DisplayName("should not block items that drift from mission")
 		void allowMissionDrift() {
 			String sessionId = "mission-ref-drift";
+			ActionContext context = new ActionContext();
 
 			// Start vegetarian party mission
 			executor.execute(conversationManager.converse(
-					"Plan a vegetarian party for 8", sessionId).plan());
+					"Plan a vegetarian party for 8", sessionId).plan(), context);
 
 			// Add non-vegetarian item (drift from mission)
 			ConversationTurnResult addTurn = conversationManager
