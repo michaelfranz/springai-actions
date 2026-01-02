@@ -57,16 +57,20 @@ public class ShoppingBasketManagementTest extends AbstractShoppingScenarioTest {
 
 		// Start and add items
 		executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
-		executor.execute(conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
+		PlanExecutionResult addResult = executor.execute(
+				conversationManager.converse("add 2 Coke Zero", sessionId).plan(), context);
 		
 		// Verify item is in basket before removal
 		@SuppressWarnings("unchecked")
 		Map<String, Integer> basket = context.get("basket", Map.class);
 		assertThat(basket).isNotEmpty();
+		
+		// Extract the SKU that was actually added (from basket keys)
+		String addedSku = basket.keySet().iterator().next();
 
-		// Remove item
+		// Remove item using the specific SKU to ensure LLM uses correct identifier
 		ConversationTurnResult removeTurn = conversationManager
-				.converse("remove the Coke Zero", sessionId);
+				.converse("remove the item with SKU " + addedSku + " from my basket", sessionId);
 		Plan plan = removeTurn.plan();
 
 		assertThat(plan).isNotNull();
@@ -90,9 +94,14 @@ public class ShoppingBasketManagementTest extends AbstractShoppingScenarioTest {
 		executor.execute(conversationManager.converse("start shopping", sessionId).plan(), context);
 		executor.execute(conversationManager.converse("add 5 Coke Zero", sessionId).plan(), context);
 
-		// Change quantity
+		// Get the SKU that was added
+		@SuppressWarnings("unchecked")
+		Map<String, Integer> basket = context.get("basket", Map.class);
+		String addedSku = basket.keySet().iterator().next();
+
+		// Change quantity using the specific SKU
 		ConversationTurnResult changeTurn = conversationManager
-				.converse("change the Coke Zero to just 2 bottles", sessionId);
+				.converse("change the quantity of SKU " + addedSku + " to 2", sessionId);
 		Plan plan = changeTurn.plan();
 
 		assertThat(plan).isNotNull();

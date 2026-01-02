@@ -170,32 +170,43 @@ public final class Planner {
 		return buildPromptPreview(nonNullRequest, Objects.requireNonNull(safeDescriptors), null);
 	}
 
+	/**
+	 * Builds the core planning directive that applies to ALL applications using this framework.
+	 * This is domain-agnostic guidance about producing execution plans.
+	 * Domain-specific guidance should come from the PersonaSpec.
+	 */
 	private static String buildPlanningDirective(List<ActionDescriptor> actionDescriptors) {
 		StringBuilder sb = new StringBuilder();
+		
+		// Core identity - framework level
+		sb.append("🎯 CORE DIRECTIVE:\n\n");
+		sb.append("You are a PLANNER producing an execution plan. You are NOT a chatbot.\n");
+		sb.append("Your output is a JSON plan that the application will execute.\n");
+		sb.append("The 'message' field is a SHORT UI summary—it must NEVER ask questions or request information.\n\n");
+		
+		// Output format
 		sb.append("🔴 OUTPUT FORMAT - JSON ONLY:\n\n");
 		sb.append("Respond with a JSON object. No prose. No markdown. Just JSON.\n\n");
 		
-		// Generate dynamic examples based on actual registered actions
+		// List valid action IDs
 		if (actionDescriptors != null && !actionDescriptors.isEmpty()) {
-			// Explicitly list valid action IDs
 			sb.append("VALID ACTION IDs (use EXACTLY one of these):\n");
 			for (ActionDescriptor ad : actionDescriptors) {
 				sb.append("  - \"").append(ad.id()).append("\"\n");
 			}
 			sb.append("\n");
 			
-			sb.append("EXAMPLE:\n");
-			
-			// Pick the simplest action for example (prefer no params, then fewest params)
+			// Generate a generic example based on registered actions
+			sb.append("EXAMPLE FORMAT:\n");
 			ActionDescriptor example = pickExampleAction(actionDescriptors);
 			sb.append("{\n");
-			sb.append("  \"message\": \"Brief description of what you're doing\",\n");
+			sb.append("  \"message\": \"Short summary of what the plan does.\",\n");
 			sb.append("  \"steps\": [\n");
 			sb.append("    {\n");
 			sb.append("      \"actionId\": \"").append(example.id()).append("\",\n");
 			sb.append("      \"description\": \"").append(truncateForExample(example.description())).append("\"");
 			
-			if (example.actionParameterSpecs() != null && !example.actionParameterSpecs().isEmpty()) {
+			if (!example.actionParameterSpecs().isEmpty()) {
 				sb.append(",\n      \"parameters\": {\n");
 				boolean firstParam = true;
 				for (ActionParameterDescriptor param : example.actionParameterSpecs()) {
@@ -207,23 +218,38 @@ public final class Planner {
 					sb.append(generateExampleValue(param));
 				}
 				sb.append("\n      }");
+			} else {
+				sb.append(",\n      \"parameters\": {}");
 			}
 			sb.append("\n    }\n");
 			sb.append("  ]\n");
 			sb.append("}\n\n");
+			
+			// Example for noAction if available
+			if (hasAction(actionDescriptors, "noAction")) {
+				sb.append("For out-of-scope requests, use noAction:\n");
+				sb.append("{\"message\": \"Cannot help with that.\", \"steps\": [{\"actionId\": \"noAction\", ");
+				sb.append("\"description\": \"Request outside scope.\", \"parameters\": {\"reason\": \"...\"}}]}\n\n");
+			}
 		}
 		
+		// Critical rules - framework level
 		sb.append("🚨 CRITICAL RULES:\n");
-		sb.append("- actionId MUST be EXACTLY one of the strings from VALID ACTION IDs above - NO EXCEPTIONS\n");
-		sb.append("- If no exact match exists in VALID ACTION IDs, the action does NOT exist\n");
+		sb.append("- actionId MUST be EXACTLY one of the VALID ACTION IDs listed above—NO EXCEPTIONS\n");
 		sb.append("- NEVER create, invent, or imagine action names not in the list\n");
 		sb.append("- Parameters MUST be nested inside a \"parameters\" object, NOT at step level\n");
 		sb.append("- Parameter names MUST match exactly as shown in PLAN STEP OPTIONS\n");
-		sb.append("- Actions already handle their internal logic (e.g., addItem validates availability)\n");
-		sb.append("- Include a brief \"description\" explaining what this step does\n");
+		sb.append("- steps[] must ALWAYS contain at least one action\n");
+		sb.append("- Actions have full access to system state (session, context, data). NEVER ask the user for this.\n");
+		sb.append("- The 'message' is a SHORT UI summary. NEVER ask questions or request information in it.\n");
+		sb.append("- If you cannot find an appropriate action, use 'noAction' with a reason—do NOT return empty steps.\n");
 		sb.append("\nSTOP after the closing brace. Emit nothing else.");
 		
 		return sb.toString();
+	}
+	
+	private static boolean hasAction(List<ActionDescriptor> descriptors, String actionId) {
+		return descriptors.stream().anyMatch(a -> actionId.equals(a.id()));
 	}
 	
 	/**
@@ -234,7 +260,7 @@ public final class Planner {
 		// Prefer actions with 1-3 params to show the parameters structure
 		return descriptors.stream()
 				.filter(a -> {
-					int params = a.actionParameterSpecs() != null ? a.actionParameterSpecs().size() : 0;
+					int params = a.actionParameterSpecs().size();
 					return params >= 1 && params <= 3;
 				})
 				.findFirst()
@@ -258,7 +284,7 @@ public final class Planner {
 	
 	private static String generateExampleValue(ActionParameterDescriptor param) {
 		// Check for explicit examples first
-		if (param.examples() != null && param.examples().length > 0) {
+		if (param.examples().length > 0) {
 			String example = param.examples()[0];
 			// If it looks like JSON, use as-is; otherwise quote it
 			if (example.startsWith("{") || example.startsWith("[") || 
@@ -270,14 +296,13 @@ public final class Planner {
 		}
 		
 		// Check for allowed values
-		if (param.allowedValues() != null && param.allowedValues().length > 0) {
+		if (param.allowedValues().length > 0) {
 			return "\"" + param.allowedValues()[0] + "\"";
 		}
 		
 		// Generate based on type
 		String typeId = param.typeId();
-		if (typeId == null) typeId = "String";
-		
+
 		return switch (typeId.toLowerCase()) {
 			case "int", "integer", "long" -> "1";
 			case "double", "float", "bigdecimal" -> "10.00";
@@ -300,7 +325,7 @@ public final class Planner {
 				this.promptContext,
 				this.typeHandlerRegistry
 		);
-		if (systemPrompt != null && !systemPrompt.isBlank()) {
+		if (!systemPrompt.isBlank()) {
 			systemMessages.add(systemPrompt);
 		}
 
@@ -329,12 +354,10 @@ public final class Planner {
 		}
 
 		// Add type-specific guidance from registered type handlers
-		if (this.typeHandlerRegistry != null) {
-			String typeGuidance = org.javai.springai.actions.internal.bind.ActionPromptContributor
-					.collectTypeGuidance(collectedActions.registry(), this.typeHandlerRegistry);
-			if (!typeGuidance.isBlank()) {
-				systemMessages.add(typeGuidance);
-			}
+		String typeGuidance = org.javai.springai.actions.internal.bind.ActionPromptContributor
+				.collectTypeGuidance(collectedActions.registry(), this.typeHandlerRegistry);
+		if (!typeGuidance.isBlank()) {
+			systemMessages.add(typeGuidance);
 		}
 
 		systemMessages.addAll(promptContributions);

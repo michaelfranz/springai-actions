@@ -18,6 +18,7 @@ import org.javai.springai.scenarios.shopping.tools.EnhancedSpecialOfferTool;
 import org.javai.springai.scenarios.shopping.tools.InventoryTool;
 import org.javai.springai.scenarios.shopping.tools.PricingTool;
 import org.javai.springai.scenarios.shopping.tools.ProductSearchTool;
+import org.javai.springai.scenarios.shopping.tools.SkuFinderTool;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
@@ -54,6 +55,7 @@ public abstract class AbstractShoppingScenarioTest {
 	protected InventoryTool inventoryTool;
 	protected PricingTool pricingTool;
 	protected ProductSearchTool searchTool;
+	protected SkuFinderTool skuFinderTool;
 
 	// LLM infrastructure
 	protected Planner planner;
@@ -73,6 +75,7 @@ public abstract class AbstractShoppingScenarioTest {
 		inventoryTool = new InventoryTool(storeApi);
 		pricingTool = new PricingTool(storeApi);
 		searchTool = new ProductSearchTool(storeApi);
+		skuFinderTool = new SkuFinderTool(storeApi);
 
 		// Initialize LLM components
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
@@ -89,7 +92,7 @@ public abstract class AbstractShoppingScenarioTest {
 		planner = Planner.builder()
 				.withChatClient(chatClient)
 				.persona(ShoppingPersonaSpec.standard())
-				.tools(offerTool, inventoryTool, pricingTool, searchTool)
+				.tools(skuFinderTool, offerTool, inventoryTool, pricingTool, searchTool)
 				.actions(actions)
 				.build();
 		

@@ -137,30 +137,32 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			Add a product to the current basket. Validates stock before adding.""")
+			Add a product to the basket by SKU identifier.
+			IMPORTANT: Use the findProductSku tool first to get the correct SKU for a product name.""")
 	public ActionResult addItem(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "The product name (e.g. 'Coke Zero')") String productName,
+			@ActionParam(description = "The product SKU identifier (e.g. 'COKE-ZERO-330ML'). Use findProductSku tool to look this up.") String sku,
 			@ActionParam(description = "How many to add") int quantity) {
 
 		addItemInvoked.set(true);
-		lastAddItem = new AddItemRequest(productName, quantity);
+		lastAddItem = new AddItemRequest(sku, quantity);
 		lastWarning = null;
 		lastAlternatives = null;
 		lastBasketSnapshot = basket;
 
+		// Find product by SKU, name, or interpret plausible SKU-like strings
+		Optional<Product> productOpt = resolveProduct(sku);
+		if (productOpt.isEmpty()) {
+			return ActionResult.error("Product not found for: " + sku + ". Please check the product name or SKU.");
+		}
+
+		Product p = productOpt.get();
+		
 		// Check availability
-		AvailabilityResult availability = storeApi.checkAvailability(productName, quantity);
+		AvailabilityResult availability = storeApi.checkAvailabilityBySku(p.sku(), quantity);
 
 		return switch (availability) {
 			case AvailabilityResult.Available(int qty, boolean lowStock) -> {
-				// Find the product to get the SKU
-				Optional<Product> productOpt = storeApi.findProduct(productName);
-				if (productOpt.isEmpty()) {
-					yield ActionResult.error("Product not found: " + productName);
-				}
-
-				Product p = productOpt.get();
 				basket.merge(p.sku(), quantity, Integer::sum);
 				storeApi.reserveStock(p.sku(), quantity);
 				
@@ -173,9 +175,9 @@ public class InventoryAwareShoppingActions {
 					int remaining = storeApi.getAvailableQuantity(p.sku());
 					lastWarning = String.format("Stock is running low - only %d left after this order.", remaining);
 					yield ActionResult.success(String.format(
-							"Added %d × %s to basket. ⚠️ %s", quantity, p.name(), lastWarning));
+							"Added %d × %s (SKU: %s) to basket. ⚠️ %s", quantity, p.name(), p.sku(), lastWarning));
 				}
-				yield ActionResult.success(String.format("Added %d × %s to basket.", quantity, p.name()));
+				yield ActionResult.success(String.format("Added %d × %s (SKU: %s) to basket.", quantity, p.name(), p.sku()));
 			}
 
 			case AvailabilityResult.PartiallyAvailable(int available, int requested, List<Product> alternatives) -> {
@@ -183,52 +185,46 @@ public class InventoryAwareShoppingActions {
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
 						"Only %d of %d %s available.%s Would you like to add %d instead?",
-						available, requested, productName, altText, available));
+						available, requested, p.name(), altText, available));
 			}
 
 			case AvailabilityResult.OutOfStock(List<Product> alternatives) -> {
 				lastAlternatives = alternatives;
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
-						"%s is out of stock.%s", productName, altText));
+						"%s is out of stock.%s", p.name(), altText));
 			}
 
 			case AvailabilityResult.Discontinued(List<Product> alternatives) -> {
 				lastAlternatives = alternatives;
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
-						"%s has been discontinued.%s", productName, altText));
+						"%s has been discontinued.%s", p.name(), altText));
 			}
 
 			case AvailabilityResult.NotFound(String searchTerm, List<Product> suggestions) -> {
+				// This shouldn't happen since we already validated the SKU
 				lastAlternatives = suggestions;
-				if (suggestions.isEmpty()) {
-					yield ActionResult.error(String.format("Product '%s' not found in catalog.", searchTerm));
-				}
-				String suggestionText = suggestions.stream()
-						.map(Product::name)
-						.collect(Collectors.joining(", "));
-				yield ActionResult.error(String.format(
-						"Product '%s' not found. Did you mean: %s?", searchTerm, suggestionText));
+				yield ActionResult.error(String.format("SKU '%s' not found. Use findProductSku tool first.", sku));
 			}
 		};
 	}
 
 	@Action(description = """
 			Update the quantity of an existing item in the basket.
-			Can increase or decrease quantity. Use 0 to remove the item.""")
+			IMPORTANT: The 'sku' parameter must be the SKU (e.g., 'BEV-002'), not the product name.""")
 	public ActionResult updateItemQuantity(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "The product name") String productName,
-			@ActionParam(description = "New quantity (0 to remove)") int newQuantity) {
+			@ActionParam(description = "The product SKU (e.g., 'BEV-002'). NOT the product name.") String sku,
+			@ActionParam(description = "New quantity (use 0 to remove the item)") int quantity) {
 
 		updateQuantityInvoked.set(true);
 		lastBasketSnapshot = basket;
 
-		// Find the product
-		Optional<Product> productOpt = storeApi.findProduct(productName);
+		// Find product by SKU, name, or interpret plausible SKU-like strings
+		Optional<Product> productOpt = resolveProduct(sku);
 		if (productOpt.isEmpty()) {
-			return ActionResult.error("Product not found: " + productName);
+			return ActionResult.error("Product not found for: " + sku);
 		}
 
 		Product p = productOpt.get();
@@ -239,38 +235,38 @@ public class InventoryAwareShoppingActions {
 		}
 
 		// If setting to 0, remove the item
-		if (newQuantity == 0) {
+		if (quantity == 0) {
 			storeApi.releaseStock(p.sku(), currentQuantity);
 			basket.remove(p.sku());
 			return ActionResult.success(String.format("Removed %s from basket.", p.name()));
 		}
 
-		int difference = newQuantity - currentQuantity;
+		int difference = quantity - currentQuantity;
 
 		if (difference > 0) {
 			// Increasing quantity - check availability
 			AvailabilityResult availability = storeApi.checkAvailabilityBySku(p.sku(), difference);
 
 			if (availability instanceof AvailabilityResult.Available(int qty, boolean lowStock)) {
-				basket.put(p.sku(), newQuantity);
+				basket.put(p.sku(), quantity);
 				storeApi.reserveStock(p.sku(), difference);
 
 				if (lowStock) {
 					return ActionResult.success(String.format(
-							"Updated %s quantity to %d. ⚠️ Stock is running low.", p.name(), newQuantity));
+							"Updated %s quantity to %d. ⚠️ Stock is running low.", p.name(), quantity));
 				}
-				return ActionResult.success(String.format("Updated %s quantity to %d.", p.name(), newQuantity));
+				return ActionResult.success(String.format("Updated %s quantity to %d.", p.name(), quantity));
 			} else {
 				int available = storeApi.getAvailableQuantity(p.sku());
 				return ActionResult.error(String.format(
 						"Cannot increase to %d. Only %d more available (total available: %d).",
-						newQuantity, available, currentQuantity + available));
+						quantity, available, currentQuantity + available));
 			}
 		} else {
 			// Decreasing quantity - always allowed
 			storeApi.releaseStock(p.sku(), -difference);
-			basket.put(p.sku(), newQuantity);
-			return ActionResult.success(String.format("Updated %s quantity to %d.", p.name(), newQuantity));
+			basket.put(p.sku(), quantity);
+			return ActionResult.success(String.format("Updated %s quantity to %d.", p.name(), quantity));
 		}
 	}
 
@@ -312,17 +308,19 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			Remove a product from the current basket.""")
+			Remove a product from the basket by SKU identifier.
+			IMPORTANT: The 'sku' parameter must be the SKU (e.g., 'BEV-002'), not the product name.""")
 	public ActionResult removeItem(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "The product name to remove") String productName) {
+			@ActionParam(description = "The product SKU (e.g., 'BEV-002'). NOT the product name.") String sku) {
 
 		removeItemInvoked.set(true);
 		lastBasketSnapshot = basket;
 
-		Optional<Product> productOpt = storeApi.findProduct(productName);
+		// Find product by SKU, name, or interpret plausible SKU-like strings
+		Optional<Product> productOpt = resolveProduct(sku);
 		if (productOpt.isEmpty()) {
-			return ActionResult.error("Product not found: " + productName);
+			return ActionResult.error("Product not found for: " + sku);
 		}
 
 		Product p = productOpt.get();
@@ -429,6 +427,16 @@ public class InventoryAwareShoppingActions {
 	public ActionResult requestFeedback() {
 		requestFeedbackInvoked.set(true);
 		return ActionResult.success("Thank you for shopping with us! How was your experience today?");
+	}
+
+	@Action(description = """
+			Use this action when the user request is OUTSIDE the shopping scope.
+			This ensures the plan always has at least one action step.
+			Explain in the 'reason' parameter why the request cannot be fulfilled.""")
+	public ActionResult noAction(
+			@ActionParam(description = "Explanation of why this request is outside shopping scope") String reason) {
+		return ActionResult.success("I can help with shopping tasks like adding items, checking prices, " +
+				"viewing your basket, and checkout. " + reason);
 	}
 
 	// ========== Budget Actions (Phase 6) ==========
@@ -709,6 +717,63 @@ public class InventoryAwareShoppingActions {
 				.map(Product::name)
 				.collect(Collectors.joining(", "));
 		return String.format(" Consider instead: %s.", altNames);
+	}
+
+	/**
+	 * Resolves a product identifier to a Product.
+	 * Handles multiple formats:
+	 * 1. Valid SKU (e.g., "BEV-002")
+	 * 2. Product name (e.g., "Coke Zero")
+	 * 3. Plausible SKU-like strings invented by LLM (e.g., "COKE-ZERO-330ML")
+	 */
+	private Optional<Product> resolveProduct(String identifier) {
+		if (identifier == null || identifier.isBlank()) {
+			return Optional.empty();
+		}
+
+		// Try direct SKU lookup first
+		Optional<Product> bySku = storeApi.findProductBySku(identifier);
+		if (bySku.isPresent()) {
+			return bySku;
+		}
+
+		// Try product name lookup
+		Optional<Product> byName = storeApi.findProduct(identifier);
+		if (byName.isPresent()) {
+			return byName;
+		}
+
+		// Try to extract product name from plausible SKU-like strings
+		// E.g., "COKE-ZERO-330ML" -> "coke zero"
+		String normalized = identifier.toLowerCase()
+				.replaceAll("-", " ")          // COKE-ZERO -> coke zero
+				.replaceAll("_", " ")          // COKE_ZERO -> coke zero
+				.replaceAll("\\d+ml", "")      // Remove size specs like 330ml
+				.replaceAll("\\d+l", "")       // Remove size specs like 1l
+				.replaceAll("\\d+g", "")       // Remove weight specs like 500g
+				.replaceAll("\\s+", " ")       // Normalize whitespace
+				.trim();
+
+		if (!normalized.isEmpty() && !normalized.equals(identifier.toLowerCase())) {
+			// Search for products matching the normalized term
+			List<Product> matches = storeApi.searchProducts(normalized);
+			if (matches.size() == 1) {
+				return Optional.of(matches.get(0));
+			}
+			// If multiple matches, try to find the best one
+			if (!matches.isEmpty()) {
+				// Prefer exact name match
+				for (Product p : matches) {
+					if (p.name().equalsIgnoreCase(normalized.trim())) {
+						return Optional.of(p);
+					}
+				}
+				// Otherwise return first match
+				return Optional.of(matches.get(0));
+			}
+		}
+
+		return Optional.empty();
 	}
 }
 

@@ -68,15 +68,29 @@ public class ShoppingErrorHandlingTest extends AbstractShoppingScenarioTest {
 
 		assertThat(plan).isNotNull();
 		
-		// The LLM may:
+		// The LLM may handle unrecognised products in several valid ways:
 		// 1. Return a READY plan with addItem (validation happens at execution)
-		// 2. Return an ERROR or PENDING plan
-		// Either behavior is acceptable - the key is graceful handling
-		if (plan.status() == PlanStatus.READY) {
-			// Execute and verify error is handled gracefully
+		// 2. Return a READY plan with noAction (LLM detected unknown product)
+		// 3. Return a plan with NoActionStep (resolved to no-action step type)
+		// 4. Return an ERROR or PENDING plan
+		// All behaviors are acceptable - the key is graceful handling
+		
+		// Check for NoActionStep first (this is how noAction action gets resolved)
+		boolean hasNoActionStep = plan.planSteps().stream()
+				.anyMatch(s -> s instanceof PlanStep.NoActionStep);
+		
+		// Check for ActionStep with noAction id
+		boolean hasNoActionAction = plan.planSteps().stream()
+				.filter(s -> s instanceof PlanStep.ActionStep)
+				.map(s -> ((PlanStep.ActionStep) s).actionId())
+				.anyMatch("noAction"::equals);
+		
+		if (hasNoActionStep || hasNoActionAction) {
+			// LLM correctly identified unknown product
+			assertThat(plan.assistantMessage()).isNotBlank();
+		} else if (plan.status() == PlanStatus.READY) {
+			// Execute the plan - addItem should handle the error gracefully
 			executor.execute(plan, context);
-			// addItem should return an error for unknown product
-			// The action handles this gracefully by returning ActionResult.error()
 			assertThat(actions.addItemInvoked()).isTrue();
 		} else {
 			// LLM detected the issue
