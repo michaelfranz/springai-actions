@@ -43,7 +43,7 @@ PersonaSpec persona = PersonaSpec.builder()
 
 // Build the planner with Spring AI ChatClient
 Planner planner = Planner.builder()
-        .withChatClient(chatClient)
+        .defaultChatClient(chatClient)
         .persona(persona)
         .actions(new ShoppingActions())
         .build();
@@ -196,8 +196,8 @@ Add custom context to the system prompt:
 
 ```java
 Planner planner = Planner.builder()
-        .withChatClient(chatClient)
-        .addPromptContributor(context -> 
+        .defaultChatClient(chatClient)
+        .promptContributor(context -> 
             Optional.of("Current date: " + LocalDate.now()))
         .actions(myActions)
         .build();
@@ -261,13 +261,70 @@ The `src/test/java/org/javai/springai/scenarios/` directory contains complete ex
 
 ## Possible Future Enhancements
 
-### Generic Retry/Correction Mechanism
+### Model Fallback with Tiered Chat Clients
 
-LLMs occasionally generate responses that fail validation (syntax errors, schema violations, wrong table names). A single retry with clear error context often produces a correct response. A generic retry mechanism should be:
+LLMs occasionally generate responses that fail validation (syntax errors, schema violations, wrong table names). Rather than failing immediately, the framework can retry with the same model or fall back to a more capable (typically more expensive) model.
 
+**Goals**:
 - **Transparent** to the application developer
-- **Configurable** (enable/disable, max retries)
-- **Extensible** for different correction strategies
+- **Configurable** per-model attempt limits
+- **Observable** with metrics on which models succeed and how many attempts are needed
+
+**Proposed Design**:
+
+```java
+Planner planner = Planner.builder()
+    .defaultChatClient(chatClientModel1, 2)      // required, maxAttempts=2
+    .fallbackChatClient(chatClientModel2)        // optional, maxAttempts=1 (default)
+    .fallbackChatClient(chatClientModel3, 2)     // optional, maxAttempts=2
+    .persona(persona)
+    .actions(myActions)
+    .build();
+```
+
+**Overloads**:
+- `defaultChatClient(ChatClient client)` → maxAttempts=1
+- `defaultChatClient(ChatClient client, int maxAttempts)` → explicit attempts
+- `fallbackChatClient(ChatClient client)` → maxAttempts=1
+- `fallbackChatClient(ChatClient client, int maxAttempts)` → explicit attempts
+
+**Key Semantics**:
+
+| Aspect | Behavior |
+|--------|----------|
+| `maxAttempts` | ≥1, total attempts per tier (not retries) |
+| Tier progression | Exhaust all attempts on current tier before moving to next |
+| Context between tiers | Fresh start—only original request passed to next tier |
+
+**Observability**:
+
+The `Plan` includes planning metrics for monitoring and tuning:
+
+```java
+public record PlanningMetrics(
+    String successfulModel,           // model that produced the final plan
+    int totalAttempts,                // across all tiers
+    List<AttemptRecord> attempts
+) {}
+
+public record AttemptRecord(
+    String modelId,
+    int tierIndex,                    // 0 = default, 1 = first fallback, etc.
+    int attemptWithinTier,            // 1-based
+    AttemptOutcome outcome,           // SUCCESS, VALIDATION_FAILED, PARSE_FAILED
+    String errorDetails               // null on success
+) {}
+```
+
+This enables developers to:
+- Monitor which models are being invoked over time
+- Identify if fallbacks are used too frequently (cost signal)
+- Tune `maxAttempts` per tier based on real data
+- Find the minimal viable model for their use case
+
+### Correction Strategies
+
+Beyond simple retries, a correction strategy mechanism could provide targeted prompts to help the LLM fix specific validation errors within a tier's attempts.
 
 **Proposed Design**:
 
@@ -279,24 +336,9 @@ public interface CorrectionStrategy<T> {
 }
 ```
 
-The `Planner` would orchestrate retries:
-1. Initial response fails validation
-2. Find applicable `CorrectionStrategy`
-3. Build correction prompt with error details
-4. Send to LLM
-5. Parse correction response
-6. Retry validation (max N times)
-7. Return corrected value or final error
+This would allow domain-specific correction logic (e.g., SQL syntax errors, schema violations) to be plugged in. The correction prompt would be sent as a follow-up within the current tier's conversation before exhausting attempts.
 
-**Configuration**:
-
-```java
-Planner planner = Planner.builder()
-    .withChatClient(chatClient)
-    .withMaxRetries(2)
-    .addCorrectionStrategy(new QueryCorrectionStrategy())
-    .build();
-```
+**Note**: This enhancement is deferred until the model fallback feature is validated in practice.
 
 ### Prompt Size Monitoring
 

@@ -296,7 +296,7 @@ AdaptiveSqlCatalogContributor contributor = new AdaptiveSqlCatalogContributor(
 
 // Wire into Planner
 Planner planner = Planner.builder()
-        .withChatClient(chatClient)
+        .defaultChatClient(chatClient)
         .promptContributor(contributor)  // Adaptive schema in prompt
         .tools(trackingTool)             // Tool-based discovery (records access)
         .actions(actions)

@@ -117,7 +117,7 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		PersonaSpec persona = createDefaultPersona();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(defaultChatClient)
 				.persona(persona)
 				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)

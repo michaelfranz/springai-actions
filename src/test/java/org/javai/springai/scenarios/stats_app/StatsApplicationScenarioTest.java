@@ -72,7 +72,7 @@ public class StatsApplicationScenarioTest {
 				.build();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(spcAssistantPersona)
 				.actions(statsActions)
 				.build();

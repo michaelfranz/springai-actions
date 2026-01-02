@@ -42,6 +42,7 @@ public final class Planner {
 	private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile("```(?:json)?\\s*\\n?(\\{.*?\\})\\s*```", Pattern.DOTALL);
 
 	private final ChatClient chatClient;
+	private final List<ChatClientTier> chatClientTiers;
 	private final List<String> promptContributions;
 	private final CollectedActions collectedActions;
 	private final Object[] toolSources;
@@ -53,7 +54,11 @@ public final class Planner {
 	private final TypeHandlerRegistry typeHandlerRegistry;
 
 	private Planner(Builder builder) {
-		this.chatClient = builder.chatClient;
+		// Get first tier's client for legacy compatibility (isDryRun, invokeModel)
+		this.chatClient = builder.chatClientTiers.isEmpty() 
+				? null 
+				: builder.chatClientTiers.getFirst().chatClient();
+		this.chatClientTiers = List.copyOf(builder.chatClientTiers);
 		this.promptContributions = List.copyOf(builder.promptContributions);
 		this.collectedActions = collectActions(builder.actionSources);
 		this.toolSources = builder.toolSources != null ? builder.toolSources : new Object[0];
@@ -109,6 +114,13 @@ public final class Planner {
 			return formulateDryRunPlan(preview, actionContext);
 		}
 
+		// Use tiered retry if configured, otherwise fall back to legacy single-client behavior
+		if (!chatClientTiers.isEmpty()) {
+			return formulatePlanWithRetry(preview, effective, actionContext);
+		}
+
+		// Legacy path for backward compatibility (shouldn't normally be reached
+		// since defaultChatClient populates chatClientTiers)
 		String response = invokeModel(preview);
 		try {
 			Plan plan = parsePlan(response, actionContext.registry());
@@ -394,19 +406,34 @@ public final class Planner {
 	}
 
 	private boolean isDryRun(PlannerOptions options) {
-		return options.dryRun() || chatClient == null;
+		return options.dryRun() || (chatClient == null && chatClientTiers.isEmpty());
 	}
 
 	private PlanFormulationResult formulateDryRunPlan(PromptPreview preview, CollectedActions actionContext) {
 		logger.debug("Dry-run enabled or ChatClient missing; skipping LLM call");
-		return new PlanFormulationResult("<dry run>", new Plan("", List.of()), preview, true, actionContext.registry());
+		return new PlanFormulationResult(
+				"<dry run>", 
+				new Plan("", List.of()), 
+				preview, 
+				true, 
+				actionContext.registry(),
+				PlanningMetrics.empty()
+		);
 	}
 
 	@SuppressWarnings("null")
 	private String invokeModel(PromptPreview preview) {
 		Objects.requireNonNull(preview, "preview must not be null");
 		Objects.requireNonNull(chatClient, "chatClient must not be null when invoking model");
-		ChatClient.ChatClientRequestSpec request = chatClient.prompt();
+		return invokeModelWith(chatClient, preview);
+	}
+
+	/**
+	 * Invoke the specified chat client with the given prompt.
+	 */
+	@SuppressWarnings("null")
+	private String invokeModelWith(ChatClient client, PromptPreview preview) {
+		ChatClient.ChatClientRequestSpec request = client.prompt();
 		request.tools(toolSources);
 		preview.systemMessages().forEach(request::system);
 		request.user(Objects.requireNonNull(preview.renderedUser()));
@@ -417,6 +444,123 @@ public final class Planner {
 		logger.info("User message:\n{}", preview.renderedUser());
 		logger.info("LLM response:\n{}", content);
 		return content;
+	}
+
+	/**
+	 * Attempt plan formulation with a specific chat client.
+	 * Captures the outcome as an InvocationResult for retry logic.
+	 */
+	private InvocationResult attemptPlanFormulation(
+			ChatClient client,
+			PromptPreview preview,
+			CollectedActions actionContext
+	) {
+		long startTime = System.currentTimeMillis();
+		try {
+			String response = invokeModelWith(client, preview);
+			long duration = System.currentTimeMillis() - startTime;
+
+			try {
+				Plan plan = parsePlan(response, actionContext.registry());
+				
+				// Check if plan has errors (validation failed)
+				if (plan.status() == PlanStatus.ERROR) {
+					String errorDetail = plan.planSteps().stream()
+							.filter(s -> s instanceof PlanStep.ErrorStep)
+							.map(s -> ((PlanStep.ErrorStep) s).reason())
+							.findFirst()
+							.orElse("Plan contains errors");
+					return InvocationResult.validationFailed(response, plan, errorDetail, duration);
+				}
+				
+				return InvocationResult.success(response, plan, duration);
+			} catch (PlanParseException e) {
+				return InvocationResult.parseFailed(response, e.getMessage(), duration);
+			}
+		} catch (Exception e) {
+			long duration = System.currentTimeMillis() - startTime;
+			logger.warn("Network/API error during plan formulation: {}", e.getMessage());
+			return InvocationResult.networkError(e.getMessage(), duration);
+		}
+	}
+
+	/**
+	 * Formulate plan with retry across tiered chat clients.
+	 */
+	private PlanFormulationResult formulatePlanWithRetry(
+			PromptPreview preview,
+			PlannerOptions options,
+			CollectedActions actionContext
+	) {
+		List<AttemptRecord> attempts = new ArrayList<>();
+		String lastResponse = null;
+		Plan lastPlan = null;
+
+		for (int tierIndex = 0; tierIndex < chatClientTiers.size(); tierIndex++) {
+			ChatClientTier tier = chatClientTiers.get(tierIndex);
+
+			for (int attempt = 1; attempt <= tier.maxAttempts(); attempt++) {
+				logger.debug("Tier {} ({}), attempt {}/{}", 
+						tierIndex, tier.modelId(), attempt, tier.maxAttempts());
+
+				InvocationResult result = attemptPlanFormulation(
+						tier.chatClient(), preview, actionContext);
+
+				attempts.add(new AttemptRecord(
+						tier.modelId(),
+						tierIndex,
+						attempt,
+						result.outcome(),
+						result.durationMillis(),
+						result.errorDetails()
+				));
+
+				lastResponse = result.response();
+				if (result.plan() != null) {
+					lastPlan = result.plan();
+				}
+
+				if (result.isSuccess()) {
+					PlanningMetrics metrics = new PlanningMetrics(
+							tier.modelId(), attempts.size(), attempts);
+					maybeFirePromptHook(preview, options);
+					return new PlanFormulationResult(
+							result.response(), result.plan(), preview, false,
+							actionContext.registry(), metrics);
+				}
+
+				logger.debug("Attempt failed: {}", result.errorDetails());
+			}
+
+			// Exhausted attempts for this tier
+			logger.info("Exhausted {} attempts on tier {} ({}), moving to next fallback",
+					tier.maxAttempts(), tierIndex, tier.modelId());
+		}
+
+		// All tiers exhausted - return error plan with full metrics
+		PlanningMetrics metrics = new PlanningMetrics(null, attempts.size(), attempts);
+
+		Plan errorPlan;
+		if (lastPlan != null) {
+			errorPlan = lastPlan;
+		} else {
+			// Include the last error details in the reason for backward compatibility
+			AttemptRecord lastAttempt = attempts.isEmpty() ? null : attempts.getLast();
+			String lastError = lastAttempt != null && lastAttempt.errorDetails() != null 
+					? lastAttempt.errorDetails() 
+					: "unknown error";
+			String snippet = lastResponse != null ? lastResponse : "<null>";
+			if (snippet.length() > 800) {
+				snippet = snippet.substring(0, 800) + "...";
+			}
+			String reason = "Failed to parse plan: " + lastError + " | raw response: " + snippet;
+			errorPlan = new Plan(lastResponse, List.of(new PlanStep.ErrorStep(reason)));
+		}
+
+		maybeFirePromptHook(preview, options);
+		return new PlanFormulationResult(
+				lastResponse, errorPlan, preview, false,
+				actionContext.registry(), metrics);
 	}
 
 	private void fireHook(PromptPreview preview) {
@@ -479,6 +623,37 @@ public final class Planner {
 	}
 
 	/**
+	 * Internal result of a single plan formulation attempt.
+	 */
+	private record InvocationResult(
+			String response,
+			Plan plan,
+			AttemptOutcome outcome,
+			String errorDetails,
+			long durationMillis
+	) {
+		static InvocationResult success(String response, Plan plan, long durationMillis) {
+			return new InvocationResult(response, plan, AttemptOutcome.SUCCESS, null, durationMillis);
+		}
+
+		static InvocationResult parseFailed(String response, String error, long durationMillis) {
+			return new InvocationResult(response, null, AttemptOutcome.PARSE_FAILED, error, durationMillis);
+		}
+
+		static InvocationResult validationFailed(String response, Plan errorPlan, String error, long durationMillis) {
+			return new InvocationResult(response, errorPlan, AttemptOutcome.VALIDATION_FAILED, error, durationMillis);
+		}
+
+		static InvocationResult networkError(String error, long durationMillis) {
+			return new InvocationResult(null, null, AttemptOutcome.NETWORK_ERROR, error, durationMillis);
+		}
+
+		boolean isSuccess() {
+			return outcome == AttemptOutcome.SUCCESS;
+		}
+	}
+
+	/**
 	 * Exception for plan parsing failures.
 	 */
 	public static class PlanParseException extends RuntimeException {
@@ -492,7 +667,8 @@ public final class Planner {
 	}
 
 	public static final class Builder {
-		private ChatClient chatClient;
+		private final List<ChatClientTier> chatClientTiers = new ArrayList<>();
+		private boolean defaultClientSet = false;
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
 		private Object[] toolSources;
@@ -506,8 +682,97 @@ public final class Planner {
 		private Builder() {
 		}
 
-		public Builder withChatClient(ChatClient chatClient) {
-			this.chatClient = chatClient;
+		/**
+		 * Set the default (primary) chat client with 1 attempt.
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @return this builder
+		 * @throws IllegalStateException if called more than once
+		 */
+		public Builder defaultChatClient(ChatClient client) {
+			return defaultChatClient(client, 1, null);
+		}
+
+		/**
+		 * Set the default (primary) chat client with specified max attempts.
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @param maxAttempts maximum attempts before moving to fallback (≥1)
+		 * @return this builder
+		 * @throws IllegalStateException if called more than once
+		 */
+		public Builder defaultChatClient(ChatClient client, int maxAttempts) {
+			return defaultChatClient(client, maxAttempts, null);
+		}
+
+		/**
+		 * Set the default (primary) chat client with specified max attempts and model ID.
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @param maxAttempts maximum attempts before moving to fallback (≥1)
+		 * @param modelId optional identifier for observability (e.g., "gpt-4.1-mini")
+		 * @return this builder
+		 * @throws IllegalStateException if called more than once
+		 */
+		public Builder defaultChatClient(ChatClient client, int maxAttempts, String modelId) {
+			if (this.defaultClientSet) {
+				throw new IllegalStateException("defaultChatClient() can only be called once");
+			}
+			Objects.requireNonNull(client, "client must not be null");
+			this.chatClientTiers.add(new ChatClientTier(client, maxAttempts, modelId));
+			this.defaultClientSet = true;
+			return this;
+		}
+
+		/**
+		 * Add a fallback chat client with 1 attempt.
+		 *
+		 * <p>Fallback clients are tried in order after the default client exhausts its attempts.</p>
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @return this builder
+		 * @throws IllegalStateException if defaultChatClient() was not called first
+		 * @throws IllegalStateException if this client instance was already added
+		 */
+		public Builder fallbackChatClient(ChatClient client) {
+			return fallbackChatClient(client, 1, null);
+		}
+
+		/**
+		 * Add a fallback chat client with specified max attempts.
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @param maxAttempts maximum attempts before moving to next fallback (≥1)
+		 * @return this builder
+		 * @throws IllegalStateException if defaultChatClient() was not called first
+		 * @throws IllegalStateException if this client instance was already added
+		 */
+		public Builder fallbackChatClient(ChatClient client, int maxAttempts) {
+			return fallbackChatClient(client, maxAttempts, null);
+		}
+
+		/**
+		 * Add a fallback chat client with specified max attempts and model ID.
+		 *
+		 * @param client the Spring AI ChatClient
+		 * @param maxAttempts maximum attempts before moving to next fallback (≥1)
+		 * @param modelId optional identifier for observability
+		 * @return this builder
+		 * @throws IllegalStateException if defaultChatClient() was not called first
+		 * @throws IllegalStateException if this client instance was already added
+		 */
+		public Builder fallbackChatClient(ChatClient client, int maxAttempts, String modelId) {
+			if (!this.defaultClientSet) {
+				throw new IllegalStateException("Must call defaultChatClient() before fallbackChatClient()");
+			}
+			Objects.requireNonNull(client, "client must not be null");
+			// Check for duplicate client instances
+			for (ChatClientTier tier : this.chatClientTiers) {
+				if (tier.chatClient() == client) {
+					throw new IllegalStateException("The same ChatClient instance cannot be added to multiple tiers");
+				}
+			}
+			this.chatClientTiers.add(new ChatClientTier(client, maxAttempts, modelId));
 			return this;
 		}
 

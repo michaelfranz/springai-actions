@@ -51,14 +51,17 @@ public final class ActionRegistry {
 		ActionParam annotation = parameter.getAnnotation(ActionParam.class);
 		Optional<String> dslId = getDslIdForType(parameter.getType());
 		String[] derivedAllowedValues = deriveAllowedValues(parameter, annotation);
-		String allowedRegex = annotation.allowedRegex();
-		boolean caseInsensitive = annotation.caseInsensitive();
-		String[] examples = annotation.examples();
+		
+		// Handle optional @ActionParam annotation - use defaults when not present
+		String allowedRegex = annotation != null ? annotation.allowedRegex() : "";
+		boolean caseInsensitive = annotation != null && annotation.caseInsensitive();
+		String[] examples = annotation != null ? annotation.examples() : new String[0];
+		
 		return new ActionParameterDescriptor(
 				parameter.getName(),
 				parameter.getType().getName(),
 				deriveShortTypeId(parameter.getType(), dslId),
-				createActionParameterDescription(annotation, parameter.getName()),
+				createActionParameterDescription(annotation, parameter.getName(), parameter.getType()),
 				derivedAllowedValues,
 				allowedRegex,
 				caseInsensitive,
@@ -78,10 +81,11 @@ public final class ActionRegistry {
 	}
 
 	private static String[] deriveAllowedValues(Parameter parameter, ActionParam annotation) {
-		// Explicit allowedValues wins
-		if (annotation.allowedValues().length > 0) {
+		// Explicit allowedValues wins (if annotation is present)
+		if (annotation != null && annotation.allowedValues().length > 0) {
 			return annotation.allowedValues();
 		}
+		// Fall back to enum constants if the type is an enum
 		Class<?> type = parameter.getType();
 		if (type.isEnum()) {
 			Object[] constants = type.getEnumConstants();
@@ -92,11 +96,89 @@ public final class ActionRegistry {
 		return new String[0];
 	}
 
-	private static String createActionParameterDescription(ActionParam actionParam, String name) {
-		if (!actionParam.description().isBlank()) {
+	/**
+	 * Create a human-readable description for a parameter.
+	 * 
+	 * <p>If {@code @ActionParam} is present with a description, that is used.
+	 * Otherwise, a default description is derived from the parameter name and type,
+	 * converting camelCase to readable text.</p>
+	 * 
+	 * @param actionParam the annotation (may be null)
+	 * @param name the parameter name
+	 * @param type the parameter type
+	 * @return a human-readable description
+	 */
+	private static String createActionParameterDescription(ActionParam actionParam, String name, Class<?> type) {
+		// Use explicit description if provided
+		if (actionParam != null && !actionParam.description().isBlank()) {
 			return actionParam.description();
 		}
-		return "Parameter to " + nameBreakdown(name);
+		// Generate default description from name and type
+		return deriveDefaultDescription(name, type);
+	}
+
+	/**
+	 * Derive a default description from parameter name and type.
+	 * 
+	 * <p>Examples:
+	 * <ul>
+	 *   <li>{@code productName} (String) → "The product name"</li>
+	 *   <li>{@code quantity} (int) → "The quantity (integer)"</li>
+	 *   <li>{@code isEnabled} (boolean) → "Whether is enabled"</li>
+	 *   <li>{@code orderStatus} (OrderStatus enum) → "The order status"</li>
+	 * </ul>
+	 */
+	private static String deriveDefaultDescription(String name, Class<?> type) {
+		String readableName = nameBreakdown(name);
+		
+		// Handle boolean parameters specially - they often represent flags
+		if (type == boolean.class || type == Boolean.class) {
+			if (readableName.startsWith("is ")) {
+				return "Whether " + readableName.substring(3);
+			}
+			if (readableName.startsWith("has ") || readableName.startsWith("can ") || readableName.startsWith("should ")) {
+				return "Whether " + readableName;
+			}
+			return "Whether " + readableName + " is true";
+		}
+		
+		// Add type hint for non-obvious types
+		String typeHint = deriveTypeHint(type);
+		if (!typeHint.isEmpty()) {
+			return "The " + readableName + " (" + typeHint + ")";
+		}
+		
+		return "The " + readableName;
+	}
+
+	/**
+	 * Derive a human-readable type hint for common types.
+	 */
+	private static String deriveTypeHint(Class<?> type) {
+		if (type == int.class || type == Integer.class) {
+			return "integer";
+		}
+		if (type == long.class || type == Long.class) {
+			return "integer";
+		}
+		if (type == double.class || type == Double.class || type == float.class || type == Float.class) {
+			return "number";
+		}
+		if (type == java.math.BigDecimal.class) {
+			return "decimal number";
+		}
+		if (type.isEnum()) {
+			return "one of: " + String.join(", ", 
+					Arrays.stream(type.getEnumConstants()).map(Object::toString).toArray(String[]::new));
+		}
+		if (List.class.isAssignableFrom(type)) {
+			return "list";
+		}
+		if (Map.class.isAssignableFrom(type)) {
+			return "map";
+		}
+		// String and other types don't need a hint
+		return "";
 	}
 
 	private static String deriveShortTypeId(Class<?> type, Optional<String> dslId) {

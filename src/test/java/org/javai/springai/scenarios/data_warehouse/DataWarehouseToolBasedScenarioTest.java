@@ -59,7 +59,7 @@ class DataWarehouseToolBasedScenarioTest extends AbstractDataWarehouseScenarioTe
 
 		// Note: No SqlCatalogContextContributor - schema discovery via tool
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(defaultChatClient)
 				.persona(sqlAnalystPersona)
 				.tools(catalogTool)  // Tool-based discovery
 				.actions(dataWarehouseActions)

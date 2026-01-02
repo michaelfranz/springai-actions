@@ -101,7 +101,7 @@ public class ShoppingMissionScenarioTest {
 
 		// Use party planner persona for mission-based tests
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(ShoppingPersonaSpec.partyPlanner())
 				.tools(offerTool, inventoryTool, pricingTool, searchTool, customerTool)
 				.actions(actions)

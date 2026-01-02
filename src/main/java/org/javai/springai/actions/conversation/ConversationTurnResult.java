@@ -5,6 +5,8 @@ import java.util.Map;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanStatus;
 import org.javai.springai.actions.PlanStep;
+import org.javai.springai.actions.PlanningMetrics;
+import org.springframework.lang.Nullable;
 
 /**
  * Result of processing a single conversation turn.
@@ -18,12 +20,23 @@ import org.javai.springai.actions.PlanStep;
  * this blob and passing it back on the next turn via 
  * {@link ConversationManager#converse(String, byte[])}.</p>
  * 
+ * <h2>Planning Metrics</h2>
+ * <p>The {@code planningMetrics} field provides telemetry about the retry/fallback
+ * mechanism used during plan formulation. Use this for monitoring and tuning.</p>
+ * 
  * <h2>Example Usage</h2>
  * <pre>{@code
  * ConversationTurnResult result = manager.converse(userMessage, priorBlob);
  * 
  * // Store the blob for next turn
  * sessionRepository.save(sessionId, result.blob());
+ * 
+ * // Check retry metrics
+ * if (result.planningMetrics() != null) {
+ *     log.info("Used {} attempts with model {}", 
+ *         result.planningMetrics().totalAttempts(),
+ *         result.planningMetrics().successfulModelId());
+ * }
  * 
  * // Execute the plan if ready
  * if (result.status() == PlanStatus.READY) {
@@ -36,14 +49,29 @@ import org.javai.springai.actions.PlanStep;
  * @param blob opaque, serialized state for persistence (application stores this)
  * @param pendingParams parameters that still need to be provided
  * @param providedParams parameters that were provided in this turn
+ * @param planningMetrics metrics from the retry/fallback mechanism (nullable)
  */
 public record ConversationTurnResult(
 		Plan plan,
 		ConversationState state,
 		byte[] blob,
 		List<PlanStep.PendingParam> pendingParams,
-		Map<String, Object> providedParams
+		Map<String, Object> providedParams,
+		@Nullable PlanningMetrics planningMetrics
 ) {
+
+	/**
+	 * Backward-compatible constructor without planning metrics.
+	 */
+	public ConversationTurnResult(
+			Plan plan,
+			ConversationState state,
+			byte[] blob,
+			List<PlanStep.PendingParam> pendingParams,
+			Map<String, Object> providedParams
+	) {
+		this(plan, state, blob, pendingParams, providedParams, null);
+	}
 
 	public ConversationTurnResult {
 		pendingParams = pendingParams != null ? List.copyOf(pendingParams) : List.of();

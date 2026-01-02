@@ -90,7 +90,7 @@ public class ShoppingRecommendationsScenarioTest {
 				.build();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(ShoppingPersonaSpec.standard())
 				.tools(offerTool, inventoryTool, pricingTool, searchTool, customerTool)
 				.actions(actions)

@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanStep;
 import org.javai.springai.actions.Planner;
+import org.javai.springai.actions.PlanningMetrics;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 
 /**
@@ -150,7 +151,8 @@ public class ConversationManager {
 				result.state(),
 				blob,
 				result.pendingParams(),
-				result.providedParams());
+				result.providedParams(),
+				result.planningMetrics());
 	}
 
 	/**
@@ -216,6 +218,7 @@ public class ConversationManager {
 		// Formulate the plan
 		PlanFormulationResult planningResult = planner.formulatePlan(userMessage, state);
 		Plan plan = planningResult.plan();
+		PlanningMetrics metrics = planningResult.planningMetrics();
 
 		// Extract pending parameters and provided params
 		List<PlanStep.PendingParam> pending = plan.pendingParams();
@@ -243,7 +246,7 @@ public class ConversationManager {
 				state.turnHistory()
 		);
 
-		return new ConversationTurnResult(plan, nextState, null, pending, newlyProvided);
+		return new ConversationTurnResult(plan, nextState, null, pending, newlyProvided, metrics);
 	}
 
 	/**

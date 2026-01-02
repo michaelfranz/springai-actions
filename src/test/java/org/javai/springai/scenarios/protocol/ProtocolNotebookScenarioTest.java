@@ -81,7 +81,7 @@ public class ProtocolNotebookScenarioTest {
 				.build();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(notebookDesignerPersona)
 				.tools(protocolCatalogTool)
 				.actions(protocolNotebookActions)

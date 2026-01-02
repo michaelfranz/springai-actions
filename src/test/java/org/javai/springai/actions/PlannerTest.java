@@ -86,7 +86,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn("{{{"); // malformed JSON
 
 		Planner planner = Planner.builder()
-				.withChatClient(mockClient)
+				.defaultChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
 
@@ -119,7 +119,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(jsonResponse);
 
 		Planner planner = Planner.builder()
-				.withChatClient(mockClient)
+				.defaultChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
 
@@ -157,7 +157,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(markdownResponse);
 
 		Planner planner = Planner.builder()
-				.withChatClient(mockClient)
+				.defaultChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
 
@@ -182,7 +182,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(nonJsonResponse);
 
 		Planner planner = Planner.builder()
-				.withChatClient(mockClient)
+				.defaultChatClient(mockClient)
 				.actions(new DemoActions())
 				.build();
 

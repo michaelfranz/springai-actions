@@ -92,7 +92,7 @@ public abstract class AbstractShoppingScenarioTest {
 				.build();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(ShoppingPersonaSpec.standard())
 				.tools(skuFinderTool, offerTool, inventoryTool, pricingTool, searchTool)
 				.actions(actions)

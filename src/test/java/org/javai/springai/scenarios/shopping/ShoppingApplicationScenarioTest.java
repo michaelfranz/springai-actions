@@ -80,7 +80,7 @@ public class ShoppingApplicationScenarioTest {
 				.build();
 
 		planner = Planner.builder()
-				.withChatClient(chatClient)
+				.defaultChatClient(chatClient)
 				.persona(persona)
 				.tools(specialOfferTool)
 				.actions(shoppingActions)

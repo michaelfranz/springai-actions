@@ -79,6 +79,9 @@ public class DefaultPlanResolver implements PlanResolver {
 		}
 
 		ActionBinding binding = context.actionRegistry().getActionBinding(actionId);
+		if (binding == null) {
+			return new PlanStep.ErrorStep("Unknown action: " + actionId);
+		}
 
 		List<ActionParameterDescriptor> params = binding.parameters();
 		Map<String, Object> stepParams = step.parameters();
