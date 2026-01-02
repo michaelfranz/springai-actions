@@ -137,29 +137,27 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			Add a product and quantity to the current basket.
-			Validates stock availability before adding.
-			Returns warnings if stock is low or suggests alternatives if unavailable.""")
+			Add a product to the current basket. Validates stock before adding.""")
 	public ActionResult addItem(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "Product name") String product,
-			@ActionParam(description = "Quantity", allowedRegex = "[0-9]+") int quantity) {
+			@ActionParam(description = "The product name (e.g. 'Coke Zero')") String productName,
+			@ActionParam(description = "How many to add") int quantity) {
 
 		addItemInvoked.set(true);
-		lastAddItem = new AddItemRequest(product, quantity);
+		lastAddItem = new AddItemRequest(productName, quantity);
 		lastWarning = null;
 		lastAlternatives = null;
 		lastBasketSnapshot = basket;
 
 		// Check availability
-		AvailabilityResult availability = storeApi.checkAvailability(product, quantity);
+		AvailabilityResult availability = storeApi.checkAvailability(productName, quantity);
 
 		return switch (availability) {
 			case AvailabilityResult.Available(int qty, boolean lowStock) -> {
 				// Find the product to get the SKU
-				Optional<Product> productOpt = storeApi.findProduct(product);
+				Optional<Product> productOpt = storeApi.findProduct(productName);
 				if (productOpt.isEmpty()) {
-					yield ActionResult.error("Product not found: " + product);
+					yield ActionResult.error("Product not found: " + productName);
 				}
 
 				Product p = productOpt.get();
@@ -185,21 +183,21 @@ public class InventoryAwareShoppingActions {
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
 						"Only %d of %d %s available.%s Would you like to add %d instead?",
-						available, requested, product, altText, available));
+						available, requested, productName, altText, available));
 			}
 
 			case AvailabilityResult.OutOfStock(List<Product> alternatives) -> {
 				lastAlternatives = alternatives;
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
-						"%s is out of stock.%s", product, altText));
+						"%s is out of stock.%s", productName, altText));
 			}
 
 			case AvailabilityResult.Discontinued(List<Product> alternatives) -> {
 				lastAlternatives = alternatives;
 				String altText = formatAlternatives(alternatives);
 				yield ActionResult.error(String.format(
-						"%s has been discontinued.%s", product, altText));
+						"%s has been discontinued.%s", productName, altText));
 			}
 
 			case AvailabilityResult.NotFound(String searchTerm, List<Product> suggestions) -> {
@@ -221,16 +219,16 @@ public class InventoryAwareShoppingActions {
 			Can increase or decrease quantity. Use 0 to remove the item.""")
 	public ActionResult updateItemQuantity(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "Product name") String product,
-			@ActionParam(description = "New quantity (0 to remove)", allowedRegex = "[0-9]+") int newQuantity) {
+			@ActionParam(description = "The product name") String productName,
+			@ActionParam(description = "New quantity (0 to remove)") int newQuantity) {
 
 		updateQuantityInvoked.set(true);
 		lastBasketSnapshot = basket;
 
 		// Find the product
-		Optional<Product> productOpt = storeApi.findProduct(product);
+		Optional<Product> productOpt = storeApi.findProduct(productName);
 		if (productOpt.isEmpty()) {
-			return ActionResult.error("Product not found: " + product);
+			return ActionResult.error("Product not found: " + productName);
 		}
 
 		Product p = productOpt.get();
@@ -277,8 +275,9 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			View the current contents of the shopping basket with prices.
-			No parameters needed - basket contents are automatically available from the session.""")
+			List all items currently in the basket (names, quantities, individual prices).
+			Use this when the user wants to see WHAT is in their basket.
+			For the TOTAL or final price, use computeTotal instead.""")
 	public ActionResult viewBasketSummary(@FromContext("basket") Map<String, Integer> basket) {
 		viewBasketInvoked.set(true);
 		lastBasketSnapshot = basket;
@@ -316,14 +315,14 @@ public class InventoryAwareShoppingActions {
 			Remove a product from the current basket.""")
 	public ActionResult removeItem(
 			@FromContext("basket") Map<String, Integer> basket,
-			@ActionParam(description = "Product name to remove") String product) {
+			@ActionParam(description = "The product name to remove") String productName) {
 
 		removeItemInvoked.set(true);
 		lastBasketSnapshot = basket;
 
-		Optional<Product> productOpt = storeApi.findProduct(product);
+		Optional<Product> productOpt = storeApi.findProduct(productName);
 		if (productOpt.isEmpty()) {
-			return ActionResult.error("Product not found: " + product);
+			return ActionResult.error("Product not found: " + productName);
 		}
 
 		Product p = productOpt.get();
@@ -338,9 +337,9 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			Compute the current basket total including any applicable discounts.
-			ALWAYS use this action when the user asks about totals, prices, or discounts.
-			No parameters needed - basket contents and discount rules are automatically applied.""")
+			Calculate the basket TOTAL. ALWAYS invoke this action when asked about totals or prices.
+			The basket contents are managed by the system - you do NOT need to know what's in it.
+			Just call this action and it will return the correct total including discounts.""")
 	public ActionResult computeTotal(@FromContext("basket") Map<String, Integer> basket) {
 		computeTotalInvoked.set(true);
 		lastBasketSnapshot = basket;
