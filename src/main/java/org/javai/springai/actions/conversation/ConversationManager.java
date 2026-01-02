@@ -41,6 +41,7 @@ public class ConversationManager {
 	private final ConversationStateSerializer serializer;
 	private final PayloadTypeRegistry typeRegistry;
 	private final ConversationStateConfig config;
+	private final Map<String, UserMessageAugmenter> augmenters = new HashMap<>();
 
 	/**
 	 * Creates a ConversationManager with store-based persistence (legacy mode).
@@ -80,6 +81,23 @@ public class ConversationManager {
 	}
 
 	/**
+	 * Registers a user message augmenter for a specific working context type.
+	 * 
+	 * <p>When a conversation has working context matching the augmenter's context type,
+	 * the augmenter will format the context and prepend it to the user's message.
+	 * This makes the context more visible to the LLM.</p>
+	 * 
+	 * @param augmenter the augmenter to register
+	 * @return this manager for fluent chaining
+	 * @throws NullPointerException if augmenter is null
+	 */
+	public ConversationManager registerAugmenter(UserMessageAugmenter augmenter) {
+		Objects.requireNonNull(augmenter, "augmenter must not be null");
+		augmenters.put(augmenter.contextType(), augmenter);
+		return this;
+	}
+
+	/**
 	 * Start or continue a conversation for the given session (store-based mode).
 	 * 
 	 * <p>If no prior state exists, initializes a new conversation state;
@@ -104,7 +122,10 @@ public class ConversationManager {
 				.map(p -> p.withLatestUserMessage(userMessage))
 				.orElse(ConversationState.initial(userMessage));
 
-		ConversationTurnResult result = processConversation(userMessage, state);
+		// Augment user message with working context if available
+		String augmentedMessage = augmentUserMessage(userMessage, state);
+
+		ConversationTurnResult result = processConversation(augmentedMessage, state);
 		
 		// Save to store
 		stateStore.save(sessionId, result.state());
@@ -141,7 +162,10 @@ public class ConversationManager {
 			state = ConversationState.initial(userMessage);
 		}
 
-		ConversationTurnResult result = processConversation(userMessage, state);
+		// Augment user message with working context if available
+		String augmentedMessage = augmentUserMessage(userMessage, state);
+
+		ConversationTurnResult result = processConversation(augmentedMessage, state);
 
 		// Serialize to blob
 		byte[] blob = serializer.serialize(result.state(), typeRegistry);
@@ -247,6 +271,40 @@ public class ConversationManager {
 		);
 
 		return new ConversationTurnResult(plan, nextState, null, pending, newlyProvided, metrics);
+	}
+
+	/**
+	 * Augments the user message with working context if available and an augmenter is registered.
+	 * 
+	 * <p>LLMs pay more attention to user messages than system prompt content.
+	 * By including working context in the user message, we improve the model's
+	 * ability to understand and modify the current state.</p>
+	 * 
+	 * @param userMessage the original user message
+	 * @param state the conversation state (may contain working context)
+	 * @return the augmented message, or the original if no augmentation needed
+	 */
+	private String augmentUserMessage(String userMessage, ConversationState state) {
+		// Check if augmentation is enabled in config
+		if (!config.augmentUserMessage()) {
+			return userMessage;
+		}
+
+		if (!state.hasWorkingContext()) {
+			return userMessage;
+		}
+
+		WorkingContext<?> ctx = state.workingContext();
+		UserMessageAugmenter augmenter = augmenters.get(ctx.contextType());
+
+		if (augmenter == null || !augmenter.shouldAugment(ctx)) {
+			return userMessage;
+		}
+
+		String requestPrefix = config.requestPrefix();
+		return augmenter.formatForUserMessage(ctx, config)
+				.map(contextPart -> contextPart + "\n\n" + requestPrefix + " " + userMessage)
+				.orElse(userMessage);
 	}
 
 	/**

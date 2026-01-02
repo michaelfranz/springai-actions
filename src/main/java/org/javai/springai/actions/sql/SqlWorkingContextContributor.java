@@ -28,7 +28,24 @@ import org.javai.springai.actions.internal.prompt.SystemPromptContext;
  *     .promptContributor(new SqlWorkingContextContributor())
  *     .build();
  * }</pre>
+ * 
+ * @deprecated Use {@link SqlUserMessageAugmenter} instead. LLMs pay more attention
+ *     to user message content than system prompt content. For multi-turn refinement
+ *     scenarios, include working context in the user message via
+ *     {@link org.javai.springai.actions.conversation.ConversationManager#registerAugmenter(
+ *     org.javai.springai.actions.conversation.UserMessageAugmenter)}.
+ *     <pre>{@code
+ *     // Instead of:
+ *     Planner.builder()
+ *         .promptContributor(new SqlWorkingContextContributor())
+ *         .build();
+ *     
+ *     // Use:
+ *     ConversationManager manager = new ConversationManager(planner, serializer, registry, config)
+ *         .registerAugmenter(new SqlUserMessageAugmenter());
+ *     }</pre>
  */
+@Deprecated(since = "1.0", forRemoval = false)
 public class SqlWorkingContextContributor implements PromptContributor {
 
 	private static final String SECTION_HEADER = "CURRENT QUERY CONTEXT:";

@@ -20,7 +20,7 @@ import org.javai.springai.actions.sql.InMemorySqlCatalog;
 import org.javai.springai.actions.sql.Query;
 import org.javai.springai.actions.sql.SqlCatalogContextContributor;
 import org.javai.springai.actions.sql.SqlQueryPayload;
-import org.javai.springai.actions.sql.SqlWorkingContextContributor;
+import org.javai.springai.actions.sql.SqlUserMessageAugmenter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -125,6 +125,9 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		// Use focused SQL Explorer actions - no aggregateOrderValue to avoid semantic confusion
 		sqlExplorerActions = new SqlExplorerActions();
 
+		// Note: SqlWorkingContextContributor is deprecated. Working context is now
+		// included in the user message via SqlUserMessageAugmenter (registered below).
+		// This is more effective because LLMs pay more attention to user messages.
 		planner = Planner.builder()
 				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION)  // gpt-4o
 				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION)
@@ -132,12 +135,10 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 				.actions(sqlExplorerActions)
 				.addPromptContext("sql", catalog)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
-				.promptContributor(new SqlWorkingContextContributor())
 				.promptContribution("""
-					⚠️ OVERRIDE FOR SQL ACTIONS:
+					⚠️ CRITICAL RULES FOR SQL ACTIONS:
 					For showSqlQuery and runSqlQuery, you MUST generate the SQL yourself.
-					- Look at CURRENT QUERY CONTEXT for the existing query
-					- Modify it based on the user's request
+					- The user message contains the current query (if any) and the modification request
 					- Return: {"query": {"sql": "SELECT ..."}}
 					- NEVER use PENDING for the query parameter
 					- NEVER invent parameters like 'table' or 'columns' - only 'query' exists
@@ -154,7 +155,8 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 				.maxHistorySize(5)
 				.build();
 
-		conversationManager = new ConversationManager(planner, serializer, typeRegistry, config);
+		conversationManager = new ConversationManager(planner, serializer, typeRegistry, config)
+				.registerAugmenter(new SqlUserMessageAugmenter());
 
 		// Application's simulated blob store
 		applicationBlobStore = new HashMap<>();
@@ -244,6 +246,62 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			assertThat(state.turnHistory().get(0).payload()).isEqualTo("context-2");
 			assertThat(state.turnHistory().get(4).payload()).isEqualTo("context-6");
 		}
+
+		@Test
+		@DisplayName("config defaults have expected values")
+		void configDefaultsHaveExpectedValues() {
+			ConversationStateConfig config = ConversationStateConfig.defaults();
+			
+			assertThat(config.maxHistorySize()).isEqualTo(10);
+			assertThat(config.augmentUserMessage()).isTrue();
+			assertThat(config.contextPrefix()).isEqualTo("Current state:");
+			assertThat(config.requestPrefix()).isEqualTo("User request:");
+		}
+
+		@Test
+		@DisplayName("config builder allows custom values")
+		void configBuilderAllowsCustomValues() {
+			ConversationStateConfig config = ConversationStateConfig.builder()
+					.maxHistorySize(20)
+					.augmentUserMessage(false)
+					.contextPrefix("Current query:")
+					.requestPrefix("Modify:")
+					.build();
+			
+			assertThat(config.maxHistorySize()).isEqualTo(20);
+			assertThat(config.augmentUserMessage()).isFalse();
+			assertThat(config.contextPrefix()).isEqualTo("Current query:");
+			assertThat(config.requestPrefix()).isEqualTo("Modify:");
+		}
+
+		@Test
+		@DisplayName("SqlUserMessageAugmenter formats with config prefix")
+		void sqlAugmenterFormatsWithConfigPrefix() {
+			SqlUserMessageAugmenter augmenter = new SqlUserMessageAugmenter();
+			SqlQueryPayload payload = SqlQueryPayload.fromModelSql("SELECT * FROM orders");
+			WorkingContext<SqlQueryPayload> ctx = WorkingContext.of(SqlQueryPayload.CONTEXT_TYPE, payload);
+			
+			// With config prefix
+			ConversationStateConfig config = ConversationStateConfig.builder()
+					.contextPrefix("Active SQL:")
+					.build();
+			
+			var formatted = augmenter.formatForUserMessage(ctx, config);
+			assertThat(formatted).isPresent();
+			assertThat(formatted.get()).isEqualTo("Active SQL: SELECT * FROM orders");
+		}
+
+		@Test
+		@DisplayName("SqlUserMessageAugmenter uses constructor prefix without config")
+		void sqlAugmenterUsesConstructorPrefixWithoutConfig() {
+			SqlUserMessageAugmenter augmenter = new SqlUserMessageAugmenter("Base query:");
+			SqlQueryPayload payload = SqlQueryPayload.fromModelSql("SELECT id FROM users");
+			WorkingContext<SqlQueryPayload> ctx = WorkingContext.of(SqlQueryPayload.CONTEXT_TYPE, payload);
+			
+			var formatted = augmenter.formatForUserMessage(ctx);
+			assertThat(formatted).isPresent();
+			assertThat(formatted.get()).isEqualTo("Base query: SELECT id FROM users");
+		}
 	}
 
 	// ========================================================================
@@ -260,6 +318,8 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		 */
 		private ConversationTurnResult processUserMessage(String sessionId, String message) {
 			byte[] priorBlob = applicationBlobStore.get(sessionId);
+			
+			// Framework automatically augments user message with working context
 			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
 
 			if (result.plan().status() == PlanStatus.READY) {
@@ -293,7 +353,7 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			sqlExplorerActions.reset();
 
 			ConversationTurnResult result = processUserMessage(sessionId,
-					"show me order values with customer names");
+					"generate a SQL query to show order_value and customer_name from fct_orders joined with dim_customer");
 
 			assertPlanReady(result.plan());
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
@@ -318,8 +378,9 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			String sessionId = "multi-turn-session-2";
 			sqlExplorerActions.reset();
 
+			// Turn 1: Explicit SQL generation request
 			ConversationTurnResult turn1 = processUserMessage(sessionId,
-					"show me order values with customer names");
+					"generate a SQL query to show order_value and customer_name from fct_orders joined with dim_customer");
 			assertPlanReady(turn1.plan());
 			
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
@@ -331,8 +392,9 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 
 			sqlExplorerActions.reset();
 
+			// Turn 2: Modify the existing query
 			ConversationTurnResult turn2 = processUserMessage(sessionId,
-					"now filter that by region = 'West'");
+					"modify the query to add WHERE region = 'West'");
 
 			assertPlanReady(turn2.plan());
 			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
@@ -435,18 +497,8 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		private ConversationTurnResult processAndTrack(String sessionId, String message) {
 			byte[] priorBlob = applicationBlobStore.get(sessionId);
 			
-			// If there's a prior blob with a SQL query, include it in the message
-			String augmentedMessage = message;
-			if (priorBlob != null && priorBlob.length > 0) {
-				ConversationState priorState = conversationManager.fromBlob(priorBlob);
-				if (priorState.hasWorkingContext() && 
-						priorState.workingContext().payload() instanceof SqlQueryPayload payload) {
-					String existingSql = payload.modelSql();
-					augmentedMessage = "Current query: " + existingSql + "\n\nUser request: " + message;
-				}
-			}
-			
-			ConversationTurnResult result = conversationManager.converse(augmentedMessage, priorBlob);
+			// Framework automatically augments user message with working context
+			ConversationTurnResult result = conversationManager.converse(message, priorBlob);
 
 			if (result.plan().status() == PlanStatus.READY) {
 				executor.execute(result.plan());
@@ -478,14 +530,18 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			String sessionId = "filter-refinement";
 			sqlExplorerActions.reset();
 
-			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values");
+			// Turn 1: Explicit SQL generation
+			ConversationTurnResult turn1 = processAndTrack(sessionId, 
+					"generate a SQL query to show order_value from fct_orders");
 			assertPlanReady(turn1.plan());
 			String sql1 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", sql1);
 
 			sqlExplorerActions.reset();
 
-			ConversationTurnResult turn2 = processAndTrack(sessionId, "now filter that by region = 'West'");
+			// Turn 2: Modify with filter
+			ConversationTurnResult turn2 = processAndTrack(sessionId, 
+					"modify the query to add WHERE region = 'West'");
 			assertPlanReady(turn2.plan());
 			
 			String sql2 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
@@ -502,15 +558,18 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 			String sessionId = "column-addition";
 			sqlExplorerActions.reset();
 
-			ConversationTurnResult turn1 = processAndTrack(sessionId, "show me order values from the orders table");
+			// Turn 1: Explicit SQL generation
+			ConversationTurnResult turn1 = processAndTrack(sessionId, 
+					"generate a SQL query to show order_value from fct_orders");
 			assertPlanReady(turn1.plan());
 			String sql1 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", sql1);
 
 			sqlExplorerActions.reset();
 
-			// More explicit phrasing to avoid INSERT vs SELECT ambiguity
-			ConversationTurnResult turn2 = processAndTrack(sessionId, "also include the customer_name column in the results");
+			// Turn 2: Add column by modifying query
+			ConversationTurnResult turn2 = processAndTrack(sessionId, 
+					"modify the query to also select customer_name by joining to dim_customer");
 			assertPlanReady(turn2.plan());
 			
 			String sql2 = sqlExplorerActions.lastQuery().orElseThrow().sqlString();
