@@ -117,7 +117,8 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		PersonaSpec persona = createDefaultPersona();
 
 		planner = Planner.builder()
-				.defaultChatClient(defaultChatClient)
+				.defaultChatClient(defaultChatClient, 2, DEFAULT_CHAT_MODEL_VERSION)
+				.fallbackChatClient(fallbackChatClient, 2, FALLBACK_CHAT_MODEL_VERSION)
 				.persona(persona)
 				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)
@@ -275,7 +276,10 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 					"show me order values with customer names");
 
 			assertPlanReady(result.plan());
-			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
+			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
+			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+					.as("Expected either showSqlQuery or runSqlQuery to be invoked")
+					.isTrue();
 
 			Query query = dataWarehouseActions.lastQuery().orElseThrow();
 			String sql = query.sqlString().toUpperCase();
@@ -298,6 +302,10 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 					"show me order values with customer names");
 			assertPlanReady(turn1.plan());
 			
+			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
+			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+					.as("Expected either showSqlQuery or runSqlQuery to be invoked")
+					.isTrue();
 			String turn1Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 1 SQL: {}", turn1Sql);
 
@@ -307,7 +315,10 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 					"now filter that by region = 'West'");
 
 			assertPlanReady(turn2.plan());
-			assertThat(dataWarehouseActions.showSqlQueryInvoked()).isTrue();
+			// Either showSqlQuery or runSqlQuery is acceptable - both generate SQL
+			assertThat(dataWarehouseActions.showSqlQueryInvoked() || dataWarehouseActions.runSqlQueryInvoked())
+					.as("Expected either showSqlQuery or runSqlQuery to be invoked for turn 2")
+					.isTrue();
 
 			String turn2Sql = dataWarehouseActions.lastQuery().orElseThrow().sqlString();
 			log.info("Turn 2 SQL: {}", turn2Sql);

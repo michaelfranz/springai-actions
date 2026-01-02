@@ -498,10 +498,11 @@ public final class Planner {
 
 		for (int tierIndex = 0; tierIndex < chatClientTiers.size(); tierIndex++) {
 			ChatClientTier tier = chatClientTiers.get(tierIndex);
+			String modelLabel = tier.modelId() != null ? tier.modelId() : "tier-" + tierIndex;
 
 			for (int attempt = 1; attempt <= tier.maxAttempts(); attempt++) {
-				logger.debug("Tier {} ({}), attempt {}/{}", 
-						tierIndex, tier.modelId(), attempt, tier.maxAttempts());
+				logger.info("[Model Fallback] Invoking model '{}' - attempt {}/{}", 
+						modelLabel, attempt, tier.maxAttempts());
 
 				InvocationResult result = attemptPlanFormulation(
 						tier.chatClient(), preview, actionContext);
@@ -521,6 +522,8 @@ public final class Planner {
 				}
 
 				if (result.isSuccess()) {
+					logger.info("[Model Fallback] Success on model '{}' attempt {}/{} (total attempts: {})",
+							modelLabel, attempt, tier.maxAttempts(), attempts.size());
 					PlanningMetrics metrics = new PlanningMetrics(
 							tier.modelId(), attempts.size(), attempts);
 					maybeFirePromptHook(preview, options);
@@ -529,15 +532,18 @@ public final class Planner {
 							actionContext.registry(), metrics);
 				}
 
-				logger.debug("Attempt failed: {}", result.errorDetails());
+				logger.warn("[Model Fallback] Attempt {}/{} on model '{}' failed: {} - {}",
+						attempt, tier.maxAttempts(), modelLabel, result.outcome(), result.errorDetails());
 			}
 
 			// Exhausted attempts for this tier
-			logger.info("Exhausted {} attempts on tier {} ({}), moving to next fallback",
-					tier.maxAttempts(), tierIndex, tier.modelId());
+			logger.warn("[Model Fallback] Exhausted {} attempts on model '{}', moving to next fallback",
+					tier.maxAttempts(), modelLabel);
 		}
 
 		// All tiers exhausted - return error plan with full metrics
+		logger.error("[Model Fallback] All {} tiers exhausted after {} total attempts - returning error plan",
+				chatClientTiers.size(), attempts.size());
 		PlanningMetrics metrics = new PlanningMetrics(null, attempts.size(), attempts);
 
 		Plan errorPlan;
