@@ -277,7 +277,8 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			View the current contents of the shopping basket with prices.""")
+			View the current contents of the shopping basket with prices.
+			No parameters needed - basket contents are automatically available from the session.""")
 	public ActionResult viewBasketSummary(@FromContext("basket") Map<String, Integer> basket) {
 		viewBasketInvoked.set(true);
 		lastBasketSnapshot = basket;
@@ -337,7 +338,9 @@ public class InventoryAwareShoppingActions {
 	}
 
 	@Action(description = """
-			Compute the basket total including any applicable discounts.""")
+			Compute the current basket total including any applicable discounts.
+			ALWAYS use this action when the user asks about totals, prices, or discounts.
+			No parameters needed - basket contents and discount rules are automatically applied.""")
 	public ActionResult computeTotal(@FromContext("basket") Map<String, Integer> basket) {
 		computeTotalInvoked.set(true);
 		lastBasketSnapshot = basket;
@@ -362,7 +365,8 @@ public class InventoryAwareShoppingActions {
 
 	@Action(description = """
 			Checkout the basket and complete the purchase.
-			Commits the stock reservations and records purchase history.""")
+			Commits the stock reservations and records purchase history.
+			No parameters needed - basket contents are automatically available from the session.""")
 	public ActionResult checkoutBasket(@FromContext("basket") Map<String, Integer> basket) {
 		checkoutInvoked.set(true);
 		lastBasketSnapshot = basket;
