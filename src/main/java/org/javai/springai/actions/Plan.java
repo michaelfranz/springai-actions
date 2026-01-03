@@ -88,4 +88,8 @@ public record Plan(String assistantMessage, List<PlanStep> planSteps) {
 				.map(PlanStep.PendingParam::name)
 				.toList();
 	}
+
+	public String toString() {
+		return String.format("Plan(assistantMessage=%s, planSteps=%s)", assistantMessage, planSteps);
+	}
 }

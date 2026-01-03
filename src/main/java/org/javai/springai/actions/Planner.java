@@ -17,6 +17,7 @@ import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
+import org.javai.springai.actions.internal.bind.ActionPromptContributor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
@@ -30,6 +31,8 @@ import org.javai.springai.actions.internal.resolve.ResolutionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ResponseEntity;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.lang.NonNull;
 
 /**

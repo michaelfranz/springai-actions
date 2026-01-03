@@ -100,10 +100,6 @@ public final class ActionPromptContributor {
 	 */
 	private static Optional<ObjectNode> generateSchema(ActionBinding binding, ActionDescriptor descriptor,
 			TypeHandlerRegistry typeRegistry) {
-		if (descriptor == null) {
-			return generateDefaultSchema(binding);
-		}
-
 		// Check if any parameter has a custom spec provider
 		boolean hasCustomTypes = typeRegistry != null && descriptor.actionParameterSpecs().stream()
 				.anyMatch(param -> {

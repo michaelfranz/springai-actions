@@ -47,7 +47,7 @@ public abstract class AbstractDataWarehouseScenarioTest {
 	protected static final boolean RUN_LLM_TESTS = "true".equalsIgnoreCase(System.getenv("RUN_LLM_TESTS"));
 	public static final String MODEST_CHAT_MODEL_VERSION = "gpt-4.1-mini";
 	public static final String CAPABLE_CHAT_MODEL_VERSION = "gpt-4o";
-	public static final String MOST_CAPABLE_CHAT_MODEL_VERSION = "gpt-4-turbo";
+	public static final String MOST_CAPABLE_CHAT_MODEL_VERSION = "gpt-5-mini";
 
 	// SQL infrastructure
 	protected InMemorySqlCatalog catalog;

@@ -49,7 +49,7 @@ class StatsApplicationConversationUnitTest {
 				List.of(new PlanStep.PendingActionStep("",
 						"exportControlChartToExcel",
 						new PlanStep.PendingParam[] { new PlanStep.PendingParam("bundleId", "Provide bundle id") },
-						Map.of("domainEntity", "displacement", "measurementConcept", "values"))));
+						Map.of("domainEntity", "displacement", "measurementType", "values"))));
 		PlanFormulationResult pendingResult = new PlanFormulationResult(
 				"", pendingPlan, null, false, null);
 
@@ -57,7 +57,7 @@ class StatsApplicationConversationUnitTest {
 		Plan resolvedPlan = new Plan("Export control chart",
 				List.of(new PlanStep.ActionStep(mockBinding, List.of(
 						new PlanArgument("domainEntity", "displacement", String.class),
-						new PlanArgument("measurementConcept", "values", String.class),
+						new PlanArgument("measurementType", "values", String.class),
 						new PlanArgument("bundleId", "A12345", String.class)
 				))));
 		PlanFormulationResult resolvedResult = new PlanFormulationResult(
@@ -78,7 +78,7 @@ class StatsApplicationConversationUnitTest {
 		ConversationState retryState = new ConversationState(
 				initialInstruction,
 				pendingParams,
-				Map.of("domainEntity", "displacement", "measurementConcept", "values"),
+				Map.of("domainEntity", "displacement", "measurementType", "values"),
 				"bundle id is A12345",
 				null,
 				List.of());

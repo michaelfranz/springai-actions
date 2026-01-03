@@ -14,30 +14,27 @@ public class StatsActions {
 
 	@Action(description = """
 			Use the user's input to derive the parameters necessary for the application to compute and display a
-			control chart. Don't try to create or compute a control chart. Just provide the parameters.
-			The measurementConcept MUST be either "force" or "displacement".""")
+			control chart. Don't try to create or compute a control chart. Just provide the parameters.""")
 	public void displayControlChart(
-			@ActionParam(description = "The measurement concept to be charted: must be 'force' or 'displacement'") String measurementConcept,
+			@ActionParam(description = "The measurement type to be charted", allowedValues = {"force", "displacement"}) String measurementType,
 			@ActionParam(description = "Bundle ID like A12345") String bundleId) {
 		displayControlChartInvoked.set(true);
 	}
 
 	@Action(description = """
 			Use the user's input to derive the parameters necessary for the application to compute and export a
-			control chart to Excel. Don't try to create or compute a control chart. Just provide the parameters.
-			The measurementConcept MUST be either "force" or "displacement".""")
+			control chart to Excel. Don't try to create or compute a control chart. Just provide the parameters.""")
 	public void exportControlChartToExcel(
-			@ActionParam(description = "The measurement concept to be charted: must be 'force' or 'displacement'", allowedValues = {"force", "displacement"}) String measurementConcept,
+			@ActionParam(description = "The measurement type to be charted", allowedValues = {"force", "displacement"}) String measurementType,
 			@ActionParam(description = "Bundle ID like A12345", allowedRegex = "[A-Z0-9]+") String bundleId) {
 		exportControlChartToExcelInvoked.set(true);
 	}
 
 	@Action(description = """
 			Use the user's input to derive the parameters necessary for the application to evaluate SPC readiness.
-			Don't try to compute SPC readiness. Just provide the parameters.
-			The measurementConcept MUST be either "force" or "displacement".""")
+			Don't try to compute SPC readiness. Just provide the parameters.""")
 	public void evaluateSpcReadiness(
-			@ActionParam(description = "The measurement concept to evaluate: must be 'force' or 'displacement'", allowedValues = {"force", "displacement"}) String measurementConcept,
+			@ActionParam(description = "The measurement type to evaluate", allowedValues = {"force", "displacement"}) String measurementType,
 			@ActionParam(description = "Bundle ID like A12345", allowedRegex = "[A-Z0-9]+") String bundleId) {
 		evaluateSpcReadinessInvoked.set(true);
 	}

@@ -36,10 +36,26 @@ public final class PlanActionsContextContributor implements PromptContributor {
 			actions.append("  Purpose: ").append(descriptor.description()).append("\n");
 			
 			if (descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()) {
-				actions.append("  Parameters:\n");
+				actions.append("  Parameters (ALL REQUIRED - use PENDING step if any missing):\n");
 				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
-					actions.append("    - ").append(param.name()).append(": ").append(param.typeId());
+					actions.append("    - ").append(param.name()).append(" [REQUIRED]: ").append(param.typeId());
+					
+					// Add allowed values constraint if present
+					if (param.allowedValues() != null && param.allowedValues().length > 0) {
+						actions.append(" (allowed: ").append(String.join(", ", param.allowedValues())).append(")");
+					}
+					
+					// Add regex constraint if present
+					if (param.allowedRegex() != null && !param.allowedRegex().isEmpty()) {
+						actions.append(" (pattern: ").append(param.allowedRegex()).append(")");
+					}
+					
 					actions.append("\n");
+					
+					// Show parameter description if provided
+					if (param.description() != null && !param.description().isEmpty()) {
+						actions.append("      ").append(param.description()).append("\n");
+					}
 					
 					// Show explicit examples if provided
 					if (param.examples() != null && param.examples().length > 0) {
