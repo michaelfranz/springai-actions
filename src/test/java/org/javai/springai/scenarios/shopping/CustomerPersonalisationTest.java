@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping.tests;
+package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;

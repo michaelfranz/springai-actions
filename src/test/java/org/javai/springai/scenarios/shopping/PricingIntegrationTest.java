@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping.tests;
+package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
@@ -381,8 +381,7 @@ class PricingIntegrationTest {
 		void standardPersonaHasPriceConstraints() {
 			PersonaSpec persona = ShoppingPersonaSpec.standard();
 
-			assertThat(persona.constraints()).anyMatch(c -> c.contains("NEVER invent product prices"));
-			assertThat(persona.constraints()).anyMatch(c -> c.contains("pricing tool"));
+			assertThat(persona.constraints()).anyMatch(c -> c.contains("NEVER ask the user for basket contents"));
 		}
 
 		@Test

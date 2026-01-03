@@ -1,4 +1,4 @@
-package org.javai.springai.scenarios.shopping.tests;
+package org.javai.springai.scenarios.shopping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import org.javai.springai.actions.api.ActionContext;
-import org.javai.springai.scenarios.shopping.ShoppingPromptContributor;
 import org.javai.springai.scenarios.shopping.actions.ActionResult;
 import org.javai.springai.scenarios.shopping.actions.InventoryAwareShoppingActions;
 import org.javai.springai.scenarios.shopping.store.MockStoreApi;
