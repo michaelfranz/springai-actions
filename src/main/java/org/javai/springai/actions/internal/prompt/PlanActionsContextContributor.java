@@ -1,23 +1,17 @@
 package org.javai.springai.actions.internal.prompt;
 
+import java.util.List;
 import java.util.Optional;
 import org.javai.springai.actions.PromptContributor;
-import org.javai.springai.actions.api.TypeHandlerRegistry;
-import org.javai.springai.actions.internal.bind.ActionPromptContributor;
+import org.javai.springai.actions.internal.bind.ActionDescriptor;
+import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 
 /**
  * Contributor that provides the action catalog for the system prompt.
  * 
- * <p>This contributor uses JSON Schema to define the complete output contract,
- * with "hardcoded complete action shapes" where each action is a self-contained
- * definition with its actionId bound via {@code const} and parameters inlined.
- * This eliminates any ambiguity about which parameters apply to which action.</p>
- * 
- * <p>The output includes:
- * <ul>
- *   <li>A JSON Schema defining valid Plan structures with per-action ActionStep variants</li>
- *   <li>A compact example showing correct parameter usage</li>
- * </ul>
+ * <p>This contributor lists available actions with their descriptions and parameters.
+ * The output format schema is enforced at the API level via OpenAI Structured Outputs,
+ * so this contributor focuses on WHAT actions do, not HOW to format the response.</p>
  */
 public final class PlanActionsContextContributor implements PromptContributor {
 
@@ -27,26 +21,48 @@ public final class PlanActionsContextContributor implements PromptContributor {
 			return Optional.empty();
 		}
 		
-		if (context.registry().getActionDescriptors().isEmpty()) {
+		List<ActionDescriptor> descriptors = context.registry().getActionDescriptors();
+		if (descriptors.isEmpty()) {
 			return Optional.empty();
 		}
 		
-		// Get type handler registry from context if available
-		TypeHandlerRegistry typeRegistry = null;
-		if (context.dslContext() != null) {
-			Object registry = context.dslContext().get("typeHandlerRegistry");
-			if (registry instanceof TypeHandlerRegistry thr) {
-				typeRegistry = thr;
-			}
+		// Filter if needed
+		if (context.filter() != null) {
+			descriptors = descriptors.stream()
+					.filter(context.filter()::include)
+					.toList();
 		}
 		
-		// Generate JSON Schema with hardcoded action shapes + example
-		String contribution = ActionPromptContributor.emitExemplar(
-				context.registry(),
-				context.filter()
-		);
+		if (descriptors.isEmpty()) {
+			return Optional.empty();
+		}
 		
-		return Optional.of(contribution);
+		StringBuilder sb = new StringBuilder();
+		sb.append("AVAILABLE ACTIONS:\n\n");
+		
+		for (ActionDescriptor action : descriptors) {
+			sb.append("• ").append(action.id());
+			if (action.description() != null && !action.description().isBlank()) {
+				sb.append(" - ").append(action.description().trim());
+			}
+			sb.append("\n");
+			
+			// List parameters with their constraints
+			for (ActionParameterDescriptor param : action.actionParameterSpecs()) {
+				sb.append("    ").append(param.name());
+				if (param.description() != null && !param.description().isBlank()) {
+					sb.append(": ").append(param.description().trim());
+				}
+				// Show allowed values if constrained
+				if (param.allowedValues() != null && param.allowedValues().length > 0) {
+					sb.append(" [").append(String.join(", ", param.allowedValues())).append("]");
+				}
+				sb.append("\n");
+			}
+			sb.append("\n");
+		}
+		
+		return Optional.of(sb.toString().trim());
 	}
 }
 

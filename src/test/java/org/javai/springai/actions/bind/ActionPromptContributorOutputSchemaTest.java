@@ -658,5 +658,73 @@ class ActionPromptContributorOutputSchemaTest {
 		if (s == null || s.isEmpty()) return s;
 		return Character.toUpperCase(s.charAt(0)) + s.substring(1);
 	}
+
+	// ═══════════════════════════════════════════════════════════════════════════
+	// OpenAI-Compatible Schema Tests
+	// ═══════════════════════════════════════════════════════════════════════════
+
+	@Nested
+	@DisplayName("OpenAI-Compatible Schema")
+	class OpenAiCompatibleSchema {
+
+		@Test
+		@DisplayName("should generate schema without oneOf (OpenAI limitation)")
+		void generatesSchemaWithoutOneOf() throws Exception {
+			String schema = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			
+			// Print for inspection
+			System.out.println("=== OpenAI-Compatible Schema ===");
+			System.out.println(schema);
+			System.out.println("================================");
+			
+			// Verify no oneOf
+			assertThat(schema).doesNotContain("\"oneOf\"");
+			assertThat(schema).doesNotContain("\"anyOf\"");
+		}
+
+		@Test
+		@DisplayName("should have action-specific properties for each action")
+		void hasActionSpecificProperties() throws Exception {
+			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			JsonNode schema = MAPPER.readTree(schemaJson);
+			
+			// Check that step items have action-specific properties
+			JsonNode stepItemProps = schema.at("/properties/steps/items/properties");
+			
+			// Should have properties for each registered action (from SpcActions)
+			assertThat(stepItemProps.has("evaluateSpcReadiness")).isTrue();
+			assertThat(stepItemProps.has("displayControlChart")).isTrue();
+			
+			// Should have utility step properties
+			assertThat(stepItemProps.has("pending")).isTrue();
+			assertThat(stepItemProps.has("noAction")).isTrue();
+			assertThat(stepItemProps.has("error")).isTrue();
+		}
+
+		@Test
+		@DisplayName("should inline action parameters within action property")
+		void inlinesActionParameters() throws Exception {
+			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			JsonNode schema = MAPPER.readTree(schemaJson);
+			
+			// Check evaluateSpcReadiness has its specific parameter
+			JsonNode evalAction = schema.at("/properties/steps/items/properties/evaluateSpcReadiness");
+			assertThat(evalAction.get("type").asText()).isEqualTo("object");
+			
+			JsonNode evalParams = evalAction.at("/properties");
+			assertThat(evalParams.has("bundleId")).isTrue();
+		}
+
+		@Test
+		@DisplayName("should require description on all steps")
+		void requiresDescriptionOnSteps() throws Exception {
+			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			JsonNode schema = MAPPER.readTree(schemaJson);
+			
+			JsonNode stepRequired = schema.at("/properties/steps/items/required");
+			assertThat(stepRequired.isArray()).isTrue();
+			assertThat(stepRequired.toString()).contains("description");
+		}
+	}
 }
 

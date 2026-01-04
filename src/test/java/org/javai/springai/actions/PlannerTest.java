@@ -1,6 +1,7 @@
 package org.javai.springai.actions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.TestChatClientTiers.tier;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
 import org.javai.springai.actions.internal.plan.PlannerOptions;
@@ -24,7 +25,6 @@ class PlannerTest {
 		Planner planner = Planner.builder()
 				.promptContribution("system-extra")
 				.actions(new DemoActions())
-				.enablePromptCapture()
 				.build();
 
 		PromptPreview preview = planner.preview("do something");
@@ -43,7 +43,6 @@ class PlannerTest {
 		Planner planner = Planner.builder()
 				.promptContribution("system-extra")
 				.actions(new DemoActions())
-				.enablePromptCapture()
 				.build();
 
 		PromptPreview preview = planner.preview("do something");
@@ -86,7 +85,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn("{{{"); // malformed JSON
 
 		Planner planner = Planner.builder()
-				.defaultChatClient(mockClient)
+				.chatClientTiers(tier(mockClient))
 				.actions(new DemoActions())
 				.build();
 
@@ -119,7 +118,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(jsonResponse);
 
 		Planner planner = Planner.builder()
-				.defaultChatClient(mockClient)
+				.chatClientTiers(tier(mockClient))
 				.actions(new DemoActions())
 				.build();
 
@@ -157,7 +156,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(markdownResponse);
 
 		Planner planner = Planner.builder()
-				.defaultChatClient(mockClient)
+				.chatClientTiers(tier(mockClient))
 				.actions(new DemoActions())
 				.build();
 
@@ -182,7 +181,7 @@ class PlannerTest {
 		Mockito.when(mockClient.prompt().call().content()).thenReturn(nonJsonResponse);
 
 		Planner planner = Planner.builder()
-				.defaultChatClient(mockClient)
+				.chatClientTiers(tier(mockClient))
 				.actions(new DemoActions())
 				.build();
 
@@ -220,7 +219,6 @@ class PlannerTest {
 				.actions(new QueryActions())
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql-catalog", catalog)
-				.enablePromptCapture()
 				.build();
 
 		PromptPreview preview = planner.preview("sum order_value by customer for last 30 days");

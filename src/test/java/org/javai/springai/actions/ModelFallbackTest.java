@@ -1,6 +1,7 @@
 package org.javai.springai.actions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.TestChatClientTiers.tier;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import org.javai.springai.actions.api.Action;
@@ -49,7 +50,7 @@ class ModelFallbackTest {
         ChatClient mockClient = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 1, "gpt-4.1-mini")
+                .chatClientTiers(tier(mockClient, 1, "gpt-4.1-mini"))
                 .actions(new DemoActions())
                 .build();
 
@@ -71,7 +72,7 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 3, "gpt-4.1-mini")
+                .chatClientTiers(tier(mockClient, 3, "gpt-4.1-mini"))
                 .actions(new DemoActions())
                 .build();
 
@@ -95,7 +96,7 @@ class ModelFallbackTest {
         ChatClient mockClient = createMockClient(MALFORMED_JSON);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "gpt-4.1-mini")
+                .chatClientTiers(tier(mockClient, 2, "gpt-4.1-mini"))
                 .actions(new DemoActions())
                 .build();
 
@@ -118,8 +119,9 @@ class ModelFallbackTest {
         ChatClient tier2Mock = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(tier1Mock, 2, "gpt-4.1-mini")
-                .fallbackChatClient(tier2Mock, 1, "gpt-4.1")
+                .chatClientTiers(
+                        tier(tier1Mock, 2, "gpt-4.1-mini"),
+                        tier(tier2Mock, 1, "gpt-4.1"))
                 .actions(new DemoActions())
                 .build();
 
@@ -158,8 +160,9 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(tier1Mock, 2, "cheap-model")
-                .fallbackChatClient(tier2Mock, 2, "expensive-model")
+                .chatClientTiers(
+                        tier(tier1Mock, 2, "cheap-model"),
+                        tier(tier2Mock, 2, "expensive-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -201,9 +204,10 @@ class ModelFallbackTest {
         ChatClient tier3Mock = createMockClient(MALFORMED_JSON);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(tier1Mock, 2, "cheap")
-                .fallbackChatClient(tier2Mock, 2, "medium")
-                .fallbackChatClient(tier3Mock, 1, "expensive")
+                .chatClientTiers(
+                        tier(tier1Mock, 2, "cheap"),
+                        tier(tier2Mock, 2, "medium"),
+                        tier(tier3Mock, 1, "expensive"))
                 .actions(new DemoActions())
                 .build();
 
@@ -226,7 +230,7 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "test-model")
+                .chatClientTiers(tier(mockClient, 2, "test-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -249,7 +253,7 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "test-model")
+                .chatClientTiers(tier(mockClient, 2, "test-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -271,7 +275,7 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "test-model")
+                .chatClientTiers(tier(mockClient, 2, "test-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -287,12 +291,11 @@ class ModelFallbackTest {
     }
 
     @Test
-    void defaultChatClientWithNoFallbacksWorks() {
+    void singleTierWithNoFallbacksWorks() {
         ChatClient mockClient = createMockClient(VALID_JSON_PLAN);
 
-        // Single tier with no fallbacks
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient)
+                .chatClientTiers(tier(mockClient))
                 .actions(new DemoActions())
                 .build();
 
@@ -324,7 +327,7 @@ class ModelFallbackTest {
         ChatClient mockClient = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 1, "test-model")
+                .chatClientTiers(tier(mockClient, 1, "test-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -342,7 +345,7 @@ class ModelFallbackTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "test-model")
+                .chatClientTiers(tier(mockClient, 2, "test-model"))
                 .actions(new DemoActions())
                 .build();
 

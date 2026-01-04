@@ -1,6 +1,7 @@
 package org.javai.springai.actions.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.javai.springai.actions.TestChatClientTiers.tier;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import org.javai.springai.actions.AttemptOutcome;
@@ -36,7 +37,7 @@ class ConversationManagerRetryTest {
         ChatClient mockClient = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 1, "gpt-4.1-mini")
+                .chatClientTiers(tier(mockClient, 1, "gpt-4.1-mini"))
                 .actions(new DemoActions())
                 .build();
 
@@ -61,7 +62,7 @@ class ConversationManagerRetryTest {
                 .thenReturn(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 3, "test-model")
+                .chatClientTiers(tier(mockClient, 3, "test-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -86,8 +87,9 @@ class ConversationManagerRetryTest {
         ChatClient tier2Mock = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(tier1Mock, 2, "cheap-model")
-                .fallbackChatClient(tier2Mock, 1, "expensive-model")
+                .chatClientTiers(
+                        tier(tier1Mock, 2, "cheap-model"),
+                        tier(tier2Mock, 1, "expensive-model"))
                 .actions(new DemoActions())
                 .build();
 
@@ -109,7 +111,7 @@ class ConversationManagerRetryTest {
         ChatClient mockClient = createMockClient(VALID_JSON_PLAN);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 1, "gpt-4.1-mini")
+                .chatClientTiers(tier(mockClient, 1, "gpt-4.1-mini"))
                 .actions(new DemoActions())
                 .build();
 
@@ -134,7 +136,7 @@ class ConversationManagerRetryTest {
         ChatClient mockClient = createMockClient(MALFORMED_JSON);
 
         Planner planner = Planner.builder()
-                .defaultChatClient(mockClient, 2, "test-model")
+                .chatClientTiers(tier(mockClient, 2, "test-model"))
                 .actions(new DemoActions())
                 .build();
 

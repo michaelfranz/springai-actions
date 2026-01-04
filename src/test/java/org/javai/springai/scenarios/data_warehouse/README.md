@@ -296,7 +296,8 @@ AdaptiveSqlCatalogContributor contributor = new AdaptiveSqlCatalogContributor(
 
 // Wire into Planner
 Planner planner = Planner.builder()
-        .defaultChatClient(chatClient)
+        .chatModel(chatModel)
+        .tier("gpt-4.1-mini", tier -> tier.maxAttempts(2))
         .promptContributor(contributor)  // Adaptive schema in prompt
         .tools(trackingTool)             // Tool-based discovery (records access)
         .actions(actions)

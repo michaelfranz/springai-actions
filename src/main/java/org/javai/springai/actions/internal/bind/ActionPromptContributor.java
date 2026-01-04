@@ -30,13 +30,6 @@ public final class ActionPromptContributor {
 	private static final ObjectMapper mapper = new ObjectMapper();
 	private static final ObjectMapper prettyMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 	
-	private static final String SCHEMA_HEADER = """
-			════════════════════════════════════════════════════════════════════════════════
-			OUTPUT SCHEMA (JSON Schema Draft 2020-12)
-			Your response MUST conform to this schema. Do not add fields not in the schema.
-			════════════════════════════════════════════════════════════════════════════════
-			""";
-	
 	private static final String EXAMPLE_HEADER = """
 			════════════════════════════════════════════════════════════════════════════════
 			EXAMPLE
@@ -97,6 +90,33 @@ public final class ActionPromptContributor {
 	}
 
 	/**
+	 * Emits an OpenAI-compatible JSON Schema for structured outputs.
+	 * 
+	 * <p>OpenAI's structured outputs API doesn't support {@code oneOf}, so this method
+	 * generates a flattened schema that still provides tight constraints:</p>
+	 * 
+	 * <ul>
+	 *   <li>{@code actionId} is an enum of all valid action IDs</li>
+	 *   <li>Action-specific parameters are embedded per-action in a wrapper object</li>
+	 *   <li>Utility steps (pending, noAction, error) use flexible object parameters</li>
+	 * </ul>
+	 *
+	 * @param registry the action registry containing all available actions
+	 * @param filter optional filter to limit which actions are included
+	 * @param typeRegistry optional type registry for custom type handling
+	 * @return OpenAI-compatible JSON Schema as a string
+	 */
+	public static String emitOpenAiSchema(ActionRegistry registry, ActionDescriptorFilter filter,
+			TypeHandlerRegistry typeRegistry) {
+		ObjectNode schema = buildOpenAiCompatibleSchema(registry, filter, typeRegistry);
+		try {
+			return prettyMapper.writeValueAsString(schema);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("Failed to serialize OpenAI schema", e);
+		}
+	}
+
+	/**
 	 * Emits combined schema and exemplars for use in system prompts.
 	 *
 	 * @param registry the action registry
@@ -108,6 +128,187 @@ public final class ActionPromptContributor {
 		// Use the first action for the example
 		ActionDescriptor first = descriptors.getFirst();
 		return EXAMPLE_HEADER + buildExemplar(first) + "\n";
+	}
+
+	/**
+	 * Builds an OpenAI-compatible schema using a tagged union pattern.
+	 * 
+	 * <p>Each step is an object with exactly one property whose name identifies the action/step type.
+	 * The value is the action-specific parameters. This avoids oneOf while maintaining tight typing.</p>
+	 * 
+	 * <p>Example output:</p>
+	 * <pre>{@code
+	 * {
+	 *   "message": "Sending email to user",
+	 *   "steps": [
+	 *     { "sendEmail": { "to": "user@example.com", "body": "Hello" }, "description": "Send welcome email" }
+	 *   ]
+	 * }
+	 * }</pre>
+	 */
+	private static ObjectNode buildOpenAiCompatibleSchema(ActionRegistry registry, ActionDescriptorFilter filter,
+			TypeHandlerRegistry typeRegistry) {
+		List<ActionDescriptor> descriptors = getFilteredDescriptors(registry, filter);
+		
+		ObjectNode schema = mapper.createObjectNode();
+		schema.put("type", "object");
+		schema.put("additionalProperties", false);
+		
+		// Required fields
+		ArrayNode required = schema.putArray("required");
+		required.add("message");
+		required.add("steps");
+		
+		// Properties
+		ObjectNode properties = schema.putObject("properties");
+		
+		// message property
+		ObjectNode messageProp = properties.putObject("message");
+		messageProp.put("type", "string");
+		messageProp.put("description", "Short UI summary of the plan");
+		
+		// steps property - array of Step objects
+		ObjectNode stepsProp = properties.putObject("steps");
+		stepsProp.put("type", "array");
+		ObjectNode stepItemSchema = stepsProp.putObject("items");
+		stepItemSchema.put("type", "object");
+		stepItemSchema.put("additionalProperties", false);
+		
+		// Step item properties: description (required) + one action/utility property
+		ObjectNode stepProps = stepItemSchema.putObject("properties");
+		
+		// description is always required
+		ObjectNode descProp = stepProps.putObject("description");
+		descProp.put("type", "string");
+		descProp.put("description", "Human-readable description of what this step does");
+		
+		// Add a property for each action with its specific parameter schema
+		for (ActionDescriptor descriptor : descriptors) {
+			stepProps.set(descriptor.id(), buildActionParametersSchema(descriptor, typeRegistry));
+		}
+		
+		// Add utility step properties (flexible parameters)
+		stepProps.set("pending", buildPendingParamsSchema());
+		stepProps.set("noAction", buildNoActionParamsSchema());
+		stepProps.set("error", buildErrorParamsSchema());
+		
+		// Only description is required at the schema level
+		// The LLM must include exactly one action/utility property
+		ArrayNode stepRequired = stepItemSchema.putArray("required");
+		stepRequired.add("description");
+		
+		// $defs section (kept minimal for OpenAI compatibility)
+		schema.putObject("$defs");
+		
+		return schema;
+	}
+
+	/**
+	 * Builds the parameter schema for a specific action (for OpenAI-compatible schema).
+	 */
+	private static ObjectNode buildActionParametersSchema(ActionDescriptor descriptor, TypeHandlerRegistry typeRegistry) {
+		ObjectNode paramSchema = mapper.createObjectNode();
+		paramSchema.put("type", "object");
+		paramSchema.put("additionalProperties", false);
+		paramSchema.put("description", descriptor.description());
+		
+		ArrayNode required = paramSchema.putArray("required");
+		ObjectNode properties = paramSchema.putObject("properties");
+		
+		for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
+			required.add(param.name());
+			properties.set(param.name(), buildParameterPropertySchema(param, typeRegistry));
+		}
+		
+		return paramSchema;
+	}
+
+	/**
+	 * Builds the pending step parameters schema.
+	 */
+	private static ObjectNode buildPendingParamsSchema() {
+		ObjectNode schema = mapper.createObjectNode();
+		schema.put("type", "object");
+		schema.put("additionalProperties", false);
+		schema.put("description", "Indicates action cannot proceed - needs more information from user");
+		
+		// OpenAI requires ALL properties to be in 'required'
+		ArrayNode required = schema.putArray("required");
+		required.add("actionId");
+		required.add("pendingParams");
+		required.add("providedParams");
+		
+		ObjectNode properties = schema.putObject("properties");
+		properties.putObject("actionId").put("type", "string");
+		
+		// pendingParams - array of parameters that need values
+		ObjectNode pendingParamsArray = properties.putObject("pendingParams");
+		pendingParamsArray.put("type", "array");
+		ObjectNode pendingItemSchema = pendingParamsArray.putObject("items");
+		pendingItemSchema.put("type", "object");
+		pendingItemSchema.put("additionalProperties", false);
+		ArrayNode pendingItemRequired = pendingItemSchema.putArray("required");
+		pendingItemRequired.add("name");
+		pendingItemRequired.add("prompt");
+		ObjectNode pendingItemProps = pendingItemSchema.putObject("properties");
+		pendingItemProps.putObject("name").put("type", "string");
+		pendingItemProps.putObject("prompt").put("type", "string");
+		
+		// providedParams - array of name/value pairs (OpenAI requires additionalProperties:false)
+		ObjectNode providedParamsArray = properties.putObject("providedParams");
+		providedParamsArray.put("type", "array");
+		providedParamsArray.put("description", "Parameters already known/provided as name-value pairs");
+		ObjectNode providedItemSchema = providedParamsArray.putObject("items");
+		providedItemSchema.put("type", "object");
+		providedItemSchema.put("additionalProperties", false);
+		ArrayNode providedItemRequired = providedItemSchema.putArray("required");
+		providedItemRequired.add("name");
+		providedItemRequired.add("value");
+		ObjectNode providedItemProps = providedItemSchema.putObject("properties");
+		providedItemProps.putObject("name").put("type", "string");
+		providedItemProps.putObject("value").put("type", "string");
+		
+		return schema;
+	}
+
+	/**
+	 * Builds the noAction step parameters schema.
+	 */
+	private static ObjectNode buildNoActionParamsSchema() {
+		ObjectNode schema = mapper.createObjectNode();
+		schema.put("type", "object");
+		schema.put("additionalProperties", false);
+		schema.put("description", "No action needed - explain why to the user");
+		
+		ArrayNode required = schema.putArray("required");
+		required.add("reason");
+		
+		ObjectNode properties = schema.putObject("properties");
+		ObjectNode reasonProp = properties.putObject("reason");
+		reasonProp.put("type", "string");
+		reasonProp.put("description", "Explanation for why no action is needed");
+		
+		return schema;
+	}
+
+	/**
+	 * Builds the error step parameters schema.
+	 */
+	private static ObjectNode buildErrorParamsSchema() {
+		ObjectNode schema = mapper.createObjectNode();
+		schema.put("type", "object");
+		schema.put("additionalProperties", false);
+		schema.put("description", "Error occurred - explain the issue to the user");
+		
+		ArrayNode required = schema.putArray("required");
+		required.add("reason");
+		
+		ObjectNode properties = schema.putObject("properties");
+		ObjectNode reasonProp = properties.putObject("reason");
+		reasonProp.put("type", "string");
+		reasonProp.put("description", "Description of the error");
+		
+		return schema;
 	}
 
 	/**

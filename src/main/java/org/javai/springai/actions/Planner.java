@@ -3,6 +3,7 @@ package org.javai.springai.actions;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +17,6 @@ import org.javai.springai.actions.conversation.ConversationPromptBuilder;
 import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
-import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
@@ -50,8 +50,6 @@ public final class Planner {
 	private final Object[] toolSources;
 	private final List<PromptContributor> promptContributors;
 	private final Map<String, Object> promptContext;
-	private final boolean capturePromptByDefault;
-	private final Consumer<PromptPreview> promptHook;
 	private final PersonaSpec persona;
 	private final TypeHandlerRegistry typeHandlerRegistry;
 
@@ -66,8 +64,6 @@ public final class Planner {
 		this.toolSources = builder.toolSources != null ? builder.toolSources : new Object[0];
 		this.promptContributors = List.copyOf(builder.promptContributors);
 		this.promptContext = Map.copyOf(builder.promptContext);
-		this.capturePromptByDefault = builder.capturePromptByDefault;
-		this.promptHook = builder.promptHook;
 		this.persona = builder.persona;
 		this.typeHandlerRegistry = builder.typeHandlerRegistry;
 	}
@@ -110,7 +106,6 @@ public final class Planner {
 		PromptPreview preview = buildPromptPreview(Objects.requireNonNull(requestText),
 				Objects.requireNonNull(actionDescriptors),
 				state);
-		maybeFirePromptHook(preview, effective);
 
 		if (isDryRun(effective)) {
 			return formulateDryRunPlan(preview, actionContext);
@@ -121,12 +116,10 @@ public final class Planner {
 			return formulatePlanWithRetry(preview, effective, actionContext);
 		}
 
-		// Legacy path for backward compatibility (shouldn't normally be reached
-		// since defaultChatClient populates chatClientTiers)
+		// Dry-run path: no chat clients configured, return empty plan preview
 		String response = invokeModel(preview);
 		try {
 			Plan plan = parsePlan(response, actionContext.registry());
-			maybeFirePromptHook(preview, effective);
 			return new PlanFormulationResult(response, plan, preview, false, actionContext.registry());
 		}
 		catch (PlanParseException e) {
@@ -141,7 +134,6 @@ public final class Planner {
 					response,
 					List.of(new PlanStep.ErrorStep(reason))
 			);
-			maybeFirePromptHook(preview, effective);
 			return new PlanFormulationResult(response, errorPlan, preview, false, actionContext.registry());
 		}
 	}
@@ -270,71 +262,6 @@ public final class Planner {
 		
 		return sb.toString();
 	}
-	
-	private static boolean hasAction(List<ActionDescriptor> descriptors, String actionId) {
-		return descriptors.stream().anyMatch(a -> actionId.equals(a.id()));
-	}
-	
-	/**
-	 * Pick the best action to use as an example - prefer actions with 1-3 params to demonstrate structure.
-	 * Actions with too few params don't show the parameters structure well.
-	 */
-	private static ActionDescriptor pickExampleAction(List<ActionDescriptor> descriptors) {
-		// Prefer actions with 1-3 params to show the parameters structure
-		return descriptors.stream()
-				.filter(a -> {
-					int params = a.actionParameterSpecs().size();
-					return params >= 1 && params <= 3;
-				})
-				.findFirst()
-				.orElse(descriptors.getFirst());
-	}
-	
-	private static String truncateForExample(String description) {
-		if (description == null) return "Perform action";
-		String trimmed = description.trim();
-		// Take first sentence or first 50 chars
-		int endIdx = Math.min(50, trimmed.length());
-		int periodIdx = trimmed.indexOf('.');
-		if (periodIdx > 0 && periodIdx < endIdx) {
-			return trimmed.substring(0, periodIdx);
-		}
-		if (endIdx < trimmed.length()) {
-			return trimmed.substring(0, endIdx) + "...";
-		}
-		return trimmed;
-	}
-	
-	private static String generateExampleValue(ActionParameterDescriptor param) {
-		// Check for explicit examples first
-		if (param.examples().length > 0) {
-			String example = param.examples()[0];
-			// If it looks like JSON, use as-is; otherwise quote it
-			if (example.startsWith("{") || example.startsWith("[") || 
-				example.equals("true") || example.equals("false") ||
-				example.matches("-?\\d+(\\.\\d+)?")) {
-				return example;
-			}
-			return "\"" + example + "\"";
-		}
-		
-		// Check for allowed values
-		if (param.allowedValues().length > 0) {
-			return "\"" + param.allowedValues()[0] + "\"";
-		}
-		
-		// Generate based on type
-		String typeId = param.typeId();
-
-		return switch (typeId.toLowerCase()) {
-			case "int", "integer", "long" -> "1";
-			case "double", "float", "bigdecimal" -> "10.00";
-			case "boolean" -> "true";
-			case "map" -> "{}";
-			case "list" -> "[]";
-			default -> "\"<" + param.name() + ">\"";
-		};
-	}
 
 	private PromptPreview buildPromptPreview(@NonNull String requestText,
 			@NonNull List<ActionDescriptor> actionDescriptors,
@@ -358,7 +285,7 @@ public final class Planner {
 
 		// Add contributions from prompt contributors (e.g., SqlCatalogContextContributor)
 		// Merge conversation state into prompt context for context-aware contributors
-		Map<String, Object> mergedContext = new java.util.HashMap<>(this.promptContext);
+		Map<String, Object> mergedContext = new HashMap<>(this.promptContext);
 		if (state != null) {
 			mergedContext.put("conversationState", state);
 			if (state.workingContext() != null) {
@@ -400,12 +327,6 @@ public final class Planner {
 				Objects.requireNonNull(userMessages),
 				List.of(),  // No grammar IDs - we use JSON now
 				actionNames);
-	}
-
-	private void maybeFirePromptHook(PromptPreview preview, PlannerOptions options) {
-		if (options.capturePrompt() || capturePromptByDefault) {
-			fireHook(preview);
-		}
 	}
 
 	private boolean isDryRun(PlannerOptions options) {
@@ -529,7 +450,6 @@ public final class Planner {
 							modelLabel, attempt, tier.maxAttempts(), attempts.size());
 					PlanningMetrics metrics = new PlanningMetrics(
 							tier.modelId(), attempts.size(), attempts);
-					maybeFirePromptHook(preview, options);
 					return new PlanFormulationResult(
 							result.response(), result.plan(), preview, false,
 							actionContext.registry(), metrics);
@@ -566,21 +486,9 @@ public final class Planner {
 			errorPlan = new Plan(lastResponse, List.of(new PlanStep.ErrorStep(reason)));
 		}
 
-		maybeFirePromptHook(preview, options);
 		return new PlanFormulationResult(
 				lastResponse, errorPlan, preview, false,
 				actionContext.registry(), metrics);
-	}
-
-	private void fireHook(PromptPreview preview) {
-		if (promptHook != null && preview != null) {
-			try {
-				promptHook.accept(preview);
-			}
-			catch (Exception ex) {
-				logger.warn("Prompt hook threw an exception", ex);
-			}
-		}
 	}
 
 	/**
@@ -676,21 +584,15 @@ public final class Planner {
 	}
 
 	public static final class Builder {
-		// Legacy: pre-built ChatClient tiers
 		private final List<ChatClientTier> chatClientTiers = new ArrayList<>();
 		private boolean defaultClientSet = false;
-		
-		// New: ChatModel + tier configs (Planner creates ChatClients with schema)
 		private ChatModel chatModel;
 		private final List<ModelTierConfig> modelTierConfigs = new ArrayList<>();
-		
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
 		private Object[] toolSources;
 		private final List<PromptContributor> promptContributors = new ArrayList<>();
 		private final Map<String, Object> promptContext = new HashMap<>();
-		private boolean capturePromptByDefault;
-		private Consumer<PromptPreview> promptHook;
 		private PersonaSpec persona;
 		private TypeHandlerRegistry typeHandlerRegistry;
 
@@ -698,130 +600,23 @@ public final class Planner {
 		}
 
 		/**
-		 * Set the default (primary) chat client with 1 attempt.
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @return this builder
-		 * @throws IllegalStateException if called more than once
-		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
-		 *             for automatic JSON Schema injection.
+		 * Directly inject ChatClient tiers. For testing with mocked clients.
 		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder defaultChatClient(ChatClient client) {
-			return defaultChatClient(client, 1, null);
-		}
-
-		/**
-		 * Set the default (primary) chat client with specified max attempts.
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @param maxAttempts maximum attempts before moving to fallback (≥1)
-		 * @return this builder
-		 * @throws IllegalStateException if called more than once
-		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
-		 *             for automatic JSON Schema injection.
-		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder defaultChatClient(ChatClient client, int maxAttempts) {
-			return defaultChatClient(client, maxAttempts, null);
-		}
-
-		/**
-		 * Set the default (primary) chat client with specified max attempts and model ID.
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @param maxAttempts maximum attempts before moving to fallback (≥1)
-		 * @param modelId optional identifier for observability (e.g., "gpt-4.1-mini")
-		 * @return this builder
-		 * @throws IllegalStateException if called more than once
-		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
-		 *             for automatic JSON Schema injection.
-		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder defaultChatClient(ChatClient client, int maxAttempts, String modelId) {
-			if (this.defaultClientSet) {
-				throw new IllegalStateException("defaultChatClient() can only be called once");
-			}
-			Objects.requireNonNull(client, "client must not be null");
-			this.chatClientTiers.add(new ChatClientTier(client, maxAttempts, modelId));
-			this.defaultClientSet = true;
+		public Builder chatClientTiers(ChatClientTier... tiers) {
+			this.chatClientTiers.addAll(Arrays.asList(tiers));
+			this.defaultClientSet = !this.chatClientTiers.isEmpty();
 			return this;
 		}
 
 		/**
-		 * Add a fallback chat client with 1 attempt.
-		 *
-		 * <p>Fallback clients are tried in order after the default client exhausts its attempts.</p>
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @return this builder
-		 * @throws IllegalStateException if defaultChatClient() was not called first
-		 * @throws IllegalStateException if this client instance was already added
-		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
-		 *             for automatic JSON Schema injection.
-		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder fallbackChatClient(ChatClient client) {
-			return fallbackChatClient(client, 1, null);
-		}
-
-		/**
-		 * Add a fallback chat client with specified max attempts.
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @param maxAttempts maximum attempts before moving to next fallback (≥1)
-		 * @return this builder
-		 * @throws IllegalStateException if defaultChatClient() was not called first
-		 * @throws IllegalStateException if this client instance was already added
-		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
-		 *             for automatic JSON Schema injection.
-		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder fallbackChatClient(ChatClient client, int maxAttempts) {
-			return fallbackChatClient(client, maxAttempts, null);
-		}
-
-		/**
-		 * Add a fallback chat client with specified max attempts and model ID.
-		 *
-		 * @param client the Spring AI ChatClient
-		 * @param maxAttempts maximum attempts before moving to next fallback (≥1)
-		 * @param modelId optional identifier for observability
-		 * @return this builder
-		 * @throws IllegalStateException if defaultChatClient() was not called first
-		 * @throws IllegalStateException if this client instance was already added
-		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
-		 *             for automatic JSON Schema injection.
-		 */
-		@Deprecated(since = "1.0", forRemoval = true)
-		public Builder fallbackChatClient(ChatClient client, int maxAttempts, String modelId) {
-			if (!this.defaultClientSet) {
-				throw new IllegalStateException("Must call defaultChatClient() before fallbackChatClient()");
-			}
-			Objects.requireNonNull(client, "client must not be null");
-			// Check for duplicate client instances
-			for (ChatClientTier tier : this.chatClientTiers) {
-				if (tier.chatClient() == client) {
-					throw new IllegalStateException("The same ChatClient instance cannot be added to multiple tiers");
-				}
-			}
-			this.chatClientTiers.add(new ChatClientTier(client, maxAttempts, modelId));
-			return this;
-		}
-
-		/**
-		 * Set the ChatModel to use for creating ChatClients with schema-aware options.
-		 * 
-		 * <p>When using this method, the Planner will create ChatClients internally,
-		 * configuring them with the dynamically-generated JSON Schema for plan output.
-		 * Use {@link #tier(String, Consumer)} to configure model tiers after calling this method.</p>
+		 * Set the ChatModel to use. Configure model tiers via {@link #tier(String, Consumer)}.
 		 *
 		 * @param chatModel the Spring AI ChatModel (e.g., OpenAiChatModel)
 		 * @return this builder
 		 */
 		public Builder chatModel(ChatModel chatModel) {
 			if (this.defaultClientSet) {
-				throw new IllegalStateException("Cannot use chatModel() with defaultChatClient()/fallbackChatClient()");
+				throw new IllegalStateException("Cannot use chatModel() with chatClientTiers()");
 			}
 			this.chatModel = Objects.requireNonNull(chatModel, "chatModel must not be null");
 			return this;
@@ -853,7 +648,7 @@ public final class Planner {
 				throw new IllegalStateException("Must call chatModel() before tier()");
 			}
 			if (this.defaultClientSet) {
-				throw new IllegalStateException("Cannot use tier() with defaultChatClient()/fallbackChatClient()");
+				throw new IllegalStateException("Cannot use tier() with chatClientTiers()");
 			}
 			ModelTierConfig.Builder tierBuilder = ModelTierConfig.builder(modelName);
 			configurer.accept(tierBuilder);
@@ -884,9 +679,6 @@ public final class Planner {
 			return this;
 		}
 
-		/**
-		 * Add a prompt contributor that provides dynamic context to the system prompt.
-		 */
 		public Builder promptContributor(PromptContributor contributor) {
 			if (contributor != null) {
 				this.promptContributors.add(contributor);
@@ -906,55 +698,28 @@ public final class Planner {
 			return this;
 		}
 
-		/**
-		 * Register custom type handlers for schema generation and resolution.
-		 */
-		public Builder withTypeHandlers(TypeHandlerRegistry registry) {
-			this.typeHandlerRegistry = registry;
-			return this;
-		}
-
-		public Builder enablePromptCapture() {
-			this.capturePromptByDefault = true;
-			return this;
-		}
-
-		public Builder onPrompt(Consumer<PromptPreview> hook) {
-			this.promptHook = hook;
-			return this;
-		}
-
 		public Planner build() {
-			// Ensure plan actions contributor is present (provides action catalog)
 			boolean hasPlanContributor = this.promptContributors.stream()
 					.anyMatch(c -> c instanceof PlanActionsContextContributor);
 			if (!hasPlanContributor) {
 				this.promptContributors.add(new PlanActionsContextContributor());
 			}
-			// Auto-discover type handlers via SPI if not explicitly provided
 			if (this.typeHandlerRegistry == null) {
 				this.typeHandlerRegistry = TypeHandlerRegistry.discover();
 			}
-			
-			// If using tier-based configuration, create ChatClients with schema
 			if (this.chatModel != null && !this.modelTierConfigs.isEmpty()) {
 				createChatClientsFromTierConfigs();
 			}
-			
 			return new Planner(this);
 		}
-		
-		/**
-		 * Creates ChatClients from modelTierConfigs.
-		 * 
-		 * <p>Note: We do NOT use OpenAI's response_format with JSON Schema enforcement because
-		 * their Structured Outputs feature doesn't support 'oneOf', which is required for our
-		 * polymorphic step types (ActionStep variants, PendingStep, NoActionStep, ErrorStep).
-		 * Instead, the schema is included in the system prompt via PlanActionsContextContributor
-		 * as documentation that guides the LLM.</p>
-		 */
+
 		private void createChatClientsFromTierConfigs() {
-			// Create ChatClient for each tier
+			// Note: Structured outputs (ResponseFormat with JSON schema) is not used because:
+			// 1. OpenAI strict mode requires ALL properties in 'required', but our schema
+			//    has optional action properties (only one filled per step)
+			// 2. The tagged-union schema format differs from RawPlanStep's expected format
+			// We rely on prompt-based guidance via PlanActionsContextContributor.
+
 			boolean first = true;
 			for (ModelTierConfig tierConfig : this.modelTierConfigs) {
 				OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
