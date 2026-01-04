@@ -304,7 +304,7 @@ public final class Planner {
 		}
 
 		// Add type-specific guidance from registered type handlers
-		String typeGuidance = org.javai.springai.actions.internal.bind.ActionPromptContributor
+		String typeGuidance = org.javai.springai.actions.internal.bind.ActionSchemaGenerator
 				.collectTypeGuidance(collectedActions.registry(), this.typeHandlerRegistry);
 		if (!typeGuidance.isBlank()) {
 			systemMessages.add(typeGuidance);

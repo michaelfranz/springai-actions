@@ -17,15 +17,15 @@ import org.javai.springai.actions.api.TypeSpecProvider;
 import org.springframework.ai.util.json.schema.JsonSchemaGenerator;
 
 /**
- * Emits action specs for inclusion in system prompts.
+ * Generates JSON Schema definitions for actions.
  * 
- * <p>This class generates JSON Schema output contracts for LLM plan generation.
+ * <p>This class creates JSON Schema output contracts for LLM plan generation.
  * The schema uses "hardcoded complete action shapes" where each action is a 
  * self-contained definition with its actionId bound via {@code const} and 
  * parameters inlined. This eliminates ambiguity about which parameters apply 
  * to which action.</p>
  */
-public final class ActionPromptContributor {
+public final class ActionSchemaGenerator {
 
 	private static final ObjectMapper mapper = new ObjectMapper();
 	private static final ObjectMapper prettyMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
@@ -36,7 +36,7 @@ public final class ActionPromptContributor {
 			════════════════════════════════════════════════════════════════════════════════
 			""";
 
-	private ActionPromptContributor() {
+	private ActionSchemaGenerator() {
 	}
 
 	public static String emit(ActionRegistry registry, ActionDescriptorFilter filter) {

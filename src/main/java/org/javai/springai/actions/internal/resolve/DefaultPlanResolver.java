@@ -119,20 +119,24 @@ public class DefaultPlanResolver implements PlanResolver {
 			if (!outcome.success()) {
 				// Conversion failed - might be due to incomplete/wrong data structure
 				// Check if this looks like partial data that should trigger PENDING
-				if (looksLikePartialData(raw, param)) {
+				if (looksLikePartialData(raw, param, context)) {
 					return createPendingForIncompleteParam(actionId, param, raw, step.description());
 				}
 				return new PlanStep.ErrorStep(outcome.errorMessage());
 			}
 			
-			// Validate constraints (allowed values, regex)
-			Optional<String> constraintValidation = validateConstraint(param, outcome.value());
-			if (constraintValidation.isPresent()) {
-				return new PlanStep.ErrorStep(constraintValidation.get());
+			// Validate and normalize constraints (allowed values, regex)
+			Object normalizedValue = outcome.value();
+			NormalizationResult normResult = validateAndNormalize(param, normalizedValue);
+			if (normResult.error() != null) {
+				return new PlanStep.ErrorStep(normResult.error());
+			}
+			if (normResult.normalizedValue() != null) {
+				normalizedValue = normResult.normalizedValue();
 			}
 			
 			Class<?> targetType = resolveType(param.typeName()).orElse(Object.class);
-			arguments.add(new PlanArgument(param.name(), outcome.value(), targetType));
+			arguments.add(new PlanArgument(param.name(), normalizedValue, targetType));
 		}
 
 		return new PlanStep.ActionStep(binding, arguments);
@@ -142,30 +146,45 @@ public class DefaultPlanResolver implements PlanResolver {
 	 * Validate parameter constraints (allowed values, regex patterns).
 	 * Returns Optional.empty() if valid, error message if invalid.
 	 */
-	private Optional<String> validateConstraint(ActionParameterDescriptor param, Object value) {
-		//noinspection ConstantValue
+	/**
+	 * Result of validation and normalization.
+	 */
+	private record NormalizationResult(String error, Object normalizedValue) {
+		static NormalizationResult ok() { return new NormalizationResult(null, null); }
+		static NormalizationResult normalized(Object value) { return new NormalizationResult(null, value); }
+		static NormalizationResult error(String msg) { return new NormalizationResult(msg, null); }
+	}
+	
+	/**
+	 * Validates and normalizes parameter value against constraints.
+	 * Returns normalized value if normalization was needed, or error if validation failed.
+	 */
+	private NormalizationResult validateAndNormalize(ActionParameterDescriptor param, Object value) {
 		if (value == null) {
-			return Optional.empty();
+			return NormalizationResult.ok();
 		}
 		String stringValue = value.toString();
 		
 		if (param.allowedValues().length > 0) {
-			boolean match = false;
+			// First check for exact match
 			for (String allowed : param.allowedValues()) {
 				if (param.caseInsensitive()) {
 					if (stringValue.equalsIgnoreCase(allowed)) {
-						match = true;
-						break;
+						return NormalizationResult.ok();
 					}
 				} else if (stringValue.equals(allowed)) {
-					match = true;
-					break;
+					return NormalizationResult.ok();
 				}
 			}
-			if (!match) {
-				return Optional.of("Value for parameter '" + param.name() + "' must be one of: "
-						+ String.join(", ", param.allowedValues()));
+			
+			// No exact match - try fuzzy matching (e.g., "displacements" → "displacement")
+			String normalized = findClosestAllowedValue(stringValue, param.allowedValues(), param.caseInsensitive());
+			if (normalized != null) {
+				return NormalizationResult.normalized(normalized);
 			}
+			
+			return NormalizationResult.error("Value for parameter '" + param.name() + "' must be one of: "
+					+ String.join(", ", param.allowedValues()));
 		}
 		
 		if (!param.allowedRegex().isBlank()) {
@@ -174,11 +193,33 @@ public class DefaultPlanResolver implements PlanResolver {
 					? stringValue.toLowerCase().matches(pattern.toLowerCase())
 					: stringValue.matches(pattern);
 			if (!matches) {
-				return Optional.of("Value for parameter '" + param.name() + "' must match pattern: " + pattern);
+				return NormalizationResult.error("Value for parameter '" + param.name() + "' must match pattern: " + pattern);
 			}
 		}
 
-		return Optional.empty();
+		return NormalizationResult.ok();
+	}
+	
+	/**
+	 * Finds the closest allowed value for fuzzy matching.
+	 * Handles common variations like plurals (displacements → displacement).
+	 */
+	private String findClosestAllowedValue(String value, String[] allowedValues, boolean caseInsensitive) {
+		String normalizedValue = caseInsensitive ? value.toLowerCase() : value;
+		
+		for (String allowed : allowedValues) {
+			String normalizedAllowed = caseInsensitive ? allowed.toLowerCase() : allowed;
+			
+			// Check if value starts with allowed value (e.g., "displacements" starts with "displacement")
+			if (normalizedValue.startsWith(normalizedAllowed)) {
+				return allowed;
+			}
+			// Check if allowed value starts with the value
+			if (normalizedAllowed.startsWith(normalizedValue)) {
+				return allowed;
+			}
+		}
+		return null;
 	}
 
 	private ConversionOutcome convert(Object raw, ActionParameterDescriptor param, String actionId, ResolutionContext context) {
@@ -425,7 +466,7 @@ public class DefaultPlanResolver implements PlanResolver {
 	 * Check if the raw data looks like partial/incomplete data that should trigger PENDING.
 	 * This catches cases where the LLM provided some data but not in the expected structure.
 	 */
-	private boolean looksLikePartialData(Object raw, ActionParameterDescriptor param) {
+	private boolean looksLikePartialData(Object raw, ActionParameterDescriptor param, ResolutionContext context) {
 		// If raw is a simple value but param expects a complex type, it might be partial data
 
 		// If the param description mentions required nested fields, and raw is a simple string,
@@ -434,8 +475,26 @@ public class DefaultPlanResolver implements PlanResolver {
 			return true;
 		}
 		
-		// If param expects a complex type and raw is a primitive, it's incomplete
 		String typeName = param.typeName();
+		try {
+			Class<?> paramType = Class.forName(typeName);
+			
+			// Enums should NOT be treated as partial data - invalid enum values are errors
+			if (paramType.isEnum()) {
+				return false;
+			}
+			
+			// Types with custom TypeResolvers should NOT be treated as partial data
+			// If the resolver fails, that's a validation error
+			if (context.typeRegistry().isPresent() && 
+				context.typeRegistry().get().resolver(paramType).isPresent()) {
+				return false;
+			}
+		} catch (ClassNotFoundException ignored) {
+			// Type not found - fall through to the heuristic check
+		}
+		
+		// If param expects a complex type and raw is a primitive, it's incomplete
 		if (!typeName.startsWith("java.lang.") && (raw instanceof String || raw instanceof Number || raw instanceof Boolean)) {
 			return true;
 		}
@@ -469,3 +528,4 @@ public class DefaultPlanResolver implements PlanResolver {
 		return step.description();
 	}
 }
+

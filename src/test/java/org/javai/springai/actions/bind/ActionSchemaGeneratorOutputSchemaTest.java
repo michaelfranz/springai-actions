@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.internal.bind.ActionPromptContributor;
+import org.javai.springai.actions.internal.bind.ActionSchemaGenerator;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * TDD tests for ActionPromptContributor output schema generation.
+ * TDD tests for ActionSchemaGenerator output schema generation.
  * 
  * <p>These tests embody the IDEAL output format: a complete JSON Schema
  * that constrains LLM output to valid Plan structures with action-specific
@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
  *   <li>Omitting required parameters</li>
  * </ul>
  */
-class ActionPromptContributorOutputSchemaTest {
+class ActionSchemaGeneratorOutputSchemaTest {
 
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -43,12 +43,11 @@ class ActionPromptContributorOutputSchemaTest {
 	// ═══════════════════════════════════════════════════════════════════════════
 
 	@Nested
-	@DisplayName("Golden Output - The Ideal Prompt Contribution")
+	@DisplayName("Golden Output - Schema and Exemplar Validation")
 	class GoldenOutput {
 
 		/**
-		 * This test validates the structure and content of the output.
-		 * The text block below shows what the LLM will receive in the system prompt.
+		 * This test validates the structure of the output schema.
 		 * 
 		 * <p>The schema uses hardcoded complete action shapes for ActionStep variants.
 		 * Each action is a self-contained definition with:
@@ -62,20 +61,14 @@ class ActionPromptContributorOutputSchemaTest {
 		 * per-action variants because they are format documentation, not precise bindings.</p>
 		 */
 		@Test
-		@DisplayName("should produce the correct golden output structure for SPC actions")
-		void producesGoldenOutput() throws Exception {
-			// Register a single action for a cleaner golden output
+		@DisplayName("should produce correct schema structure for SPC actions")
+		void producesCorrectSchemaStructure() throws Exception {
+			// Register a single action for a cleaner output
 			ActionRegistry singleActionRegistry = new ActionRegistry();
 			singleActionRegistry.registerActions(new SingleSpcAction());
 
-			String actual = ActionPromptContributor.emitExemplar(singleActionRegistry, null);
-
-			// Validate headers are present
-			assertThat(actual).contains("OUTPUT SCHEMA");
-			assertThat(actual).contains("EXAMPLE");
-			
-			// Extract and validate the JSON schema portion
-			String schemaJson = extractJsonBlock(actual);
+			// Get the schema (used for structured outputs, not prompt contribution)
+			String schemaJson = ActionSchemaGenerator.emitOutputSchema(singleActionRegistry, null, null);
 			JsonNode schema = MAPPER.readTree(schemaJson);
 			
 			// Validate top-level schema structure
@@ -114,11 +107,23 @@ class ActionPromptContributorOutputSchemaTest {
 			JsonNode pendingDef = schema.at("/$defs/PendingStep");
 			assertThat(pendingDef.at("/properties/actionId/type").asText()).isEqualTo("string");
 			assertThat(pendingDef.at("/properties/status/const").asText()).isEqualTo("pending");
+		}
+		
+		@Test
+		@DisplayName("should produce correct exemplar structure for SPC actions")
+		void producesCorrectExemplarStructure() throws Exception {
+			// Register a single action for a cleaner output
+			ActionRegistry singleActionRegistry = new ActionRegistry();
+			singleActionRegistry.registerActions(new SingleSpcAction());
+
+			// Get the exemplar (used for prompt contribution)
+			String exemplar = ActionSchemaGenerator.emitExemplar(singleActionRegistry, null);
 			
-			// Validate example contains correct structure
-			assertThat(actual).contains("\"actionId\":\"evaluateSpcReadiness\"");
-			assertThat(actual).contains("\"measurementType\":\"displacement\"");
-			assertThat(actual).contains("\"bundleId\":\"A12345\"");
+			// Validate exemplar contains correct structure
+			assertThat(exemplar).contains("EXAMPLE");
+			assertThat(exemplar).contains("\"actionId\":\"evaluateSpcReadiness\"");
+			assertThat(exemplar).contains("\"measurementType\":\"displacement\"");
+			assertThat(exemplar).contains("\"bundleId\":\"A12345\"");
 		}
 		
 		/**
@@ -213,7 +218,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate a valid JSON Schema document")
 		void generatesValidJsonSchema() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -226,7 +231,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should require message and steps at top level")
 		void requiresMessageAndSteps() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode required = schema.get("required");
@@ -239,7 +244,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define message as a constrained string")
 		void definesMessageAsConstrainedString() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode messageSchema = schema.at("/properties/message");
@@ -252,7 +257,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define steps as an array with Step reference")
 		void definesStepsAsArray() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode stepsSchema = schema.at("/properties/steps");
@@ -274,7 +279,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should create ActionStep definition for each registered action")
 		void createsActionStepDefinitionForEachAction() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -289,7 +294,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should filter actions when filter is provided")
 		void filtersActionsWhenFilterProvided() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(
+			String contribution = ActionSchemaGenerator.emitOutputSchema(
 					registry, 
 					spec -> spec.id().equals("evaluateSpcReadiness"), 
 					null
@@ -305,7 +310,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should bind actionId via const in each action definition")
 		void bindsActionIdViaConst() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -328,7 +333,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define Step as oneOf action variants plus generic Pending, NoAction, Error")
 		void definesStepAsOneOf() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode stepDef = schema.at("/$defs/Step");
@@ -341,7 +346,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define per-action step with const actionId binding")
 		void definesPerActionStepWithConstBinding() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -361,7 +366,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define generic PendingStep (not per-action)")
 		void definesGenericPendingStep() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -383,7 +388,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define NoActionStep without actionId")
 		void definesNoActionStep() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode noActionStepDef = schema.at("/$defs/NoActionStep");
@@ -398,7 +403,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should define ErrorStep without actionId")
 		void definesErrorStep() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			JsonNode errorStepDef = schema.at("/$defs/ErrorStep");
@@ -422,7 +427,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate parameter schema with enum for allowedValues")
 		void generatesEnumForAllowedValues() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -438,7 +443,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate parameter schema with pattern for allowedRegex")
 		void generatesPatternForAllowedRegex() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -451,7 +456,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should include description in parameter schema")
 		void includesDescriptionInParameterSchema() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -464,7 +469,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should include examples in parameter schema when provided")
 		void includesExamplesInParameterSchema() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -478,7 +483,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should mark all action parameters as required")
 		void marksAllParametersAsRequired() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -493,7 +498,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate separate parameter schemas for each action")
 		void generatesSeparateParameterSchemasPerAction() throws Exception {
-			String contribution = ActionPromptContributor.emitOutputSchema(registry, null, null);
+			String contribution = ActionSchemaGenerator.emitOutputSchema(registry, null, null);
 
 			JsonNode schema = MAPPER.readTree(contribution);
 			
@@ -521,7 +526,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate valid exemplar for first action")
 		void generatesExemplarForFirstAction() throws Exception {
-			String exemplars = ActionPromptContributor.emitExemplar(registry, null);
+			String exemplars = ActionSchemaGenerator.emitExemplar(registry, null);
 
 			// Should contain at least one action ID (first action is used as example)
 			assertThat(exemplars).contains("evaluateSpcReadiness");
@@ -530,7 +535,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should use example values from @ActionParam.examples()")
 		void usesExampleValuesFromAnnotation() throws Exception {
-			String exemplars = ActionPromptContributor.emitExemplar(registry, null);
+			String exemplars = ActionSchemaGenerator.emitExemplar(registry, null);
 
 			// Should use the example value "displacement" from @ActionParam
 			assertThat(exemplars).contains("\"displacement\"");
@@ -542,7 +547,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@DisplayName("should use first allowedValue when no example provided")
 		void usesFirstAllowedValueWhenNoExample() throws Exception {
 			// displayControlChart has no examples, but has allowedValues
-			String exemplars = ActionPromptContributor.emitExemplar(
+			String exemplars = ActionSchemaGenerator.emitExemplar(
 					registry, 
 					spec -> spec.id().equals("displayControlChart")
 			);
@@ -554,7 +559,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("exemplar should be valid JSON")
 		void exemplarIsValidJson() throws Exception {
-			String exemplars = ActionPromptContributor.emitExemplar(registry, null);
+			String exemplars = ActionSchemaGenerator.emitExemplar(registry, null);
 
 			// Extract JSON blocks and verify they parse
 			// The exemplars format includes JSON plans
@@ -567,7 +572,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("exemplar should show correct parameter names")
 		void exemplarShowsCorrectParameterNames() throws Exception {
-			String exemplars = ActionPromptContributor.emitExemplar(registry, null);
+			String exemplars = ActionSchemaGenerator.emitExemplar(registry, null);
 
 			// Must use exact parameter names - this is the key fix for the bug
 			assertThat(exemplars).contains("\"measurementType\"");
@@ -579,34 +584,29 @@ class ActionPromptContributorOutputSchemaTest {
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════════
-	// Tests for Combined Output (Schema + Exemplars)
+	// Tests for Exemplar Output
 	// ═══════════════════════════════════════════════════════════════════════════
 
 	@Nested
-	@DisplayName("Combined Output")
-	class CombinedOutput {
+	@DisplayName("Exemplar Output")
+	class ExemplarOutput {
 
 		@Test
-		@DisplayName("should emit full contribution with schema and exemplars")
-		void emitsFullContribution() {
-			String contribution = ActionPromptContributor.emitExemplar(registry, null);
+		@DisplayName("should emit exemplar with example header")
+		void emitsExemplar() {
+			String contribution = ActionSchemaGenerator.emitExemplar(registry, null);
 
-			// Should contain schema section
-			assertThat(contribution).contains("$schema");
-			assertThat(contribution).contains("json-schema.org");
-			
-			// Should contain exemplars section
+			// Should contain exemplar with action details
 			assertThat(contribution).contains("evaluateSpcReadiness");
 			assertThat(contribution).contains("\"displacement\"");
 		}
 
 		@Test
-		@DisplayName("should include clear section headers")
-		void includesClearSectionHeaders() {
-			String contribution = ActionPromptContributor.emitExemplar(registry, null);
+		@DisplayName("should include example header")
+		void includesExampleHeader() {
+			String contribution = ActionSchemaGenerator.emitExemplar(registry, null);
 
-			// Should have clear headers to help LLM parse structure
-			assertThat(contribution).containsIgnoringCase("schema");
+			// Should have EXAMPLE header
 			assertThat(contribution).containsIgnoringCase("example");
 		}
 	}
@@ -670,7 +670,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should generate schema without oneOf (OpenAI limitation)")
 		void generatesSchemaWithoutOneOf() throws Exception {
-			String schema = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			String schema = ActionSchemaGenerator.emitOpenAiSchema(registry, null, null);
 			
 			// Print for inspection
 			System.out.println("=== OpenAI-Compatible Schema ===");
@@ -685,7 +685,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should have action-specific properties for each action")
 		void hasActionSpecificProperties() throws Exception {
-			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			String schemaJson = ActionSchemaGenerator.emitOpenAiSchema(registry, null, null);
 			JsonNode schema = MAPPER.readTree(schemaJson);
 			
 			// Check that step items have action-specific properties
@@ -704,7 +704,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should inline action parameters within action property")
 		void inlinesActionParameters() throws Exception {
-			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			String schemaJson = ActionSchemaGenerator.emitOpenAiSchema(registry, null, null);
 			JsonNode schema = MAPPER.readTree(schemaJson);
 			
 			// Check evaluateSpcReadiness has its specific parameter
@@ -718,7 +718,7 @@ class ActionPromptContributorOutputSchemaTest {
 		@Test
 		@DisplayName("should require description on all steps")
 		void requiresDescriptionOnSteps() throws Exception {
-			String schemaJson = ActionPromptContributor.emitOpenAiSchema(registry, null, null);
+			String schemaJson = ActionSchemaGenerator.emitOpenAiSchema(registry, null, null);
 			JsonNode schema = MAPPER.readTree(schemaJson);
 			
 			JsonNode stepRequired = schema.at("/properties/steps/items/required");

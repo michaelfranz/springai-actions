@@ -63,11 +63,12 @@ class StatsApplicationScenarioTest {
 				.build();
 
 		// New tier-based configuration: Planner creates ChatClients with schema injection
+		// Use temperature 0 for deterministic outputs (gpt-5-mini only accepts 1.0)
 		planner = Planner.builder()
 				.actions(statsActions)
 				.chatModel(chatModel)
-				.tier(MODEST_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(1.0))
-				.tier(CAPABLE_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(1.0))
+				.tier(MODEST_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(CAPABLE_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(0.0))
 				.persona(spcAssistantPersona)
 				.build();
 		executor = new DefaultPlanExecutor();

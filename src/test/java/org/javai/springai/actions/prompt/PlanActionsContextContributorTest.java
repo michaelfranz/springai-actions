@@ -7,116 +7,155 @@ import org.javai.springai.actions.api.ActionParam;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.prompt.PlanActionsContextContributor;
 import org.javai.springai.actions.internal.prompt.SystemPromptContext;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
  * Tests for PlanActionsContextContributor.
  * 
- * <p>Verifies that action parameters are expressed in JSON Schema format with:
+ * <p>Verifies that the prompt contribution includes ActionParam constraints:
  * <ul>
- *   <li>Per-action ActionStep definitions with const actionId binding</li>
  *   <li>Enum constraints from allowedValues</li>
- *   <li>Pattern constraints from allowedRegex</li>
  *   <li>Descriptions</li>
+ *   <li>Guidance for normalizing user input to allowed values</li>
  * </ul>
  */
 class PlanActionsContextContributorTest {
 
-	@Test
-	void includesAllowedValuesInJsonSchema() {
-		ActionRegistry registry = new ActionRegistry();
-		registry.registerActions(new ActionsWithAllowedValues());
+	@Nested
+	@DisplayName("ActionParam Constraints in Prompt")
+	class ActionParamConstraints {
 
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
-		Optional<String> result = contributor.contribute(context);
+		@Test
+		@DisplayName("should include allowedValues with MUST be constraint")
+		void includesAllowedValuesAsEnumOptions() {
+			ActionRegistry registry = new ActionRegistry();
+			registry.registerActions(new ActionsWithAllowedValues());
 
-		assertThat(result).isPresent();
-		String prompt = result.get();
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
+			Optional<String> result = contributor.contribute(context);
 
-		// Verify JSON Schema structure with enum for allowed values
-		assertThat(prompt).contains("$schema");
-		assertThat(prompt).contains("measurementType");
-		assertThat(prompt).contains("\"enum\"");
-		assertThat(prompt).contains("force");
-		assertThat(prompt).contains("displacement");
+			assertThat(result).isPresent();
+			String prompt = result.get();
+
+			// Verify parameter name and allowed values
+			assertThat(prompt).contains("measurementType");
+			assertThat(prompt).contains("MUST be");
+			assertThat(prompt).contains("\"force\"");
+			assertThat(prompt).contains("\"displacement\"");
+		}
+
+		@Test
+		@DisplayName("should include parameter description as comment")
+		void includesParameterDescriptionAsComment() {
+			ActionRegistry registry = new ActionRegistry();
+			registry.registerActions(new ActionsWithDescription());
+
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
+			Optional<String> result = contributor.contribute(context);
+
+			assertThat(result).isPresent();
+			String prompt = result.get();
+
+			// Verify description is included
+			assertThat(prompt).contains("The measurement type to be charted");
+		}
+
+		@Test
+		@DisplayName("should include all constraints together")
+		void includesAllConstraints() {
+			ActionRegistry registry = new ActionRegistry();
+			registry.registerActions(new ActionsWithAllConstraints());
+
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
+			Optional<String> result = contributor.contribute(context);
+
+			assertThat(result).isPresent();
+			String prompt = result.get();
+
+			// Verify actionId
+			assertThat(prompt).contains("exportControlChartToExcel");
+			
+			// Verify measurement parameter with MUST be constraint
+			assertThat(prompt).contains("measurementType");
+			assertThat(prompt).contains("MUST be");
+			assertThat(prompt).contains("\"force\"");
+			assertThat(prompt).contains("\"displacement\"");
+
+			// Verify bundleId parameter
+			assertThat(prompt).contains("bundleId");
+		}
 	}
 
-	@Test
-	void includesAllowedRegexAsPatternInJsonSchema() {
-		ActionRegistry registry = new ActionRegistry();
-		registry.registerActions(new ActionsWithAllowedRegex());
+	@Nested
+	@DisplayName("Input Normalization Guidance")
+	class InputNormalizationGuidance {
 
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
-		Optional<String> result = contributor.contribute(context);
+		@Test
+		@DisplayName("should include value mapping guidance for user input variations")
+		void includesValueMappingGuidance() {
+			ActionRegistry registry = new ActionRegistry();
+			registry.registerActions(new ActionsWithAllowedValues());
 
-		assertThat(result).isPresent();
-		String prompt = result.get();
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
+			Optional<String> result = contributor.contribute(context);
 
-		// Verify JSON Schema with pattern constraint
-		assertThat(prompt).contains("bundleId");
-		assertThat(prompt).contains("\"pattern\"");
-		assertThat(prompt).contains("[A-Z0-9]+");
+			assertThat(result).isPresent();
+			String prompt = result.get();
+
+			// Verify value mapping guidance is present at the top
+			assertThat(prompt).containsIgnoringCase("IMPORTANT");
+			assertThat(prompt).contains("\"displacements\"");
+			assertThat(prompt).contains("\"displacement\"");
+		}
+
+		@Test
+		@DisplayName("should show allowed values with MUST be constraint")
+		void showsMustBeConstraint() {
+			ActionRegistry registry = new ActionRegistry();
+			registry.registerActions(new ActionsWithAllowedValues());
+
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
+			Optional<String> result = contributor.contribute(context);
+
+			assertThat(result).isPresent();
+			String prompt = result.get();
+
+			// Verify MUST be constraint
+			assertThat(prompt).contains("MUST be");
+			assertThat(prompt).contains("\"force\"");
+			assertThat(prompt).contains("\"displacement\"");
+		}
 	}
 
-	@Test
-	void includesParameterDescriptionInJsonSchema() {
-		ActionRegistry registry = new ActionRegistry();
-		registry.registerActions(new ActionsWithDescription());
+	@Nested
+	@DisplayName("Edge Cases")
+	class EdgeCases {
 
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
-		Optional<String> result = contributor.contribute(context);
+		@Test
+		@DisplayName("should return empty for null context")
+		void returnsEmptyForNullContext() {
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			Optional<String> result = contributor.contribute(null);
 
-		assertThat(result).isPresent();
-		String prompt = result.get();
+			assertThat(result).isEmpty();
+		}
 
-		// Verify description is included in JSON Schema
-		assertThat(prompt).contains("The measurement type to be charted");
-	}
+		@Test
+		@DisplayName("should return empty for null registry")
+		void returnsEmptyForNullRegistry() {
+			PlanActionsContextContributor contributor = new PlanActionsContextContributor();
+			SystemPromptContext context = new SystemPromptContext(null, null, null, null);
+			Optional<String> result = contributor.contribute(context);
 
-	@Test
-	void includesAllConstraintsInJsonSchema() {
-		ActionRegistry registry = new ActionRegistry();
-		registry.registerActions(new ActionsWithAllConstraints());
-
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		SystemPromptContext context = new SystemPromptContext(registry, null, null, null);
-		Optional<String> result = contributor.contribute(context);
-
-		assertThat(result).isPresent();
-		String prompt = result.get();
-
-		// Verify measurement parameter with enum
-		assertThat(prompt).contains("measurementType");
-		assertThat(prompt).contains("force");
-		assertThat(prompt).contains("displacement");
-
-		// Verify bundleId parameter with pattern
-		assertThat(prompt).contains("bundleId");
-		assertThat(prompt).contains("[A-Z0-9]+");
-		
-		// Verify per-action definition structure
-		assertThat(prompt).contains("ExportControlChartToExcelAction");
-		assertThat(prompt).contains("\"const\"");
-	}
-
-	@Test
-	void returnsEmptyForNullContext() {
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		Optional<String> result = contributor.contribute(null);
-
-		assertThat(result).isEmpty();
-	}
-
-	@Test
-	void returnsEmptyForNullRegistry() {
-		PlanActionsContextContributor contributor = new PlanActionsContextContributor();
-		SystemPromptContext context = new SystemPromptContext(null, null, null, null);
-		Optional<String> result = contributor.contribute(context);
-
-		assertThat(result).isEmpty();
+			assertThat(result).isEmpty();
+		}
 	}
 
 	// Test actions with different constraint configurations
@@ -125,13 +164,6 @@ class PlanActionsContextContributorTest {
 		@Action(description = "Export control chart")
 		public void exportControlChart(
 				@ActionParam(allowedValues = {"force", "displacement"}) String measurementType) {
-		}
-	}
-
-	private static class ActionsWithAllowedRegex {
-		@Action(description = "Process bundle")
-		public void processBundle(
-				@ActionParam(allowedRegex = "[A-Z0-9]+") String bundleId) {
 		}
 	}
 
@@ -146,7 +178,7 @@ class PlanActionsContextContributorTest {
 		@Action(description = "Export control chart to Excel")
 		public void exportControlChartToExcel(
 				@ActionParam(description = "The measurement type to be charted", allowedValues = {"force", "displacement"}) String measurementType,
-				@ActionParam(description = "Bundle ID like A12345", allowedRegex = "[A-Z0-9]+") String bundleId) {
+				@ActionParam(description = "Bundle ID like A12345") String bundleId) {
 		}
 	}
 }

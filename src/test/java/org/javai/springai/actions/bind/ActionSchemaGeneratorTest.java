@@ -7,15 +7,15 @@ import java.util.List;
 import java.util.Locale;
 import org.javai.springai.actions.api.Action;
 import org.javai.springai.actions.api.ActionParam;
-import org.javai.springai.actions.internal.bind.ActionPromptContributor;
+import org.javai.springai.actions.internal.bind.ActionSchemaGenerator;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.sql.Query;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests for ActionPromptContributor.
+ * Tests for ActionSchemaGenerator.
  */
-class ActionPromptContributorTest {
+class ActionSchemaGeneratorTest {
 
 	@Test
 	void emitsJsonPrompt() {
@@ -23,7 +23,7 @@ class ActionPromptContributorTest {
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
+		String prompt = ActionSchemaGenerator.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
 
 		assertThat(prompt).contains("runQuery");
 		assertThat(prompt).doesNotContain("otherAction");
@@ -35,7 +35,7 @@ class ActionPromptContributorTest {
 		registry.registerActions(new SampleActions());
 		registry.registerActions(new OtherActions());
 
-		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
+		String prompt = ActionSchemaGenerator.emit(registry, spec -> spec.id().endsWith("runQuery"), null);
 
 		ObjectMapper mapper = new ObjectMapper();
 		JsonNode node = mapper.readTree(prompt);
@@ -52,7 +52,7 @@ class ActionPromptContributorTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ListActions());
 
-		String prompt = ActionPromptContributor.emit(registry, spec -> spec.id().equals("processBundleIds"), null);
+		String prompt = ActionSchemaGenerator.emit(registry, spec -> spec.id().equals("processBundleIds"), null);
 
 		assertThat(prompt).contains("processBundleIds");
 		assertThat(prompt).contains("bundleIds");
@@ -63,7 +63,7 @@ class ActionPromptContributorTest {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ConstrainedActions());
 
-		String prompt = ActionPromptContributor.emit(registry, 
+		String prompt = ActionSchemaGenerator.emit(registry, 
 				spec -> spec.id().equals("constrainedAction"), null);
 
 		assertThat(prompt).contains("constrainedAction");
