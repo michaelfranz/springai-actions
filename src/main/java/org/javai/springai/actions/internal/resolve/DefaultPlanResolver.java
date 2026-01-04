@@ -86,12 +86,9 @@ public class DefaultPlanResolver implements PlanResolver {
 		List<ActionParameterDescriptor> params = binding.parameters();
 		Map<String, Object> stepParams = step.parameters();
 
-		// Check arity
-		if (stepParams.size() != params.size()) {
-			return new PlanStep.ErrorStep(
-					"Argument count mismatch for action " + actionId + ": expected " + params.size() 
-					+ " got " + stepParams.size());
-		}
+		// Note: We don't do a strict arity check here because missing parameters
+		// should result in PENDING status, not ERROR. The parameter loop below
+		// handles missing parameters by creating PENDING steps.
 
 		// Convert each parameter - with fallback for when LLM uses wrong parameter names
 		List<PlanArgument> arguments = new ArrayList<>();

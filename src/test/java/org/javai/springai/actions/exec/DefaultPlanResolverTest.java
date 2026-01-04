@@ -69,14 +69,17 @@ class DefaultPlanResolverTest {
 	}
 
 	@Test
-	void failsOnArityMismatch() {
+	void returnsPendingOnMissingParameter() {
 		RawPlan jsonPlan = new RawPlan(
 				"",
 				List.of(RawPlanStep.actionStep("greet", "Say hello", Map.of("name", "Bob")))  // missing 'times'
 		);
 
+		// Missing parameters should result in PENDING, not ERROR - this allows
+		// the system to ask the user for the missing value
 		Plan result = resolver.resolve(jsonPlan, registry);
-		assertThat(result.status()).isEqualTo(PlanStatus.ERROR);
+		assertThat(result.status()).isEqualTo(PlanStatus.PENDING);
+		assertThat(result.planSteps().getFirst()).isInstanceOf(PlanStep.PendingActionStep.class);
 	}
 
 	@Test
