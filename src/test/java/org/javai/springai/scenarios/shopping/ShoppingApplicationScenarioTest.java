@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.Map;
-import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -23,9 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 public class ShoppingApplicationScenarioTest {
@@ -49,14 +46,6 @@ public class ShoppingApplicationScenarioTest {
 
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
-				.temperature(0.1)
-				.topP(1.0)
-				.build();
-		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
-				.build();
 
 		shoppingActions = new ShoppingActions();
 		specialOfferTool = new SpecialOfferTool();
@@ -79,11 +68,13 @@ public class ShoppingApplicationScenarioTest {
 				))
 				.build();
 
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(chatClient)
+				.actions(shoppingActions)
+				.chatModel(chatModel)
+				.tier("gpt-4.1-mini", tier -> tier.maxAttempts(2).temperature(0.1))
 				.persona(persona)
 				.tools(specialOfferTool)
-				.actions(shoppingActions)
 				.build();
 		executor = DefaultPlanExecutor.builder()
 				.onPending((plan, context) -> {

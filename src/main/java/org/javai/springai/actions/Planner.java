@@ -17,7 +17,6 @@ import org.javai.springai.actions.conversation.ConversationState;
 import org.javai.springai.actions.internal.bind.ActionDescriptor;
 import org.javai.springai.actions.internal.bind.ActionDescriptorFilter;
 import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
-import org.javai.springai.actions.internal.bind.ActionPromptContributor;
 import org.javai.springai.actions.internal.bind.ActionRegistry;
 import org.javai.springai.actions.internal.parse.RawPlan;
 import org.javai.springai.actions.internal.plan.PlanFormulationResult;
@@ -31,8 +30,8 @@ import org.javai.springai.actions.internal.resolve.ResolutionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.ResponseEntity;
-import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.lang.NonNull;
 
 /**
@@ -677,8 +676,14 @@ public final class Planner {
 	}
 
 	public static final class Builder {
+		// Legacy: pre-built ChatClient tiers
 		private final List<ChatClientTier> chatClientTiers = new ArrayList<>();
 		private boolean defaultClientSet = false;
+		
+		// New: ChatModel + tier configs (Planner creates ChatClients with schema)
+		private ChatModel chatModel;
+		private final List<ModelTierConfig> modelTierConfigs = new ArrayList<>();
+		
 		private final List<String> promptContributions = new ArrayList<>();
 		private final List<Object> actionSources = new ArrayList<>();
 		private Object[] toolSources;
@@ -698,7 +703,10 @@ public final class Planner {
 		 * @param client the Spring AI ChatClient
 		 * @return this builder
 		 * @throws IllegalStateException if called more than once
+		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder defaultChatClient(ChatClient client) {
 			return defaultChatClient(client, 1, null);
 		}
@@ -710,7 +718,10 @@ public final class Planner {
 		 * @param maxAttempts maximum attempts before moving to fallback (≥1)
 		 * @return this builder
 		 * @throws IllegalStateException if called more than once
+		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder defaultChatClient(ChatClient client, int maxAttempts) {
 			return defaultChatClient(client, maxAttempts, null);
 		}
@@ -723,7 +734,10 @@ public final class Planner {
 		 * @param modelId optional identifier for observability (e.g., "gpt-4.1-mini")
 		 * @return this builder
 		 * @throws IllegalStateException if called more than once
+		 * @deprecated Use {@link #chatModel(ChatModel)} with {@link #tier(String, Consumer)} instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder defaultChatClient(ChatClient client, int maxAttempts, String modelId) {
 			if (this.defaultClientSet) {
 				throw new IllegalStateException("defaultChatClient() can only be called once");
@@ -743,7 +757,10 @@ public final class Planner {
 		 * @return this builder
 		 * @throws IllegalStateException if defaultChatClient() was not called first
 		 * @throws IllegalStateException if this client instance was already added
+		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder fallbackChatClient(ChatClient client) {
 			return fallbackChatClient(client, 1, null);
 		}
@@ -756,7 +773,10 @@ public final class Planner {
 		 * @return this builder
 		 * @throws IllegalStateException if defaultChatClient() was not called first
 		 * @throws IllegalStateException if this client instance was already added
+		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder fallbackChatClient(ChatClient client, int maxAttempts) {
 			return fallbackChatClient(client, maxAttempts, null);
 		}
@@ -770,7 +790,10 @@ public final class Planner {
 		 * @return this builder
 		 * @throws IllegalStateException if defaultChatClient() was not called first
 		 * @throws IllegalStateException if this client instance was already added
+		 * @deprecated Use {@link #chatModel(ChatModel)} with multiple {@link #tier(String, Consumer)} calls instead
+		 *             for automatic JSON Schema injection.
 		 */
+		@Deprecated(since = "1.0", forRemoval = true)
 		public Builder fallbackChatClient(ChatClient client, int maxAttempts, String modelId) {
 			if (!this.defaultClientSet) {
 				throw new IllegalStateException("Must call defaultChatClient() before fallbackChatClient()");
@@ -783,6 +806,58 @@ public final class Planner {
 				}
 			}
 			this.chatClientTiers.add(new ChatClientTier(client, maxAttempts, modelId));
+			return this;
+		}
+
+		/**
+		 * Set the ChatModel to use for creating ChatClients with schema-aware options.
+		 * 
+		 * <p>When using this method, the Planner will create ChatClients internally,
+		 * configuring them with the dynamically-generated JSON Schema for plan output.
+		 * Use {@link #tier(String, Consumer)} to configure model tiers after calling this method.</p>
+		 *
+		 * @param chatModel the Spring AI ChatModel (e.g., OpenAiChatModel)
+		 * @return this builder
+		 */
+		public Builder chatModel(ChatModel chatModel) {
+			if (this.defaultClientSet) {
+				throw new IllegalStateException("Cannot use chatModel() with defaultChatClient()/fallbackChatClient()");
+			}
+			this.chatModel = Objects.requireNonNull(chatModel, "chatModel must not be null");
+			return this;
+		}
+
+		/**
+		 * Configure a model tier with the given model name and options.
+		 * 
+		 * <p>Tiers are tried in order. The first tier is the primary model; subsequent tiers
+		 * are fallbacks used when the primary exhausts its retry attempts.</p>
+		 * 
+		 * <p>Example:</p>
+		 * <pre>{@code
+		 * Planner.builder()
+		 *     .actions(myActions)
+		 *     .chatModel(openAiChatModel)
+		 *     .tier("gpt-4.1-mini", tier -> tier.maxAttempts(2).temperature(1.0))
+		 *     .tier("gpt-4o", tier -> tier.maxAttempts(2))
+		 *     .build()
+		 * }</pre>
+		 *
+		 * @param modelName the model identifier (e.g., "gpt-4.1-mini", "gpt-4o")
+		 * @param configurer a function to configure tier options
+		 * @return this builder
+		 * @throws IllegalStateException if chatModel() was not called first
+		 */
+		public Builder tier(String modelName, Consumer<ModelTierConfig.Builder> configurer) {
+			if (this.chatModel == null) {
+				throw new IllegalStateException("Must call chatModel() before tier()");
+			}
+			if (this.defaultClientSet) {
+				throw new IllegalStateException("Cannot use tier() with defaultChatClient()/fallbackChatClient()");
+			}
+			ModelTierConfig.Builder tierBuilder = ModelTierConfig.builder(modelName);
+			configurer.accept(tierBuilder);
+			this.modelTierConfigs.add(tierBuilder.build());
 			return this;
 		}
 
@@ -860,7 +935,49 @@ public final class Planner {
 			if (this.typeHandlerRegistry == null) {
 				this.typeHandlerRegistry = TypeHandlerRegistry.discover();
 			}
+			
+			// If using tier-based configuration, create ChatClients with schema
+			if (this.chatModel != null && !this.modelTierConfigs.isEmpty()) {
+				createChatClientsFromTierConfigs();
+			}
+			
 			return new Planner(this);
+		}
+		
+		/**
+		 * Creates ChatClients from modelTierConfigs.
+		 * 
+		 * <p>Note: We do NOT use OpenAI's response_format with JSON Schema enforcement because
+		 * their Structured Outputs feature doesn't support 'oneOf', which is required for our
+		 * polymorphic step types (ActionStep variants, PendingStep, NoActionStep, ErrorStep).
+		 * Instead, the schema is included in the system prompt via PlanActionsContextContributor
+		 * as documentation that guides the LLM.</p>
+		 */
+		private void createChatClientsFromTierConfigs() {
+			// Create ChatClient for each tier
+			boolean first = true;
+			for (ModelTierConfig tierConfig : this.modelTierConfigs) {
+				OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
+						.model(tierConfig.modelName());
+				
+				if (tierConfig.temperature() != null) {
+					optionsBuilder.temperature(tierConfig.temperature());
+				}
+				if (tierConfig.topP() != null) {
+					optionsBuilder.topP(tierConfig.topP());
+				}
+				
+				ChatClient client = ChatClient.builder(this.chatModel)
+						.defaultOptions(optionsBuilder.build())
+						.build();
+				
+				this.chatClientTiers.add(new ChatClientTier(client, tierConfig.maxAttempts(), tierConfig.modelName()));
+				
+				if (first) {
+					this.defaultClientSet = true;
+					first = false;
+				}
+			}
 		}
 	}
 

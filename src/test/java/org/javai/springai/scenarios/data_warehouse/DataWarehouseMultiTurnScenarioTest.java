@@ -128,11 +128,13 @@ class DataWarehouseMultiTurnScenarioTest extends AbstractDataWarehouseScenarioTe
 		// Note: SqlWorkingContextContributor is deprecated. Working context is now
 		// included in the user message via SqlUserMessageAugmenter (registered below).
 		// This is more effective because LLMs pay more attention to user messages.
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION)  // gpt-4o
-				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION)
-				.persona(persona)
 				.actions(sqlExplorerActions)
+				.chatModel(chatModel)
+				.tier(CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(MOST_CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.persona(persona)
 				.addPromptContext("sql", catalog)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.promptContribution("""

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
-import java.util.Objects;
 import org.javai.punit.api.ProbabilisticTest;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
@@ -18,9 +17,7 @@ import org.javai.springai.actions.conversation.ConversationTurnResult;
 import org.javai.springai.actions.conversation.InMemoryConversationStateStore;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 class StatsApplicationScenarioTest {
@@ -44,9 +41,6 @@ class StatsApplicationScenarioTest {
 
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		ChatClient modestChatClient = getChatClient(chatModel, MODEST_CHAT_CLIENT);
-		ChatClient capableChatClient = getChatClient(chatModel, CAPABLE_CHAT_CLIENT);
-		ChatClient mostCapableChatClient = getChatClient(chatModel, MOST_CAPABLE_CHAT_CLIENT);
 
 		statsActions = new StatsActions();
 
@@ -68,25 +62,15 @@ class StatsApplicationScenarioTest {
 						"Map natural language to allowed values: 'displacements'/'displacement values' → 'displacement'"))
 				.build();
 
+		// New tier-based configuration: Planner creates ChatClients with schema injection
 		planner = Planner.builder()
-				.defaultChatClient(mostCapableChatClient, 2)
-//				.defaultChatClient(modestChatClient, 2)
-//				.fallbackChatClient(capableChatClient, 2)
-//				.fallbackChatClient(mostCapableChatClient, 2)
-				.persona(spcAssistantPersona)
 				.actions(statsActions)
+				.chatModel(chatModel)
+				.tier(MODEST_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(1.0))
+				.tier(CAPABLE_CHAT_CLIENT, tier -> tier.maxAttempts(2).temperature(1.0))
+				.persona(spcAssistantPersona)
 				.build();
 		executor = new DefaultPlanExecutor();
-	}
-
-	private static ChatClient getChatClient(OpenAiChatModel chatModel, String model) {
-		return ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(OpenAiChatOptions.builder()
-						.model(model)
-						.temperature(1.0)
-						.topP(1.0)
-						.build()))
-				.build();
 	}
 
 	@ProbabilisticTest(samples = 10, minPassRate = 0.9)

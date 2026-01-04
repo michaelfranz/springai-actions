@@ -1,7 +1,6 @@
 package org.javai.springai.scenarios.data_warehouse;
 
 import java.util.List;
-import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -20,9 +19,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
@@ -60,9 +57,7 @@ public abstract class AbstractDataWarehouseScenarioTest {
 	protected DataWarehouseActions dataWarehouseActions;
 
 	// LLM infrastructure
-	protected ChatClient modestChatClient;
-	protected ChatClient capableChatClient;
-	protected ChatClient mostCapableChatClient;
+	protected OpenAiChatModel chatModel;
 	protected Planner planner;
 	protected DefaultPlanExecutor executor;
 	protected ConversationManager conversationManager;
@@ -73,14 +68,9 @@ public abstract class AbstractDataWarehouseScenarioTest {
 		Assumptions.assumeTrue(OPENAI_API_KEY != null && !OPENAI_API_KEY.isBlank(),
 				"OPENAI_API_KEY must be set for this integration test");
 
-		// Initialize LLM components
+		// Initialize LLM model (ChatClients are created by Planner with schema injection)
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-
-		modestChatClient = getChatClient(chatModel, MODEST_CHAT_MODEL_VERSION);
-		capableChatClient = getChatClient(chatModel, CAPABLE_CHAT_MODEL_VERSION);
-		mostCapableChatClient = getChatClient(chatModel, MOST_CAPABLE_CHAT_MODEL_VERSION);
+		chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
 
 		// Initialize actions
 		dataWarehouseActions = new DataWarehouseActions();
@@ -98,16 +88,6 @@ public abstract class AbstractDataWarehouseScenarioTest {
 
 		// Allow subclasses to customize planner and conversation manager
 		initializePlanner();
-	}
-
-	protected static ChatClient getChatClient(OpenAiChatModel chatModel, String chatModelVersion) {
-		return ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(OpenAiChatOptions.builder()
-						.model(chatModelVersion)
-						.temperature(0.0)
-						.topP(1.0)
-						.build()))
-				.build();
 	}
 
 	/**
@@ -174,12 +154,14 @@ public abstract class AbstractDataWarehouseScenarioTest {
 	protected void initializePlanner() {
 		PersonaSpec sqlAnalystPersona = createDefaultPersona();
 
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(modestChatClient, 2)
-				.fallbackChatClient(capableChatClient, 2)
-				.fallbackChatClient(mostCapableChatClient, 2)
-				.persona(sqlAnalystPersona)
 				.actions(dataWarehouseActions)
+				.chatModel(chatModel)
+				.tier(MODEST_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(MOST_CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(1.0))
+				.persona(sqlAnalystPersona)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql", catalog)
 				.build();

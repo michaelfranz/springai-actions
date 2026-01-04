@@ -1,15 +1,23 @@
 package org.javai.springai.actions.internal.prompt;
 
-import java.util.List;
 import java.util.Optional;
 import org.javai.springai.actions.PromptContributor;
-import org.javai.springai.actions.internal.bind.ActionDescriptor;
-import org.javai.springai.actions.internal.bind.ActionParameterDescriptor;
+import org.javai.springai.actions.api.TypeHandlerRegistry;
+import org.javai.springai.actions.internal.bind.ActionPromptContributor;
 
 /**
  * Contributor that provides the action catalog for the system prompt.
- * The action catalog is included directly in the system prompt to help
- * the LLM understand the available actions and their parameters.
+ * 
+ * <p>This contributor uses JSON Schema to define the complete output contract,
+ * with "hardcoded complete action shapes" where each action is a self-contained
+ * definition with its actionId bound via {@code const} and parameters inlined.
+ * This eliminates any ambiguity about which parameters apply to which action.</p>
+ * 
+ * <p>The output includes:
+ * <ul>
+ *   <li>A JSON Schema defining valid Plan structures with per-action ActionStep variants</li>
+ *   <li>A compact example showing correct parameter usage</li>
+ * </ul>
  */
 public final class PlanActionsContextContributor implements PromptContributor {
 
@@ -19,54 +27,26 @@ public final class PlanActionsContextContributor implements PromptContributor {
 			return Optional.empty();
 		}
 		
-		List<ActionDescriptor> descriptors = context.registry().getActionDescriptors().stream()
-				.filter(d -> context.filter() == null || context.filter().include(d))
-				.toList();
-		
-		if (descriptors.isEmpty()) {
+		if (context.registry().getActionDescriptors().isEmpty()) {
 			return Optional.empty();
 		}
 		
-		StringBuilder actions = new StringBuilder();
-		actions.append("PLAN STEP OPTIONS:\n");
-		actions.append("Valid actionId values (use EXACTLY as shown, case-sensitive):\n\n");
-		
-		for (ActionDescriptor descriptor : descriptors) {
-			actions.append("• actionId: \"").append(descriptor.id()).append("\"\n");
-			actions.append("  Purpose: ").append(descriptor.description()).append("\n");
-			
-			if (descriptor.actionParameterSpecs() != null && !descriptor.actionParameterSpecs().isEmpty()) {
-				actions.append("  Parameters (ALL REQUIRED - use PENDING step if any missing):\n");
-				for (ActionParameterDescriptor param : descriptor.actionParameterSpecs()) {
-					actions.append("    - ").append(param.name()).append(" [REQUIRED]: ").append(param.typeId());
-					
-					// Add allowed values constraint if present
-					if (param.allowedValues() != null && param.allowedValues().length > 0) {
-						actions.append(" (allowed: ").append(String.join(", ", param.allowedValues())).append(")");
-					}
-					
-					// Add regex constraint if present
-					if (param.allowedRegex() != null && !param.allowedRegex().isEmpty()) {
-						actions.append(" (pattern: ").append(param.allowedRegex()).append(")");
-					}
-					
-					actions.append("\n");
-					
-					// Show parameter description if provided
-					if (param.description() != null && !param.description().isEmpty()) {
-						actions.append("      ").append(param.description()).append("\n");
-					}
-					
-					// Show explicit examples if provided
-					if (param.examples() != null && param.examples().length > 0) {
-						actions.append("      Example: ").append(param.examples()[0]).append("\n");
-					}
-				}
+		// Get type handler registry from context if available
+		TypeHandlerRegistry typeRegistry = null;
+		if (context.dslContext() != null) {
+			Object registry = context.dslContext().get("typeHandlerRegistry");
+			if (registry instanceof TypeHandlerRegistry thr) {
+				typeRegistry = thr;
 			}
-			actions.append("\n");
 		}
 		
-		return Optional.of(actions.toString());
+		// Generate JSON Schema with hardcoded action shapes + example
+		String contribution = ActionPromptContributor.emitExemplar(
+				context.registry(),
+				context.filter()
+		);
+		
+		return Optional.of(contribution);
 	}
 }
 

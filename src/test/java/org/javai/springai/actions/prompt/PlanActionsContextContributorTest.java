@@ -11,12 +11,19 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Tests for PlanActionsContextContributor.
- * Verifies that action parameters include all relevant metadata in the system prompt.
+ * 
+ * <p>Verifies that action parameters are expressed in JSON Schema format with:
+ * <ul>
+ *   <li>Per-action ActionStep definitions with const actionId binding</li>
+ *   <li>Enum constraints from allowedValues</li>
+ *   <li>Pattern constraints from allowedRegex</li>
+ *   <li>Descriptions</li>
+ * </ul>
  */
 class PlanActionsContextContributorTest {
 
 	@Test
-	void includesAllowedValuesInParameterDescription() {
+	void includesAllowedValuesInJsonSchema() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithAllowedValues());
 
@@ -27,14 +34,16 @@ class PlanActionsContextContributorTest {
 		assertThat(result).isPresent();
 		String prompt = result.get();
 
-		// Verify the parameter includes allowed values and REQUIRED marker
-		assertThat(prompt).contains("measurementType [REQUIRED]");
+		// Verify JSON Schema structure with enum for allowed values
+		assertThat(prompt).contains("$schema");
+		assertThat(prompt).contains("measurementType");
+		assertThat(prompt).contains("\"enum\"");
 		assertThat(prompt).contains("force");
 		assertThat(prompt).contains("displacement");
 	}
 
 	@Test
-	void includesAllowedRegexInParameterDescription() {
+	void includesAllowedRegexAsPatternInJsonSchema() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithAllowedRegex());
 
@@ -45,13 +54,14 @@ class PlanActionsContextContributorTest {
 		assertThat(result).isPresent();
 		String prompt = result.get();
 
-		// Verify the parameter includes regex pattern
+		// Verify JSON Schema with pattern constraint
 		assertThat(prompt).contains("bundleId");
+		assertThat(prompt).contains("\"pattern\"");
 		assertThat(prompt).contains("[A-Z0-9]+");
 	}
 
 	@Test
-	void includesParameterDescriptionInPrompt() {
+	void includesParameterDescriptionInJsonSchema() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithDescription());
 
@@ -62,12 +72,12 @@ class PlanActionsContextContributorTest {
 		assertThat(result).isPresent();
 		String prompt = result.get();
 
-		// Verify the parameter includes its description
+		// Verify description is included in JSON Schema
 		assertThat(prompt).contains("The measurement type to be charted");
 	}
 
 	@Test
-	void includesAllConstraintsForComplexParameters() {
+	void includesAllConstraintsInJsonSchema() {
 		ActionRegistry registry = new ActionRegistry();
 		registry.registerActions(new ActionsWithAllConstraints());
 
@@ -78,14 +88,18 @@ class PlanActionsContextContributorTest {
 		assertThat(result).isPresent();
 		String prompt = result.get();
 
-		// Verify measurement parameter with allowed values
+		// Verify measurement parameter with enum
 		assertThat(prompt).contains("measurementType");
 		assertThat(prompt).contains("force");
 		assertThat(prompt).contains("displacement");
 
-		// Verify bundleId parameter with regex
+		// Verify bundleId parameter with pattern
 		assertThat(prompt).contains("bundleId");
 		assertThat(prompt).contains("[A-Z0-9]+");
+		
+		// Verify per-action definition structure
+		assertThat(prompt).contains("ExportControlChartToExcelAction");
+		assertThat(prompt).contains("\"const\"");
 	}
 
 	@Test

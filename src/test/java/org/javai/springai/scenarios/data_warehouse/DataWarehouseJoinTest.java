@@ -45,11 +45,13 @@ class DataWarehouseJoinTest extends AbstractDataWarehouseScenarioTest {
 						"fct_orders.customer_id references dim_customer.id"))
 				.build();
 
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION) // gpt-4o
-				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION)
-				.persona(persona)
 				.actions(dataWarehouseActions)
+				.chatModel(chatModel)
+				.tier(CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(MOST_CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.persona(persona)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql", catalog)
 				.build();

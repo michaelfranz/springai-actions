@@ -72,10 +72,12 @@ class DataWarehousePendingFlowTest extends AbstractDataWarehouseScenarioTest {
 						"{\"message\":\"Need a date range.\",\"steps\":[{\"actionId\":\"aggregateOrderValue\",\"description\":\"Aggregate order value for Mike.\",\"status\":\"pending\",\"pendingParams\":[{\"name\":\"orderValueQuery\",\"prompt\":\"Provide period as {\\\"start\\\":\\\"YYYY-MM-DD\\\",\\\"end\\\":\\\"YYYY-MM-DD\\\"}.\"}],\"providedParams\":{\"orderValueQuery\":{\"customer_name\":\"Mike\"}}}]}"))
 				.build();
 
+		// Tier-based configuration with automatic schema injection
 		pendingAwarePlanner = Planner.builder()
-				.defaultChatClient(modestChatClient)
-				.persona(pendingAwarePersona)
 				.actions(aggregateActions)  // Only aggregate action - no SQL query actions
+				.chatModel(chatModel)
+				.tier(MODEST_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.persona(pendingAwarePersona)
 				.promptContributor(new SqlCatalogContextContributor(pendingCatalog))
 				.addPromptContext("sql", pendingCatalog)
 				.build();

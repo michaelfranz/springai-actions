@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.javai.springai.actions.test.PlanAssertions.assertExecutionSuccess;
 import static org.javai.springai.actions.test.PlanAssertions.assertPlanReady;
 import java.util.List;
-import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.PersonaSpec;
 import org.javai.springai.actions.Plan;
@@ -24,9 +23,7 @@ import org.javai.springai.actions.internal.instrument.TokenStore;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 public class ProtocolNotebookScenarioTest {
@@ -51,11 +48,6 @@ public class ProtocolNotebookScenarioTest {
 
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
 		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model("gpt-4.1-mini")
-				.temperature(0.0)
-				.topP(1.0)
-				.build();
 
 		protocolNotebookActions = new ProtocolNotebookActions();
 		invocationListener = new TestInvocationListener();
@@ -63,10 +55,6 @@ public class ProtocolNotebookScenarioTest {
 		PayloadAugmentor augmentor = new PiiTokenizingAugmentor(tokenStore);
 		emitter = InvocationEmitter.of("protocol-notebook-session", invocationListener);
 		protocolCatalogTool = new ProtocolCatalogTool(emitter, augmentor);
-
-		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
-				.build();
 
 		PersonaSpec notebookDesignerPersona = PersonaSpec.builder()
 				.name("ProtocolNotebookDesigner")
@@ -80,11 +68,13 @@ public class ProtocolNotebookScenarioTest {
 						"Do NOT include legacy or experimental actions when following FDX 2024 standard protocol."))
 				.build();
 
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(chatClient)
+				.actions(protocolNotebookActions)
+				.chatModel(chatModel)
+				.tier("gpt-4.1-mini", tier -> tier.maxAttempts(2).temperature(0.0))
 				.persona(notebookDesignerPersona)
 				.tools(protocolCatalogTool)
-				.actions(protocolNotebookActions)
 				.build();
 		executor = new DefaultPlanExecutor(emitter);
 		conversationManager = new ConversationManager(planner, new InMemoryConversationStateStore());

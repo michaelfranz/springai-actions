@@ -58,11 +58,13 @@ class DataWarehouseToolBasedScenarioTest extends AbstractDataWarehouseScenarioTe
 				.build();
 
 		// Note: No SqlCatalogContextContributor - schema discovery via tool
+		// Tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(modestChatClient)
+				.actions(dataWarehouseActions)
+				.chatModel(chatModel)
+				.tier(MODEST_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
 				.persona(sqlAnalystPersona)
 				.tools(catalogTool)  // Tool-based discovery
-				.actions(dataWarehouseActions)
 				.addPromptContext("sql", catalog)  // Still needed for Query resolution
 				.build();
 		

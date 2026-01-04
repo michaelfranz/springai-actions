@@ -59,13 +59,15 @@ class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScena
 
 		// Use a more capable model for the adaptive scenario since it requires
 		// reliably following the tool-use instructions
+		// Tier-based configuration with automatic schema injection
 		return Planner.builder()
-				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION) // gpt-4o
-				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION) // gpt-4-turbo
+				.actions(dataWarehouseActions)
+				.chatModel(chatModel)
+				.tier(CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(MOST_CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
 				.persona(sqlAnalystPersona)
 				.promptContributor(adaptiveContributor)
 				.tools(trackingTool)
-				.actions(dataWarehouseActions)
 				// Note: No addPromptContext("sql", catalog) - adaptive approach relies on tools for discovery
 				.build();
 	}
@@ -76,7 +78,7 @@ class DataWarehouseAdaptiveHybridScenarioTest extends AbstractDataWarehouseScena
 
 		@Test
 		@DisplayName("initial state has no schema in prompt, query still succeeds")
-		void initialStateNoSchemaInPrompt() {
+			void initialStateNoSchemaInPrompt() {
 			Planner planner = createPlanner(2);  // Threshold of 2
 			ConversationManager conversationManager = new ConversationManager(
 					planner, new InMemoryConversationStateStore());

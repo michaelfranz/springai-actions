@@ -1,7 +1,6 @@
 package org.javai.springai.scenarios.shopping;
 
 import java.util.List;
-import java.util.Objects;
 import org.javai.springai.actions.DefaultPlanExecutor;
 import org.javai.springai.actions.Plan;
 import org.javai.springai.actions.PlanExecutionResult;
@@ -24,9 +23,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
@@ -60,6 +57,7 @@ public abstract class AbstractShoppingScenarioTest {
 	protected SkuFinderTool skuFinderTool;
 
 	// LLM infrastructure
+	protected OpenAiChatModel chatModel;
 	protected Planner planner;
 	protected DefaultPlanExecutor executor;
 	protected ConversationManager conversationManager;
@@ -79,23 +77,17 @@ public abstract class AbstractShoppingScenarioTest {
 		searchTool = new ProductSearchTool(storeApi);
 		skuFinderTool = new SkuFinderTool(storeApi);
 
-		// Initialize LLM components
+		// Initialize LLM model (ChatClients are created by Planner with schema injection)
 		OpenAiApi openAiApi = OpenAiApi.builder().apiKey(OPENAI_API_KEY).build();
-		OpenAiChatModel chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
-		OpenAiChatOptions options = OpenAiChatOptions.builder()
-				.model(CHAT_MODEL_VERSION)
-				.temperature(0.1)
-				.topP(1.0)
-				.build();
-		ChatClient chatClient = ChatClient.builder(Objects.requireNonNull(chatModel))
-				.defaultOptions(Objects.requireNonNull(options))
-				.build();
+		chatModel = OpenAiChatModel.builder().openAiApi(openAiApi).build();
 
+		// Planner uses tier-based configuration with automatic schema injection
 		planner = Planner.builder()
-				.defaultChatClient(chatClient)
+				.actions(actions)
+				.chatModel(chatModel)
+				.tier(CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.1))
 				.persona(ShoppingPersonaSpec.standard())
 				.tools(skuFinderTool, offerTool, inventoryTool, pricingTool, searchTool)
-				.actions(actions)
 				.build();
 		
 		executor = DefaultPlanExecutor.builder()

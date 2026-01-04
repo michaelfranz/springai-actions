@@ -60,11 +60,13 @@ class DataWarehouseAggregateTest extends AbstractDataWarehouseScenarioTest {
 						"Never flatten nested parameters - use the exact structure required"))
 				.build();
 
+		// Tier-based configuration with automatic schema injection
 		aggregatePlanner = Planner.builder()
-				.defaultChatClient(capableChatClient, 2, CAPABLE_CHAT_MODEL_VERSION) // gpt-4o
-				.fallbackChatClient(mostCapableChatClient, 2, MOST_CAPABLE_CHAT_MODEL_VERSION) // gpt-4-turbo
-				.persona(persona)
 				.actions(aggregateActions)  // Only aggregate action - no SQL query actions
+				.chatModel(chatModel)
+				.tier(CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.tier(MOST_CAPABLE_CHAT_MODEL_VERSION, tier -> tier.maxAttempts(2).temperature(0.0))
+				.persona(persona)
 				.promptContributor(new SqlCatalogContextContributor(catalog))
 				.addPromptContext("sql", catalog)
 				.build();
